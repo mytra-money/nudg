@@ -10,6 +10,8 @@ import { useDesk } from '@/stores/desk'
 import {
   createCatalog,
   createCatalogItem,
+  deleteCatalog,
+  deleteCatalogItem,
   listCatalogItems,
   listCatalogs,
   sendCatalogProduct,
@@ -165,7 +167,7 @@ const catalogForm = ref({ catalog_name: '', whatsapp_account: '', description: '
 const itemEditorOpen = ref(false)
 const itemEditorMode = ref<'create' | 'edit'>('create')
 const editingItemName = ref('')
-const itemForm = ref({ item_name: '', sku: '', description: '', price: '', currency: 'INR', status: 'Active' })
+const itemForm = ref({ item_name: '', sku: '', description: '', price: '', currency: 'INR', status: 'Active', image: '' })
 const savingCatalog = ref(false)
 
 const accountOptions = computed(() => desk.inbox.value?.accounts || [])
@@ -196,6 +198,7 @@ function startItem(existing?: any) {
     price: existing?.price != null ? String(existing.price) : '',
     currency: existing?.currency || 'INR',
     status: existing?.status || 'Active',
+    image: existing?.image || '',
   }
   itemEditorOpen.value = true
 }
@@ -268,6 +271,44 @@ async function saveCatalogForm() {
   }
 }
 
+async function removeCatalog() {
+  if (catalogEditorMode.value !== 'edit' || !editingCatalogName.value) return
+  if (!window.confirm(`Delete catalog “${catalogForm.value.catalog_name || editingCatalogName.value}” and its items?`)) return
+  savingCatalog.value = true
+  const isLive = Boolean(window.csrf_token)
+  try {
+    if (isLive) await deleteCatalog(editingCatalogName.value)
+    catalogs.value = catalogs.value.filter((row) => row.name !== editingCatalogName.value)
+    if (selectedCatalogName.value === editingCatalogName.value) {
+      selectedCatalogName.value = catalogs.value[0]?.name || null
+      items.value = []
+    }
+    catalogEditorOpen.value = false
+    showToast('Catalog deleted')
+  } catch (caught) {
+    showToast(errorText(caught), true)
+  } finally {
+    savingCatalog.value = false
+  }
+}
+
+async function removeItem() {
+  if (itemEditorMode.value !== 'edit' || !editingItemName.value) return
+  if (!window.confirm(`Delete item “${itemForm.value.item_name || editingItemName.value}”?`)) return
+  savingCatalog.value = true
+  const isLive = Boolean(window.csrf_token)
+  try {
+    if (isLive) await deleteCatalogItem(editingItemName.value)
+    items.value = items.value.filter((row) => row.name !== editingItemName.value)
+    itemEditorOpen.value = false
+    showToast('Item deleted')
+  } catch (caught) {
+    showToast(errorText(caught), true)
+  } finally {
+    savingCatalog.value = false
+  }
+}
+
 async function saveItemForm() {
   const itemName = itemForm.value.item_name.trim()
   if (!itemName) {
@@ -292,6 +333,7 @@ async function saveItemForm() {
         price: Number(itemForm.value.price || 0),
         currency: itemForm.value.currency || 'INR',
         status: itemForm.value.status,
+        image: itemForm.value.image.trim(),
       }
       const bucket = sampleItemsByCatalog[catalogName] || (sampleItemsByCatalog[catalogName] = [])
       if (itemEditorMode.value === 'edit') {
@@ -314,6 +356,7 @@ async function saveItemForm() {
         price: itemForm.value.price,
         currency: itemForm.value.currency,
         status: itemForm.value.status,
+        image: itemForm.value.image.trim(),
       })
     } else {
       await createCatalogItem({
@@ -324,6 +367,7 @@ async function saveItemForm() {
         price: itemForm.value.price,
         currency: itemForm.value.currency,
         status: itemForm.value.status,
+        image: itemForm.value.image.trim(),
       })
     }
     itemEditorOpen.value = false
@@ -976,9 +1020,13 @@ onMounted(() => {
         </label>
       </div>
       <template #actions>
-        <div class="flex justify-end gap-2">
-          <Button label="Cancel" @click="catalogEditorOpen = false" />
-          <Button variant="solid" class="bg-[#075E54] text-white" :label="catalogEditorMode === 'edit' ? 'Save' : 'Create catalog'" :loading="savingCatalog" @click="saveCatalogForm" />
+        <div class="flex w-full items-center justify-between gap-2">
+          <Button v-if="catalogEditorMode === 'edit'" label="Delete" :loading="savingCatalog" @click="removeCatalog" />
+          <span v-else />
+          <div class="flex gap-2">
+            <Button label="Cancel" @click="catalogEditorOpen = false" />
+            <Button variant="solid" class="bg-[#075E54] text-white" :label="catalogEditorMode === 'edit' ? 'Save' : 'Create catalog'" :loading="savingCatalog" @click="saveCatalogForm" />
+          </div>
         </div>
       </template>
     </Dialog>
@@ -1008,6 +1056,10 @@ onMounted(() => {
           </label>
         </div>
         <label class="block font-semibold text-ink-gray-7">
+          Image
+          <input v-model="itemForm.image" type="text" placeholder="https://… or /files/…" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 text-xs" />
+        </label>
+        <label class="block font-semibold text-ink-gray-7">
           Status
           <select v-model="itemForm.status" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 text-xs">
             <option>Active</option>
@@ -1016,9 +1068,13 @@ onMounted(() => {
         </label>
       </div>
       <template #actions>
-        <div class="flex justify-end gap-2">
-          <Button label="Cancel" @click="itemEditorOpen = false" />
-          <Button variant="solid" class="bg-[#075E54] text-white" :label="itemEditorMode === 'edit' ? 'Save' : 'Add item'" :loading="savingCatalog" @click="saveItemForm" />
+        <div class="flex w-full items-center justify-between gap-2">
+          <Button v-if="itemEditorMode === 'edit'" label="Delete" :loading="savingCatalog" @click="removeItem" />
+          <span v-else />
+          <div class="flex gap-2">
+            <Button label="Cancel" @click="itemEditorOpen = false" />
+            <Button variant="solid" class="bg-[#075E54] text-white" :label="itemEditorMode === 'edit' ? 'Save' : 'Add item'" :loading="savingCatalog" @click="saveItemForm" />
+          </div>
         </div>
       </template>
     </Dialog>

@@ -438,6 +438,7 @@ def create_catalog_item(
 	price: Any = None,
 	currency: str | None = None,
 	status: str | None = None,
+	image: str | None = None,
 ) -> dict:
 	frappe.has_permission("WhatsApp Catalog Item", "create", throw=True)
 	catalog = (catalog or "").strip()
@@ -462,6 +463,7 @@ def create_catalog_item(
 			"price": amount,
 			"currency": (currency or "INR").strip() or "INR",
 			"status": "Inactive" if status == "Inactive" else "Active",
+			"image": (image or "").strip(),
 		}
 	)
 	doc.insert()
@@ -476,6 +478,7 @@ def update_catalog_item(
 	price: Any = None,
 	currency: str | None = None,
 	status: str | None = None,
+	image: str | None = None,
 ) -> dict:
 	doc = frappe.get_doc("WhatsApp Catalog Item", name)
 	frappe.has_permission("WhatsApp Catalog Item", "write", doc=doc, throw=True)
@@ -493,6 +496,8 @@ def update_catalog_item(
 	doc.currency = (currency or doc.currency or "INR").strip() or "INR"
 	if status in ("Active", "Inactive"):
 		doc.status = status
+	if image is not None:
+		doc.image = (image or "").strip()
 	doc.save()
 	return _item_dict(doc.name)
 

@@ -561,6 +561,8 @@ def create_campaign(
 	campaign_description: str | None = None,
 	whatsapp_account: str | None = None,
 	whatsapp_template: str | None = None,
+	scheduled_at: str | None = None,
+	recipients: Any = None,
 ) -> dict:
 	"""Create a draft UTM Campaign without leaving NUDG."""
 	frappe.has_permission("UTM Campaign", "create", throw=True)
@@ -582,6 +584,8 @@ def create_campaign(
 			"whatsapp_status": "Draft",
 		}
 	)
+	_apply_schedule(doc, scheduled_at)
+	_apply_recipients(doc, recipients)
 	doc.insert()
 	return get_campaign(doc.name)
 
@@ -592,6 +596,8 @@ def update_campaign(
 	campaign_description: str | None = None,
 	whatsapp_account: str | None = None,
 	whatsapp_template: str | None = None,
+	scheduled_at: str | None = None,
+	recipients: Any = None,
 ) -> dict:
 	"""Update a draft or scheduled campaign from NUDG."""
 	doc = frappe.get_doc("UTM Campaign", name)
@@ -613,5 +619,53 @@ def update_campaign(
 	doc.campaign_description = (campaign_description or "").strip()
 	doc.whatsapp_account = account
 	doc.whatsapp_template = template
+	_apply_schedule(doc, scheduled_at)
+	_apply_recipients(doc, recipients)
 	doc.save()
 	return get_campaign(doc.name)
+
+
+def delete_campaign(name: str) -> dict:
+	"""Remove a campaign that has not been sent."""
+	doc = frappe.get_doc("UTM Campaign", name)
+	frappe.has_permission("UTM Campaign", "delete", doc=doc, throw=True)
+	status = doc.get("whatsapp_status") or "Draft"
+	if status not in ("Draft", "Scheduled", "Cancelled"):
+		frappe.throw(_("Only a draft, scheduled, or cancelled campaign can be deleted."))
+	frappe.delete_doc("UTM Campaign", doc.name, ignore_permissions=True)
+	return {"name": name, "deleted": True}
+
+
+def _apply_schedule(doc, scheduled_at: str | None) -> None:
+	if scheduled_at is None:
+		return
+	value = (scheduled_at or "").strip()
+	doc.whatsapp_scheduled_at = value or None
+	status = doc.get("whatsapp_status") or "Draft"
+	if status in ("Draft", "Scheduled"):
+		doc.whatsapp_status = "Scheduled" if value else "Draft"
+
+
+def _apply_recipients(doc, recipients: Any) -> None:
+	if recipients is None:
+		return
+	if isinstance(recipients, str):
+		phones = [line.strip() for line in recipients.replace(",", "\n").splitlines() if line.strip()]
+	elif isinstance(recipients, (list, tuple)):
+		phones = []
+		for item in recipients:
+			if isinstance(item, dict):
+				phone = item.get("phone_number") or item.get("phone") or ""
+			else:
+				phone = str(item)
+			phone = str(phone).strip()
+			if phone:
+				phones.append(phone)
+	else:
+		phones = []
+	doc.set("whatsapp_recipients", [])
+	for phone in phones:
+		profile = None
+		if frappe.db.exists("DocType", "WA Profile"):
+			profile = frappe.db.get_value("WA Profile", {"phone_number": phone}, "name")
+		doc.append("whatsapp_recipients", {"phone_number": phone, "profile": profile, "status": "Pending"})

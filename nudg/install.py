@@ -13,7 +13,7 @@ ROLE_MANAGER = "WhatsApp Manager"
 GRANTS = {
 	"WA Message": ("read", "write", "create", "report", "print", "email"),
 	"WA Profile": ("read", "write", "create", "report"),
-	"WA Template": ("read", "report"),
+	"WA Template": ("read", "write", "create", "report"),
 }
 
 DESK_GRANTS = {
@@ -254,6 +254,10 @@ def ensure_role():
 			role.role_name = r
 			role.desk_access = 1
 			role.insert(ignore_permissions=True)
+
+	from nudg.desk_access import sync_role_desk_access
+
+	sync_role_desk_access()
 
 	_apply_grants(GRANTS, role_name=ROLE, require_whatsapp=True)
 	_apply_grants(DESK_GRANTS, role_name=ROLE, require_whatsapp=False)

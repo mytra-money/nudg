@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { Badge, Button, call, Dialog, toast } from 'frappe-ui'
 import { errorText } from '@/utils/format'
-import { listQuickReplies, saveQuickReply, updateWhatsappAccount } from '@/services/catalogApi'
+import { deleteQuickReply, getWhatsappSettings, listQuickReplies, saveQuickReply, saveWhatsappSettings, updateWhatsappAccount } from '@/services/catalogApi'
 import { isManager, useDesk } from '@/stores/desk'
 import { router } from '@/router'
 
@@ -76,8 +76,28 @@ const newShortcut = ref('')
 const newChannel = ref('')
 const newBody = ref('')
 const editingReply = ref<string | null>(null)
-const accountEditor = ref<{ name: string; account_name: string; status: string; auto_read_receipts: boolean } | null>(null)
+const replyStatus = ref('Active')
+const accountEditor = ref<{
+  name: string
+  account_name: string
+  status: string
+  auto_read_receipts: boolean
+  phone_id: string
+  business_id: string
+  app_id: string
+  access_token: string
+} | null>(null)
 const accountEditorOpen = ref(false)
+const siteSettings = ref({
+  default_account: '',
+  whatsapp_api_url: '',
+  whatsapp_api_version: '',
+  webhook_verify_token: '',
+  webhook_secret: '',
+  has_webhook_secret: false,
+  callback_method: 'nudg.integrations.webhook.handler',
+})
+const savingSite = ref(false)
 
 // Enriched sample quick replies for demo/preview mode
 const fallbackQuickReplies: any[] = [
@@ -146,15 +166,29 @@ function startReply(row?: any) {
   newShortcut.value = row?.shortcut || ''
   newBody.value = row?.body || ''
   newChannel.value = row?.whatsapp_account || ''
+  replyStatus.value = row?.status === 'Inactive' ? 'Inactive' : 'Active'
   showCreateModal.value = true
 }
 
-function startAccountEdit(account: any) {
+async function startAccountEdit(account: any) {
+  let source = account
+  if (desk.mode.value === 'live') {
+    try {
+      const rows = await call<any[]>('nudg.desk_api.list_user_accounts')
+      source = (rows || []).find((row) => row.name === account.name) || account
+    } catch {
+      source = account
+    }
+  }
   accountEditor.value = {
-    name: account.name,
-    account_name: account.account_name || account.name,
-    status: account.status || 'Active',
-    auto_read_receipts: Boolean(account.auto_read_receipts),
+    name: source.name,
+    account_name: source.account_name || source.name,
+    status: source.status || 'Active',
+    auto_read_receipts: Boolean(source.auto_read_receipts),
+    phone_id: source.phone_id || '',
+    business_id: source.business_id || '',
+    app_id: source.app_id || '',
+    access_token: '',
   }
   accountEditorOpen.value = true
 }
@@ -192,6 +226,10 @@ async function saveAccount() {
       name: accountEditor.value.name,
       status: accountEditor.value.status,
       auto_read_receipts: accountEditor.value.auto_read_receipts ? 1 : 0,
+      phone_id: accountEditor.value.phone_id.trim() || undefined,
+      business_id: accountEditor.value.business_id.trim() || undefined,
+      app_id: accountEditor.value.app_id.trim() || undefined,
+      access_token: accountEditor.value.access_token.trim() || undefined,
     })
     showToast('WhatsApp account updated.')
     accountEditor.value = null
@@ -242,7 +280,7 @@ async function handleSaveQuickReply() {
         shortcut: cleanShortcut || undefined,
         body: newBody.value.trim(),
         whatsapp_account: newChannel.value || undefined,
-        status: 'Active',
+        status: replyStatus.value,
       })
       showToast(editingReply.value ? `Quick reply "${newTitle.value.trim()}" updated.` : `Quick reply "${newTitle.value.trim()}" created.`)
       newTitle.value = ''
@@ -390,10 +428,67 @@ async function handleUpdateMember() {
   }
 }
 
+async function loadSiteSettings() {
+  if (!isManager.value || desk.mode.value !== 'live') return
+  try {
+    const result = await getWhatsappSettings()
+    siteSettings.value = {
+      default_account: result?.default_account || '',
+      whatsapp_api_url: result?.whatsapp_api_url || '',
+      whatsapp_api_version: result?.whatsapp_api_version || '',
+      webhook_verify_token: result?.webhook_verify_token || '',
+      webhook_secret: '',
+      has_webhook_secret: Boolean(result?.has_webhook_secret),
+      callback_method: result?.callback_method || 'nudg.integrations.webhook.handler',
+    }
+  } catch (caught) {
+    showToast(errorText(caught), true)
+  }
+}
+
+async function saveSiteSettings() {
+  if (!isManager.value || desk.mode.value !== 'live') return
+  savingSite.value = true
+  try {
+    const saved = await saveWhatsappSettings({
+      default_account: siteSettings.value.default_account,
+      whatsapp_api_url: siteSettings.value.whatsapp_api_url,
+      whatsapp_api_version: siteSettings.value.whatsapp_api_version,
+      webhook_verify_token: siteSettings.value.webhook_verify_token,
+      webhook_secret: siteSettings.value.webhook_secret,
+    })
+    siteSettings.value.webhook_secret = ''
+    siteSettings.value.has_webhook_secret = Boolean(saved?.has_webhook_secret)
+    showToast('WhatsApp settings saved.')
+  } catch (caught) {
+    showToast(errorText(caught), true)
+  } finally {
+    savingSite.value = false
+  }
+}
+
+async function removeReply() {
+  if (!editingReply.value) return
+  if (!window.confirm(`Delete quick reply “${newTitle.value || editingReply.value}”?`)) return
+  if (desk.mode.value === 'live') {
+    try {
+      await deleteQuickReply(editingReply.value)
+    } catch (caught) {
+      showToast(errorText(caught), true)
+      return
+    }
+  }
+  replies.value = replies.value.filter((row) => row.name !== editingReply.value)
+  editingReply.value = null
+  showCreateModal.value = false
+  showToast('Quick reply deleted.')
+}
+
 onMounted(() => {
   desk.load()
   load()
   loadTeamMembers()
+  loadSiteSettings()
 })
 </script>
 
@@ -732,6 +827,47 @@ onMounted(() => {
               </button>
             </div>
           </div>
+          <div v-if="isManager" class="rounded-xl border border-outline-gray-2 bg-white p-6 shadow-2xs">
+            <h2 class="text-lg font-bold text-ink-gray-9">WhatsApp settings</h2>
+            <p class="mt-1 text-xs text-ink-gray-5">
+              Default account, Graph API, and the webhook Meta calls. Callback: {{ siteSettings.callback_method }}
+            </p>
+            <div class="mt-4 grid gap-3 sm:grid-cols-2 text-xs">
+              <label class="block font-semibold text-ink-gray-7">
+                Default account
+                <select v-model="siteSettings.default_account" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 font-normal">
+                  <option value="">None</option>
+                  <option v-for="account in desk.inbox.value?.accounts || []" :key="account.name" :value="account.name">
+                    {{ account.account_name || account.name }}
+                  </option>
+                </select>
+              </label>
+              <label class="block font-semibold text-ink-gray-7">
+                API version
+                <input v-model="siteSettings.whatsapp_api_version" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 font-normal" placeholder="v23.0" />
+              </label>
+              <label class="block font-semibold text-ink-gray-7 sm:col-span-2">
+                API URL
+                <input v-model="siteSettings.whatsapp_api_url" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 font-normal" placeholder="https://graph.facebook.com" />
+              </label>
+              <label class="block font-semibold text-ink-gray-7">
+                Webhook verify token
+                <input v-model="siteSettings.webhook_verify_token" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 font-normal" />
+              </label>
+              <label class="block font-semibold text-ink-gray-7">
+                Webhook secret
+                <input
+                  v-model="siteSettings.webhook_secret"
+                  type="password"
+                  class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 font-normal"
+                  :placeholder="siteSettings.has_webhook_secret ? 'Saved. Type a new secret to replace it.' : 'App secret from Meta'"
+                />
+              </label>
+            </div>
+            <div class="mt-4 flex justify-end">
+              <Button variant="solid" class="bg-[#075E54] text-white hover:bg-[#128C7E]" label="Save settings" :loading="savingSite" @click="saveSiteSettings" />
+            </div>
+          </div>
         </template>
         <div v-else class="rounded-xl border border-outline-gray-2 bg-white p-6 shadow-2xs">
           <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between border-b border-outline-gray-2 pb-5">
@@ -1023,7 +1159,23 @@ onMounted(() => {
 
     <Dialog v-model="accountEditorOpen" :title="accountEditor ? 'Edit ' + accountEditor.account_name : 'WhatsApp account'">
       <div v-if="accountEditor" class="space-y-4 py-1 text-xs">
-        <p class="text-ink-gray-6">A new number is connected from Integrations. Here you can pause this number or turn read receipts on.</p>
+        <p class="text-ink-gray-6">A new number is connected from Integrations. Update the credentials Meta issued for this number. Leave the token blank to keep the current one.</p>
+        <label class="block font-semibold text-ink-gray-7">
+          Phone number ID
+          <input v-model="accountEditor.phone_id" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2" />
+        </label>
+        <label class="block font-semibold text-ink-gray-7">
+          Business ID
+          <input v-model="accountEditor.business_id" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2" />
+        </label>
+        <label class="block font-semibold text-ink-gray-7">
+          App ID
+          <input v-model="accountEditor.app_id" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2" />
+        </label>
+        <label class="block font-semibold text-ink-gray-7">
+          Access token
+          <input v-model="accountEditor.access_token" type="password" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2" placeholder="Leave blank to keep the current token" />
+        </label>
         <div>
           <label class="block font-semibold text-ink-gray-7">Status</label>
           <select
@@ -1083,6 +1235,17 @@ onMounted(() => {
           </div>
 
           <div>
+            <label class="block font-semibold text-ink-gray-7">Status</label>
+            <select
+              v-model="replyStatus"
+              class="mt-1 block w-full rounded-lg border border-outline-gray-2 bg-white px-3 py-2 text-xs text-ink-gray-9"
+            >
+              <option value="Active">Active</option>
+              <option value="Inactive">Inactive</option>
+            </select>
+          </div>
+
+          <div>
             <label class="block font-semibold text-ink-gray-7">Channel</label>
             <select
               v-model="newChannel"
@@ -1107,11 +1270,19 @@ onMounted(() => {
 
       <template #actions>
         <div class="flex items-center justify-between w-full">
-          <Button
-            variant="subtle"
-            label="Cancel"
-            @click="showCreateModal = false"
-          />
+          <div class="flex gap-2">
+            <Button
+              variant="subtle"
+              label="Cancel"
+              @click="showCreateModal = false"
+            />
+            <Button
+              v-if="editingReply"
+              variant="subtle"
+              label="Delete"
+              @click="removeReply"
+            />
+          </div>
           <Button
             variant="solid"
             class="bg-[#075E54] text-white hover:bg-[#128C7E]"

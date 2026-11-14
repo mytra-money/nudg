@@ -6,7 +6,7 @@ import ErrorState from '@/components/ErrorState.vue'
 import LoadingState from '@/components/LoadingState.vue'
 import { errorText, formatDay, formatTime, initials } from '@/utils/format'
 import { formatErrorMessage } from '@/utils/errors'
-import { createCampaign, getCampaign, listCampaigns, runCampaign, updateCampaign } from '@/services/catalogApi'
+import { createCampaign, deleteCampaign, getCampaign, listCampaigns, runCampaign, updateCampaign } from '@/services/catalogApi'
 import { isManager, useDesk } from '@/stores/desk'
 
 const desk = useDesk()
@@ -26,11 +26,14 @@ const editorOpen = ref(false)
 const editorMode = ref<'create' | 'edit'>('create')
 const editingName = ref('')
 const saving = ref(false)
+const recipientsReady = ref(true)
 const form = ref({
   name: '',
   description: '',
   whatsapp_account: '',
   whatsapp_template: '',
+  scheduled_at: '',
+  recipients: '',
 })
 const recipientQuery = ref('')
 const recipientStatusFilter = ref<'all' | 'Read' | 'Delivered' | 'Failed' | 'Pending'>('all')
@@ -188,28 +191,83 @@ function canEdit(row: any) {
   return status === 'Draft' || status === 'Scheduled'
 }
 
+function recipientLines(recipients: any) {
+  if (!recipients) return ''
+  if (typeof recipients === 'string') return recipients
+  if (!Array.isArray(recipients)) return ''
+  return recipients
+    .map((row) => (typeof row === 'string' ? row : row?.phone_number || ''))
+    .filter(Boolean)
+    .join('\n')
+}
+
+function toDatetimeLocal(value: string | null | undefined) {
+  if (!value) return ''
+  return String(value).replace(' ', 'T').slice(0, 16)
+}
+
+function fromDatetimeLocal(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+  if (trimmed.length === 16) return `${trimmed.replace('T', ' ')}:00`
+  return trimmed.replace('T', ' ')
+}
+
 function startCreate() {
   editorMode.value = 'create'
   editingName.value = ''
+  recipientsReady.value = true
   form.value = {
     name: '',
     description: '',
     whatsapp_account: accountOptions.value[0]?.value || '',
     whatsapp_template: '',
+    scheduled_at: '',
+    recipients: '',
   }
   editorOpen.value = true
 }
 
-function startEdit(row: any) {
+async function startEdit(row: any) {
   editorMode.value = 'edit'
   editingName.value = row.name
+  recipientsReady.value = !live
   form.value = {
     name: row.campaign_name || row.name || '',
     description: row.description || row.campaign_description || '',
     whatsapp_account: row.whatsapp_account || '',
     whatsapp_template: row.whatsapp_template || row.template || '',
+    scheduled_at: toDatetimeLocal(row.scheduled_at),
+    recipients: recipientLines(row.recipients),
   }
   editorOpen.value = true
+  if (!live || !row.name) return
+  try {
+    const full = await getCampaign(row.name)
+    if (editingName.value !== row.name) return
+    form.value.description = full.campaign_description || full.description || form.value.description
+    form.value.scheduled_at = toDatetimeLocal(full.scheduled_at)
+    form.value.recipients = recipientLines(full.recipients)
+    recipientsReady.value = true
+  } catch {
+    recipientsReady.value = false
+  }
+}
+
+async function removeCampaign() {
+  if (!selected.value || !canEdit(selected.value)) return
+  if (!window.confirm(`Delete campaign “${selected.value.campaign_name || selected.value.name}”?`)) return
+  busy.value = true
+  try {
+    if (live) await deleteCampaign(selected.value.name)
+    rows.value = rows.value.filter((row) => row.name !== selected.value.name)
+    selected.value = null
+    toast.success('Campaign deleted')
+  } catch (caught) {
+    toast.error(errorText(caught))
+  } finally {
+    busy.value = false
+  }
 }
 
 async function saveCampaign() {
@@ -230,14 +288,14 @@ async function saveCampaign() {
         whatsapp_account: form.value.whatsapp_account,
         template: form.value.whatsapp_template,
         whatsapp_template: form.value.whatsapp_template,
-        status: 'Draft',
-        scheduled_at: null,
+        status: form.value.scheduled_at ? 'Scheduled' : 'Draft',
+        scheduled_at: fromDatetimeLocal(form.value.scheduled_at) || null,
+        recipients: form.value.recipients,
         sent_count: 0,
         delivered_count: 0,
         read_count: 0,
         failed_count: 0,
         modified: new Date().toISOString(),
-        recipients: editorMode.value === 'edit' ? selected.value?.recipients || [] : [],
       }
       if (editorMode.value === 'edit') {
         const index = rows.value.findIndex((item) => item.name === editingName.value)
@@ -259,12 +317,16 @@ async function saveCampaign() {
             campaign_description: form.value.description.trim(),
             whatsapp_account: form.value.whatsapp_account || undefined,
             whatsapp_template: form.value.whatsapp_template || undefined,
+            scheduled_at: fromDatetimeLocal(form.value.scheduled_at),
+            recipients: recipientsReady.value ? form.value.recipients : undefined,
           })
         : await createCampaign({
             name,
             campaign_description: form.value.description.trim(),
             whatsapp_account: form.value.whatsapp_account || undefined,
             whatsapp_template: form.value.whatsapp_template || undefined,
+            scheduled_at: fromDatetimeLocal(form.value.scheduled_at),
+            recipients: form.value.recipients,
           })
     editorOpen.value = false
     toast.success(editorMode.value === 'edit' ? 'Campaign updated' : 'Campaign created')
@@ -583,6 +645,12 @@ onMounted(() => {
                 icon-left="lucide-pencil"
                 @click="startEdit(selected)"
               />
+              <Button
+                v-if="isManager && canEdit(selected)"
+                variant="subtle"
+                label="Delete"
+                @click="removeCampaign"
+              />
             </div>
           </div>
 
@@ -751,7 +819,7 @@ onMounted(() => {
     <Dialog v-model="editorOpen" :title="editorMode === 'edit' ? 'Edit campaign' : 'New campaign'">
       <div class="space-y-3 py-1 text-sm">
         <p class="text-xs text-ink-gray-6">
-          The campaign is saved here in Nudg. Name, description, WhatsApp account, and template stay on this page.
+          Save the broadcast here. A schedule keeps it as Scheduled until it runs. One phone number per line becomes the audience.
         </p>
         <label class="block text-xs font-medium text-ink-gray-7">
           Name
@@ -784,6 +852,19 @@ onMounted(() => {
             @update:model-value="(val) => (form.whatsapp_template = String(val || ''))"
           />
         </label>
+        <label class="block text-xs font-medium text-ink-gray-7">
+          Schedule
+          <input v-model="form.scheduled_at" type="datetime-local" class="mt-1 w-full rounded border border-outline-gray-2 px-2 py-1.5 text-sm" />
+        </label>
+        <label class="block text-xs font-medium text-ink-gray-7">
+          Recipients
+          <textarea
+            v-model="form.recipients"
+            rows="4"
+            class="mt-1 w-full rounded border border-outline-gray-2 px-2 py-1.5 font-mono text-sm text-ink-gray-9"
+            placeholder="9198XXXXXXXX&#10;One number per line"
+          />
+        </label>
       </div>
       <template #actions>
         <div class="flex justify-end gap-2">
@@ -792,7 +873,8 @@ onMounted(() => {
             variant="solid"
             class="bg-[#075E54] text-white hover:bg-[#128C7E]"
             :label="editorMode === 'edit' ? 'Save' : 'Create campaign'"
-            :loading="saving"
+            :loading="saving || (editorMode === 'edit' && !recipientsReady)"
+            :disabled="editorMode === 'edit' && !recipientsReady"
             @click="saveCampaign"
           />
         </div>

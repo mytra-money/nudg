@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import { Badge, Button, Dialog, Select, TextInput, toast } from 'frappe-ui'
 import DeskTemplatePreview from '@/components/DeskTemplatePreview.vue'
 import { errorText, formatDay, initials } from '@/utils/format'
-import { saveWhatsappTemplate } from '@/services/catalogApi'
+import { deleteWhatsappTemplate, getWhatsappTemplate, saveWhatsappTemplate, syncWhatsappTemplates } from '@/services/catalogApi'
 import { isManager, useDesk } from '@/stores/desk'
 import type { Template } from '@/types'
 
@@ -127,10 +127,19 @@ const templateForm = ref({
   message: '',
   footer: '',
   header_text: '',
+  header_type: 'Text',
+  language: 'en',
   whatsapp_account: '',
+  buttons: [] as Array<{ button_type: string; button_text: string; url: string; phone_number: string }>,
 })
+const syncingTemplates = ref(false)
+const buttonsReady = ref(true)
 
-function openTemplateEditor(template?: Template) {
+function blankButton() {
+  return { button_type: 'Quick Reply', button_text: '', url: '', phone_number: '' }
+}
+
+async function openTemplateEditor(template?: Template) {
   const accounts = desk.inbox.value?.accounts || []
   templateForm.value = {
     name: template?.name && template.name !== 'new' ? template.name : '',
@@ -139,9 +148,37 @@ function openTemplateEditor(template?: Template) {
     message: template?.message || '',
     footer: template?.footer || '',
     header_text: template?.header_text || '',
+    header_type: template?.header_type || 'Text',
+    language: template?.language || 'en',
     whatsapp_account: template?.whatsapp_account || accounts[0]?.name || '',
+    buttons: (template?.buttons || []).map((row) => ({
+      button_type: row.button_type || 'Quick Reply',
+      button_text: row.button_text || '',
+      url: row.url || '',
+      phone_number: row.phone_number || '',
+    })),
   }
+  buttonsReady.value = !live || !templateForm.value.name
   templateEditorOpen.value = true
+  if (!live || !templateForm.value.name) return
+  try {
+    const full = await getWhatsappTemplate(templateForm.value.name)
+    if (!templateEditorOpen.value || templateForm.value.name !== full.name) return
+    templateForm.value.header_type = full.header_type || templateForm.value.header_type
+    templateForm.value.language = full.language || templateForm.value.language
+    templateForm.value.header_text = full.header_text || ''
+    templateForm.value.message = full.message || templateForm.value.message
+    templateForm.value.footer = full.footer || ''
+    templateForm.value.buttons = (full.buttons || []).map((row: any) => ({
+      button_type: row.button_type || 'Quick Reply',
+      button_text: row.button_text || '',
+      url: row.url || '',
+      phone_number: row.phone_number || '',
+    }))
+    buttonsReady.value = true
+  } catch {
+    buttonsReady.value = false
+  }
 }
 
 async function saveTemplate() {
@@ -166,13 +203,52 @@ async function saveTemplate() {
       message: templateForm.value.message.trim(),
       whatsapp_account: templateForm.value.whatsapp_account,
       template_type: templateForm.value.template_type,
+      language: templateForm.value.language.trim() || 'en',
       footer: templateForm.value.footer.trim() || undefined,
       header_text: templateForm.value.header_text.trim() || undefined,
+      header_type: templateForm.value.header_type,
+      buttons: buttonsReady.value ? templateForm.value.buttons.filter((row) => row.button_text.trim()) : undefined,
     })
     templateEditorOpen.value = false
     toast.success('Template saved and sent to Meta.')
     if (saved?.name) selected.value = saved.name
     await desk.refresh()
+  } catch (caught) {
+    toast.error(errorText(caught))
+  } finally {
+    templateSaving.value = false
+  }
+}
+
+async function syncTemplates() {
+  if (!live) {
+    toast.success('Sample templates are already loaded.')
+    return
+  }
+  syncingTemplates.value = true
+  try {
+    const account = selectedAccount.value !== 'all' ? selectedAccount.value : undefined
+    const result = await syncWhatsappTemplates(account)
+    const created = result?.total_synced ?? result?.accounts?.reduce((sum: number, row: any) => sum + (row.total_synced || 0), 0) ?? 0
+    toast.success(created ? `Synced ${created} new template${created === 1 ? '' : 's'} from Meta.` : 'Templates are up to date with Meta.')
+    await desk.refresh()
+  } catch (caught) {
+    toast.error(errorText(caught))
+  } finally {
+    syncingTemplates.value = false
+  }
+}
+
+async function removeTemplate() {
+  if (!templateForm.value.name) return
+  if (!window.confirm(`Delete template “${templateForm.value.template_label || templateForm.value.name}” from Nudg?`)) return
+  templateSaving.value = true
+  try {
+    if (live) await deleteWhatsappTemplate(templateForm.value.name)
+    if (selected.value === templateForm.value.name) selected.value = null
+    templateEditorOpen.value = false
+    toast.success('Template removed from Nudg.')
+    if (live) await desk.refresh()
   } catch (caught) {
     toast.error(errorText(caught))
   } finally {
@@ -204,15 +280,23 @@ function clearFilters() {
           WhatsApp Message Templates
         </h1>
       </div>
-      <Button
-        v-if="isManager"
-        variant="solid"
-        size="sm"
-        class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-        icon-left="lucide-plus"
-        label="New Template"
-        @click="openTemplateEditor()"
-      />
+      <div v-if="isManager" class="flex gap-2">
+        <Button
+          variant="subtle"
+          size="sm"
+          label="Sync from Meta"
+          :loading="syncingTemplates"
+          @click="syncTemplates"
+        />
+        <Button
+          variant="solid"
+          size="sm"
+          class="bg-[#075E54] text-white hover:bg-[#128C7E]"
+          icon-left="lucide-plus"
+          label="New Template"
+          @click="openTemplateEditor()"
+        />
+      </div>
     </header>
 
     <!-- Top KPI Performance Bar -->
@@ -639,6 +723,22 @@ function clearFilters() {
             </select>
           </label>
         </div>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="block">
+            <span class="font-semibold text-ink-gray-7">Language</span>
+            <input v-model="templateForm.language" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2" placeholder="en" />
+          </label>
+          <label class="block">
+            <span class="font-semibold text-ink-gray-7">Header type</span>
+            <select v-model="templateForm.header_type" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2">
+              <option>Text</option>
+              <option>Image</option>
+              <option>Document</option>
+              <option>GIF</option>
+              <option>Video</option>
+            </select>
+          </label>
+        </div>
         <label class="block">
           <span class="font-semibold text-ink-gray-7">Header</span>
           <input v-model="templateForm.header_text" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2" />
@@ -651,17 +751,41 @@ function clearFilters() {
           <span class="font-semibold text-ink-gray-7">Footer</span>
           <input v-model="templateForm.footer" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2" />
         </label>
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-semibold text-ink-gray-7">Buttons</span>
+            <button type="button" class="text-[#075E54]" @click="templateForm.buttons.push(blankButton())">Add button</button>
+          </div>
+          <div v-for="(button, index) in templateForm.buttons" :key="index" class="grid grid-cols-2 gap-2 rounded-lg border border-outline-gray-2 p-2">
+            <select v-model="button.button_type" class="rounded-lg border border-outline-gray-2 px-2 py-1.5">
+              <option>Quick Reply</option>
+              <option>URL</option>
+              <option>Phone Number</option>
+              <option>Copy Code</option>
+              <option>Voice Call</option>
+            </select>
+            <input v-model="button.button_text" class="rounded-lg border border-outline-gray-2 px-2 py-1.5" placeholder="Button label" />
+            <input v-if="button.button_type === 'URL'" v-model="button.url" class="col-span-2 rounded-lg border border-outline-gray-2 px-2 py-1.5" placeholder="https://" />
+            <input v-if="button.button_type === 'Phone Number'" v-model="button.phone_number" class="col-span-2 rounded-lg border border-outline-gray-2 px-2 py-1.5" placeholder="Phone number" />
+            <button type="button" class="col-span-2 text-left text-ink-gray-5" @click="templateForm.buttons.splice(index, 1)">Remove</button>
+          </div>
+        </div>
       </div>
       <template #actions>
-        <div class="flex w-full justify-end gap-2">
-          <Button variant="subtle" label="Cancel" @click="templateEditorOpen = false" />
-          <Button
-            variant="solid"
-            class="bg-[#075E54] text-white hover:bg-[#128C7E]"
+        <div class="flex w-full items-center justify-between gap-2">
+          <Button v-if="templateForm.name" variant="subtle" label="Delete" :loading="templateSaving" @click="removeTemplate" />
+          <span v-else />
+          <div class="flex gap-2">
+            <Button variant="subtle" label="Cancel" @click="templateEditorOpen = false" />
+            <Button
+              variant="solid"
+              class="bg-[#075E54] text-white hover:bg-[#128C7E]"
             label="Save"
-            :loading="templateSaving"
+            :loading="templateSaving || Boolean(templateForm.name && !buttonsReady)"
+            :disabled="Boolean(templateForm.name && !buttonsReady)"
             @click="saveTemplate"
-          />
+            />
+          </div>
         </div>
       </template>
     </Dialog>

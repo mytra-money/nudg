@@ -39,6 +39,7 @@ export async function createCatalogItem(payload: {
   price?: string | number
   currency?: string
   status?: string
+  image?: string
 }) {
   return call<any>('nudg.desk_api.create_catalog_item', payload)
 }
@@ -51,8 +52,17 @@ export async function updateCatalogItem(payload: {
   price?: string | number
   currency?: string
   status?: string
+  image?: string
 }) {
   return call<any>('nudg.desk_api.update_catalog_item', payload)
+}
+
+export async function deleteCatalog(name: string) {
+  return call<any>('nudg.desk_api.delete_catalog', { name })
+}
+
+export async function deleteCatalogItem(name: string) {
+  return call<any>('nudg.desk_api.delete_catalog_item', { name })
 }
 
 export async function sendCatalogProduct(payload: {
@@ -104,6 +114,8 @@ export async function createCampaign(payload: {
   campaign_description?: string
   whatsapp_account?: string
   whatsapp_template?: string
+  scheduled_at?: string
+  recipients?: string
 }) {
   return call<any>('nudg.desk_api.create_campaign', payload)
 }
@@ -114,8 +126,14 @@ export async function updateCampaign(payload: {
   campaign_description?: string
   whatsapp_account?: string
   whatsapp_template?: string
+  scheduled_at?: string
+  recipients?: string
 }) {
   return call<any>('nudg.desk_api.update_campaign', payload)
+}
+
+export async function deleteCampaign(name: string) {
+  return call<any>('nudg.desk_api.delete_campaign', { name })
 }
 
 export async function listAutomationRules(account?: string) {
@@ -133,6 +151,8 @@ export async function createAutomationRule(payload: {
   action_reference?: string
   whatsapp_account?: string
   status?: string
+  condition_operator?: string
+  condition_keyword?: string
 }) {
   return call<any>('nudg.desk_api.create_automation_rule', payload)
 }
@@ -145,8 +165,14 @@ export async function updateAutomationRule(payload: {
   action_reference?: string
   whatsapp_account?: string
   status?: string
+  condition_operator?: string
+  condition_keyword?: string
 }) {
   return call<any>('nudg.desk_api.update_automation_rule', payload)
+}
+
+export async function deleteAutomationRule(name: string) {
+  return call<any>('nudg.desk_api.delete_automation_rule', { name })
 }
 
 export async function getAnalytics(account?: string) {
@@ -163,8 +189,30 @@ export async function updateWhatsappAccount(payload: {
   name: string
   status?: string
   auto_read_receipts?: number
+  phone_id?: string
+  business_id?: string
+  app_id?: string
+  access_token?: string
 }) {
   return call<any>('nudg.desk_api.update_whatsapp_account', payload)
+}
+
+export async function getWhatsappSettings() {
+  return call<any>('nudg.desk_api.get_whatsapp_settings')
+}
+
+export async function saveWhatsappSettings(payload: {
+  default_account?: string
+  whatsapp_api_url?: string
+  whatsapp_api_version?: string
+  webhook_verify_token?: string
+  webhook_secret?: string
+}) {
+  return call<any>('nudg.desk_api.save_whatsapp_settings', payload)
+}
+
+export async function deleteQuickReply(name: string) {
+  return call<any>('nudg.desk_api.delete_quick_reply', { name })
 }
 
 export async function saveQuickReply(payload: {
@@ -186,9 +234,23 @@ export async function saveWhatsappTemplate(payload: {
   language?: string
   footer?: string
   header_text?: string
+  header_type?: string
+  buttons?: Array<{ button_type: string; button_text: string; url?: string; phone_number?: string }>
   name?: string
 }) {
   return call<any>('nudg.desk_api.save_whatsapp_template', payload)
+}
+
+export async function getWhatsappTemplate(name: string) {
+  return call<any>('nudg.desk_api.get_whatsapp_template', { name })
+}
+
+export async function deleteWhatsappTemplate(name: string) {
+  return call<any>('nudg.desk_api.delete_whatsapp_template', { name })
+}
+
+export async function syncWhatsappTemplates(account?: string) {
+  return call<any>('nudg.desk_api.sync_whatsapp_templates', { account })
 }
 
 export function deskForm(doctype: string, name?: string) {

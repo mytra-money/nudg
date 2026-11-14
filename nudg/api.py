@@ -55,7 +55,7 @@ MESSAGE_FIELDS = [
 ]
 
 PROFILE_FIELDS = ["name", "profile_name", "phone_number", "whatsapp_account", "status", "wa_id"]
-ACCOUNT_FIELDS = ["name", "account_name", "status", "auto_read_receipts"]
+ACCOUNT_FIELDS = ["name", "account_name", "status", "phone_id", "business_id", "app_id", "auto_read_receipts"]
 TEMPLATE_FIELDS = [
 	"name",
 	"template_label",

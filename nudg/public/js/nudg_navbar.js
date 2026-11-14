@@ -87,7 +87,7 @@
 		const title = (typeof __ === "function" && __("NUDG")) || "NUDG";
 		const html = `
 			<li class="nav-item dropdown-mobile nudg-navbar-icon" title="${title}">
-				<a class="btn-reset nav-link text-muted" href="/desk/nudg" aria-label="${title}">
+				<a class="btn-reset nav-link text-muted" href="/nudg" aria-label="${title}">
 					<span class="whatsapp-icon-wrapper">
 						${nudg.WHATSAPP_ICON}
 						<span class="nudg-navbar-badge" style="display: none;">0</span>
@@ -145,13 +145,23 @@
 
 	nudg.redirect_agents = function () {
 		const path = window.location.pathname || "";
-		if (path !== "/app" && path.indexOf("/app/") !== 0 && path !== "/desk" && path.indexOf("/desk/") !== 0) {
-			return;
-		}
+		const onDesk =
+			path === "/app" ||
+			path.indexOf("/app/") === 0 ||
+			path === "/desk" ||
+			path.indexOf("/desk/") === 0 ||
+			path === "/apps" ||
+			path.indexOf("/apps/") === 0;
+		if (!onDesk) return;
 		const user = frappe.session && frappe.session.user;
 		if (!user || user === "Guest" || user === "Administrator") return;
 		const roles = (frappe.boot && frappe.boot.user && frappe.boot.user.roles) || [];
-		if (roles.indexOf("System Manager") !== -1 || roles.indexOf("WhatsApp Manager") !== -1) return;
+		if (roles.indexOf("System Manager") !== -1) return;
+		if (frappe.boot && frappe.boot.nudg_block_desk) {
+			window.location.replace("/nudg");
+			return;
+		}
+		if (roles.indexOf("WhatsApp Manager") !== -1) return;
 		if (roles.indexOf("WhatsApp User") === -1) return;
 		window.location.replace("/nudg");
 	};

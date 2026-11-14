@@ -33,7 +33,7 @@ def list_rules(account: str | None = None) -> list[dict]:
 	filters = {}
 	if account:
 		filters["whatsapp_account"] = account
-	return frappe.get_list(
+	rows = frappe.get_list(
 		"WhatsApp Automation Rule",
 		filters=filters,
 		fields=[
@@ -44,11 +44,16 @@ def list_rules(account: str | None = None) -> list[dict]:
 			"action_reference",
 			"status",
 			"whatsapp_account",
+			"condition_operator",
+			"condition_json",
 			"modified",
 		],
 		order_by="modified desc",
 		limit_page_length=100,
 	)
+	for row in rows:
+		row["condition_keyword"] = _keyword_from_condition(row.get("condition_json"))
+	return rows
 
 
 def list_runs(rule: str | None = None, limit: int = 50) -> list[dict]:
@@ -309,6 +314,33 @@ def _run_action(rule: Any, profile: str | None) -> str:
 
 _TRIGGERS = ("Incoming Message", "Status Failed", "Window Closed", "Keyword Match", "Keyword Rule", "Out of Office")
 _ACTIONS = ("Send Template", "Assign", "Quick Reply", "Send Text")
+_OPERATORS = ("Exact", "Contains", "Starts With", "Regex")
+
+
+def _keyword_from_condition(raw: Any) -> str:
+	if not raw:
+		return ""
+	try:
+		data = json.loads(raw) if isinstance(raw, str) else raw
+	except (TypeError, ValueError):
+		return ""
+	if not isinstance(data, dict):
+		return ""
+	nested = data.get("keyword_match")
+	if isinstance(nested, dict):
+		data = nested
+	value = data.get("keyword") or data.get("value") or data.get("pattern") or ""
+	if isinstance(value, (list, tuple)):
+		return ", ".join(str(part) for part in value if str(part).strip())
+	return str(value or "")
+
+
+def _store_condition(operator: str | None, keyword: str | None) -> tuple[str, str]:
+	op = operator if operator in _OPERATORS else "Contains"
+	text = (keyword or "").strip()
+	if not text:
+		return op, ""
+	return op, json.dumps({"operator": op, "keyword": text})
 
 
 def _account_or_throw(account: str | None) -> str | None:
@@ -336,10 +368,24 @@ def _rule_dict(name: str) -> dict:
 	row = frappe.db.get_value(
 		"WhatsApp Automation Rule",
 		name,
-		["name", "rule_name", "trigger", "action", "action_reference", "status", "whatsapp_account", "modified"],
+		[
+			"name",
+			"rule_name",
+			"trigger",
+			"action",
+			"action_reference",
+			"status",
+			"whatsapp_account",
+			"condition_operator",
+			"condition_json",
+			"modified",
+		],
 		as_dict=True,
 	)
-	return row or {"name": name, "rule_name": name}
+	if not row:
+		return {"name": name, "rule_name": name}
+	row["condition_keyword"] = _keyword_from_condition(row.get("condition_json"))
+	return row
 
 
 def create_rule(
@@ -349,6 +395,8 @@ def create_rule(
 	action_reference: str | None = None,
 	whatsapp_account: str | None = None,
 	status: str | None = None,
+	condition_operator: str | None = None,
+	condition_keyword: str | None = None,
 ) -> dict:
 	"""Create an automation rule from the Automation screen."""
 	frappe.has_permission("WhatsApp Automation Rule", "create", throw=True)
@@ -361,6 +409,7 @@ def create_rule(
 		frappe.throw(_("Choose an action."))
 	if frappe.db.exists("WhatsApp Automation Rule", rule_name):
 		frappe.throw(_("A rule named {0} already exists.").format(rule_name))
+	operator, condition_json = _store_condition(condition_operator, condition_keyword)
 	doc = frappe.get_doc(
 		{
 			"doctype": "WhatsApp Automation Rule",
@@ -370,6 +419,8 @@ def create_rule(
 			"action_reference": (action_reference or "").strip(),
 			"whatsapp_account": _account_or_throw(whatsapp_account),
 			"status": "Inactive" if status == "Inactive" else "Active",
+			"condition_operator": operator,
+			"condition_json": condition_json,
 		}
 	)
 	doc.insert()
@@ -384,6 +435,8 @@ def update_rule(
 	action_reference: str | None = None,
 	whatsapp_account: str | None = None,
 	status: str | None = None,
+	condition_operator: str | None = None,
+	condition_keyword: str | None = None,
 ) -> dict:
 	doc = frappe.get_doc("WhatsApp Automation Rule", name)
 	frappe.has_permission("WhatsApp Automation Rule", "write", doc=doc, throw=True)
@@ -407,5 +460,12 @@ def update_rule(
 	doc.whatsapp_account = _account_or_throw(whatsapp_account)
 	if status in ("Active", "Inactive"):
 		doc.status = status
+	if condition_operator is not None or condition_keyword is not None:
+		operator, condition_json = _store_condition(
+			condition_operator or doc.condition_operator,
+			condition_keyword if condition_keyword is not None else _keyword_from_condition(doc.condition_json),
+		)
+		doc.condition_operator = operator
+		doc.condition_json = condition_json
 	doc.save()
 	return _rule_dict(doc.name)

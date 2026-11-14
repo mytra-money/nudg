@@ -6,7 +6,7 @@ app_email = "admin@example.com"
 app_license = "MIT"
 app_icon_url = "/assets/nudg/desk.svg"
 app_icon_title = "NUDG"
-app_icon_route = "/desk/nudg"
+app_icon_route = "/nudg"
 
 app_include_js = ["/assets/nudg/js/nudg_navbar.js"]
 app_include_css = ["/assets/nudg/css/nudg_navbar.css"]
@@ -19,7 +19,7 @@ add_to_apps_screen = [
 		"name": "nudg",
 		"logo": "/assets/nudg/desk.svg",
 		"title": "NUDG",
-		"route": "/desk/nudg",
+		"route": "/nudg",
 		"has_permission": "nudg.api.has_app_permission",
 	}
 ]
@@ -49,6 +49,8 @@ has_permission = {
 }
 
 export_python_type_annotations = True
+
+extend_bootinfo = ["nudg.desk_access.extend_bootinfo"]
 
 doc_events = {
 	"User": {

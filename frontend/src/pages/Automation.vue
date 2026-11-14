@@ -6,7 +6,7 @@ import ErrorState from '@/components/ErrorState.vue'
 import LoadingState from '@/components/LoadingState.vue'
 import { errorText, formatDay, formatTime, initials } from '@/utils/format'
 import { formatErrorMessage } from '@/utils/errors'
-import { createAutomationRule, listAutomationRules, listAutomationRuns, updateAutomationRule } from '@/services/catalogApi'
+import { createAutomationRule, deleteAutomationRule, listAutomationRules, listAutomationRuns, updateAutomationRule } from '@/services/catalogApi'
 import { isManager, useDesk } from '@/stores/desk'
 
 const desk = useDesk()
@@ -37,6 +37,8 @@ const form = ref({
   action_reference: '',
   whatsapp_account: '',
   status: 'Active',
+  condition_operator: 'Contains',
+  condition_keyword: '',
 })
 
 const triggerOptions = [
@@ -56,6 +58,12 @@ const actionOptions = [
 const ruleStatusOptions = [
   { label: 'Active', value: 'Active' },
   { label: 'Inactive', value: 'Inactive' },
+]
+const operatorOptions = [
+  { label: 'Contains', value: 'Contains' },
+  { label: 'Exact', value: 'Exact' },
+  { label: 'Starts With', value: 'Starts With' },
+  { label: 'Regex', value: 'Regex' },
 ]
 
 const sampleRules: any[] = [
@@ -188,6 +196,8 @@ function startCreate() {
     action_reference: '',
     whatsapp_account: ruleAccountOptions.value[0]?.value || '',
     status: 'Active',
+    condition_operator: 'Contains',
+    condition_keyword: '',
   }
   editorOpen.value = true
 }
@@ -202,9 +212,28 @@ function startEdit(rule: any) {
     action_reference: rule.action_reference || '',
     whatsapp_account: rule.whatsapp_account || '',
     status: rule.status || 'Active',
+    condition_operator: rule.condition_operator || 'Contains',
+    condition_keyword: rule.condition_keyword || '',
   }
   ruleDialogOpen.value = false
   editorOpen.value = true
+}
+
+async function removeRule() {
+  if (editorMode.value !== 'edit' || !editingName.value) return
+  if (!window.confirm(`Delete rule “${form.value.rule_name || editingName.value}”?`)) return
+  saving.value = true
+  try {
+    if (live) await deleteAutomationRule(editingName.value)
+    rules.value = rules.value.filter((row) => row.name !== editingName.value)
+    if (selectedRule.value?.name === editingName.value) selectedRule.value = null
+    editorOpen.value = false
+    toast.success('Rule deleted')
+  } catch (caught) {
+    toast.error(errorText(caught))
+  } finally {
+    saving.value = false
+  }
 }
 
 async function saveRule() {
@@ -224,6 +253,8 @@ async function saveRule() {
         action_reference: form.value.action_reference.trim(),
         whatsapp_account: form.value.whatsapp_account,
         status: form.value.status,
+        condition_operator: form.value.condition_operator,
+        condition_keyword: form.value.condition_keyword.trim(),
         modified: new Date().toISOString(),
       }
       if (editorMode.value === 'edit') {
@@ -246,6 +277,8 @@ async function saveRule() {
             action_reference: form.value.action_reference.trim(),
             whatsapp_account: form.value.whatsapp_account || undefined,
             status: form.value.status,
+            condition_operator: form.value.condition_operator,
+            condition_keyword: form.value.condition_keyword.trim(),
           })
         : await createAutomationRule({
             rule_name: ruleName,
@@ -254,6 +287,8 @@ async function saveRule() {
             action_reference: form.value.action_reference.trim(),
             whatsapp_account: form.value.whatsapp_account || undefined,
             status: form.value.status,
+            condition_operator: form.value.condition_operator,
+            condition_keyword: form.value.condition_keyword.trim(),
           })
     editorOpen.value = false
     toast.success(editorMode.value === 'edit' ? 'Rule updated' : 'Rule created')
@@ -684,6 +719,19 @@ onMounted(() => {
           />
         </label>
         <label class="block text-xs font-medium text-ink-gray-7">
+          Match
+          <Select
+            class="mt-1"
+            :model-value="form.condition_operator"
+            :options="operatorOptions"
+            @update:model-value="(val) => (form.condition_operator = String(val || 'Contains'))"
+          />
+        </label>
+        <label class="block text-xs font-medium text-ink-gray-7">
+          Keyword
+          <TextInput v-model="form.condition_keyword" class="mt-1" placeholder="Leave empty to match every message" />
+        </label>
+        <label class="block text-xs font-medium text-ink-gray-7">
           Action
           <Select
             class="mt-1"
@@ -716,15 +764,19 @@ onMounted(() => {
         </label>
       </div>
       <template #actions>
-        <div class="flex justify-end gap-2">
-          <Button label="Cancel" @click="editorOpen = false" />
-          <Button
-            variant="solid"
-            class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-            :label="editorMode === 'edit' ? 'Save' : 'Create rule'"
-            :loading="saving"
-            @click="saveRule"
-          />
+        <div class="flex w-full items-center justify-between gap-2">
+          <Button v-if="editorMode === 'edit'" variant="subtle" label="Delete" :loading="saving" @click="removeRule" />
+          <span v-else />
+          <div class="flex gap-2">
+            <Button label="Cancel" @click="editorOpen = false" />
+            <Button
+              variant="solid"
+              class="bg-[#075E54] text-white hover:bg-[#128C7E]"
+              :label="editorMode === 'edit' ? 'Save' : 'Create rule'"
+              :loading="saving"
+              @click="saveRule"
+            />
+          </div>
         </div>
       </template>
     </Dialog>

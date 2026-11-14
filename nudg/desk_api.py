@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import frappe
 from frappe import _
 
@@ -368,10 +370,14 @@ def create_campaign(
 	campaign_description: str | None = None,
 	whatsapp_account: str | None = None,
 	whatsapp_template: str | None = None,
+	scheduled_at: str | None = None,
+	recipients: str | list | None = None,
 ) -> dict:
 	"""Create a draft broadcast from the Marketing screen."""
 	_require_manager()
-	return campaigns.create_campaign(name, campaign_description, whatsapp_account, whatsapp_template)
+	return campaigns.create_campaign(
+		name, campaign_description, whatsapp_account, whatsapp_template, scheduled_at, recipients
+	)
 
 
 @frappe.whitelist()
@@ -381,9 +387,20 @@ def update_campaign(
 	campaign_description: str | None = None,
 	whatsapp_account: str | None = None,
 	whatsapp_template: str | None = None,
+	scheduled_at: str | None = None,
+	recipients: str | list | None = None,
 ) -> dict:
 	_require_manager()
-	return campaigns.update_campaign(name, campaign_name, campaign_description, whatsapp_account, whatsapp_template)
+	return campaigns.update_campaign(
+		name, campaign_name, campaign_description, whatsapp_account, whatsapp_template, scheduled_at, recipients
+	)
+
+
+@frappe.whitelist()
+def delete_campaign(name: str) -> dict:
+	"""Delete a draft, scheduled, or cancelled campaign."""
+	_require_manager()
+	return campaigns.delete_campaign(name)
 
 
 @frappe.whitelist()
@@ -410,6 +427,22 @@ def update_catalog(
 
 
 @frappe.whitelist()
+def delete_catalog(name: str) -> dict:
+	"""Delete a catalog and its items."""
+	_require_manager()
+	name = (name or "").strip()
+	if not name or not frappe.db.exists("WhatsApp Catalog", name):
+		frappe.throw(_("Catalog not found."))
+	doc = frappe.get_doc("WhatsApp Catalog", name)
+	if doc.whatsapp_account:
+		_assert_account_access(doc.whatsapp_account)
+	for item in frappe.get_all("WhatsApp Catalog Item", filters={"catalog": name}, pluck="name"):
+		frappe.delete_doc("WhatsApp Catalog Item", item, ignore_permissions=True, force=True)
+	frappe.delete_doc("WhatsApp Catalog", name, ignore_permissions=True, force=True)
+	return {"name": name, "deleted": True}
+
+
+@frappe.whitelist()
 def create_catalog_item(
 	catalog: str,
 	item_name: str,
@@ -418,9 +451,10 @@ def create_catalog_item(
 	price: str | float | None = None,
 	currency: str | None = None,
 	status: str | None = None,
+	image: str | None = None,
 ) -> dict:
 	_require_manager()
-	return catalog_service.create_catalog_item(catalog, item_name, sku, description, price, currency, status)
+	return catalog_service.create_catalog_item(catalog, item_name, sku, description, price, currency, status, image)
 
 
 @frappe.whitelist()
@@ -432,9 +466,24 @@ def update_catalog_item(
 	price: str | float | None = None,
 	currency: str | None = None,
 	status: str | None = None,
+	image: str | None = None,
 ) -> dict:
 	_require_manager()
-	return catalog_service.update_catalog_item(name, item_name, sku, description, price, currency, status)
+	return catalog_service.update_catalog_item(name, item_name, sku, description, price, currency, status, image)
+
+
+@frappe.whitelist()
+def delete_catalog_item(name: str) -> dict:
+	_require_manager()
+	name = (name or "").strip()
+	if not name or not frappe.db.exists("WhatsApp Catalog Item", name):
+		frappe.throw(_("Catalog item not found."))
+	catalog = frappe.db.get_value("WhatsApp Catalog Item", name, "catalog")
+	account = frappe.db.get_value("WhatsApp Catalog", catalog, "whatsapp_account") if catalog else None
+	if account:
+		_assert_account_access(account)
+	frappe.delete_doc("WhatsApp Catalog Item", name, ignore_permissions=True, force=True)
+	return {"name": name, "deleted": True}
 
 
 @frappe.whitelist()
@@ -451,9 +500,20 @@ def create_automation_rule(
 	action_reference: str | None = None,
 	whatsapp_account: str | None = None,
 	status: str | None = None,
+	condition_operator: str | None = None,
+	condition_keyword: str | None = None,
 ) -> dict:
 	_require_manager()
-	return automation.create_rule(rule_name, trigger, action, action_reference, whatsapp_account, status)
+	return automation.create_rule(
+		rule_name,
+		trigger,
+		action,
+		action_reference,
+		whatsapp_account,
+		status,
+		condition_operator,
+		condition_keyword,
+	)
 
 
 @frappe.whitelist()
@@ -465,9 +525,34 @@ def update_automation_rule(
 	action_reference: str | None = None,
 	whatsapp_account: str | None = None,
 	status: str | None = None,
+	condition_operator: str | None = None,
+	condition_keyword: str | None = None,
 ) -> dict:
 	_require_manager()
-	return automation.update_rule(name, rule_name, trigger, action, action_reference, whatsapp_account, status)
+	return automation.update_rule(
+		name,
+		rule_name,
+		trigger,
+		action,
+		action_reference,
+		whatsapp_account,
+		status,
+		condition_operator,
+		condition_keyword,
+	)
+
+
+@frappe.whitelist()
+def delete_automation_rule(name: str) -> dict:
+	_require_manager()
+	name = (name or "").strip()
+	if not name or not frappe.db.exists("WhatsApp Automation Rule", name):
+		frappe.throw(_("Automation rule not found."))
+	account = frappe.db.get_value("WhatsApp Automation Rule", name, "whatsapp_account")
+	if account:
+		_assert_account_access(account)
+	frappe.delete_doc("WhatsApp Automation Rule", name, ignore_permissions=True, force=True)
+	return {"name": name, "deleted": True}
 
 
 @frappe.whitelist()
@@ -593,6 +678,340 @@ def create_whatsapp_account(
 		"phone_id": doc.phone_id,
 		"message": _("WhatsApp Account '{0}' configured successfully.").format(account_name),
 	}
+
+
+@frappe.whitelist()
+def update_whatsapp_account(
+	name: str,
+	status: str | None = None,
+	auto_read_receipts: int | None = None,
+	phone_id: str | None = None,
+	business_id: str | None = None,
+	app_id: str | None = None,
+	access_token: str | None = None,
+) -> dict:
+	"""Update a connected number from Nudg. A blank credential is left unchanged."""
+	_require_manager()
+	name = (name or "").strip()
+	if not name or not frappe.db.exists("WA Account", name):
+		frappe.throw(_("WhatsApp Account not found."))
+	_assert_account_access(name)
+	doc = frappe.get_doc("WA Account", name)
+	if status in ("Active", "Inactive"):
+		doc.status = status
+	if auto_read_receipts is not None:
+		doc.auto_read_receipts = 1 if int(auto_read_receipts) else 0
+	if phone_id and str(phone_id).strip():
+		doc.phone_id = str(phone_id).strip()
+	if business_id and str(business_id).strip():
+		doc.business_id = str(business_id).strip()
+	if app_id and str(app_id).strip():
+		doc.app_id = str(app_id).strip()
+	token = (access_token or "").strip()
+	if token:
+		doc.access_token = token
+	doc.save(ignore_permissions=True)
+	return {
+		"name": doc.name,
+		"account_name": doc.account_name,
+		"status": doc.status,
+		"phone_id": doc.phone_id,
+		"business_id": doc.business_id,
+		"app_id": doc.app_id,
+		"auto_read_receipts": doc.auto_read_receipts,
+	}
+
+
+@frappe.whitelist()
+def get_whatsapp_settings() -> dict:
+	"""WA Settings values a manager can edit. The webhook secret is never returned."""
+	_require_manager()
+	if not frappe.db.exists("DocType", "WA Settings"):
+		return {"callback_method": "nudg.integrations.webhook.handler"}
+	doc = frappe.get_single("WA Settings")
+	return {
+		"default_account": doc.default_account or "",
+		"whatsapp_api_url": doc.whatsapp_api_url or "",
+		"whatsapp_api_version": doc.whatsapp_api_version or "",
+		"webhook_verify_token": doc.webhook_verify_token or "",
+		"has_webhook_secret": bool(doc.webhook_secret),
+		"callback_method": "nudg.integrations.webhook.handler",
+	}
+
+
+@frappe.whitelist()
+def save_whatsapp_settings(
+	default_account: str | None = None,
+	whatsapp_api_url: str | None = None,
+	whatsapp_api_version: str | None = None,
+	webhook_verify_token: str | None = None,
+	webhook_secret: str | None = None,
+) -> dict:
+	"""Save site WhatsApp settings from Nudg. An empty secret keeps the current one."""
+	_require_manager()
+	if not frappe.db.exists("DocType", "WA Settings"):
+		frappe.throw(_("WhatsApp Settings is not installed."))
+	account = (default_account or "").strip()
+	if account:
+		_assert_account_access(account)
+	doc = frappe.get_single("WA Settings")
+	if default_account is not None:
+		doc.default_account = account or None
+	if whatsapp_api_url is not None:
+		doc.whatsapp_api_url = (whatsapp_api_url or "").strip() or "https://graph.facebook.com"
+	if whatsapp_api_version is not None:
+		doc.whatsapp_api_version = (whatsapp_api_version or "").strip() or "v23.0"
+	if webhook_verify_token is not None:
+		doc.webhook_verify_token = (webhook_verify_token or "").strip()
+	secret = (webhook_secret or "").strip()
+	if secret:
+		doc.webhook_secret = secret
+	doc.save(ignore_permissions=True)
+	return get_whatsapp_settings()
+
+
+@frappe.whitelist()
+def save_quick_reply(
+	title: str,
+	body: str,
+	shortcut: str | None = None,
+	whatsapp_account: str | None = None,
+	status: str | None = None,
+	name: str | None = None,
+) -> dict:
+	"""Create or update a quick reply without Desk."""
+	_require_manager()
+	title = (title or "").strip()
+	body = (body or "").strip()
+	shortcut = (shortcut or "").strip().lstrip("/")
+	account = (whatsapp_account or "").strip()
+	if not title:
+		frappe.throw(_("Title is required."))
+	if not body:
+		frappe.throw(_("Message body is required."))
+	if account:
+		_assert_account_access(account)
+	target = (name or "").strip()
+	if target and frappe.db.exists("WhatsApp Quick Reply", target):
+		doc = frappe.get_doc("WhatsApp Quick Reply", target)
+		doc.shortcut = shortcut
+		doc.body = body
+		doc.whatsapp_account = account or None
+		if status in ("Active", "Inactive"):
+			doc.status = status
+		doc.save(ignore_permissions=True)
+		if title != doc.name:
+			if frappe.db.exists("WhatsApp Quick Reply", title):
+				frappe.throw(_("A quick reply named {0} already exists.").format(title))
+			from frappe.model.rename_doc import rename_doc
+
+			rename_doc("WhatsApp Quick Reply", doc.name, title, merge=False)
+			doc = frappe.get_doc("WhatsApp Quick Reply", title)
+	else:
+		doc = frappe.new_doc("WhatsApp Quick Reply")
+		doc.title = title
+		doc.shortcut = shortcut
+		doc.body = body
+		doc.whatsapp_account = account or None
+		doc.status = status if status in ("Active", "Inactive") else "Active"
+		doc.insert(ignore_permissions=True)
+	return {"name": doc.name, "title": doc.title, "shortcut": doc.shortcut, "status": doc.status}
+
+
+@frappe.whitelist()
+def delete_quick_reply(name: str) -> dict:
+	_require_manager()
+	name = (name or "").strip()
+	if not name or not frappe.db.exists("WhatsApp Quick Reply", name):
+		frappe.throw(_("Quick reply not found."))
+	account = frappe.db.get_value("WhatsApp Quick Reply", name, "whatsapp_account")
+	if account:
+		_assert_account_access(account)
+	frappe.delete_doc("WhatsApp Quick Reply", name, ignore_permissions=True, force=True)
+	return {"name": name, "deleted": True}
+
+
+@frappe.whitelist()
+def save_whatsapp_template(
+	template_label: str,
+	message: str,
+	whatsapp_account: str,
+	template_type: str | None = None,
+	language: str | None = None,
+	footer: str | None = None,
+	header_text: str | None = None,
+	header_type: str | None = None,
+	buttons: str | list | None = None,
+	name: str | None = None,
+) -> dict:
+	"""Create or update a WA Template. Saving submits it to Meta."""
+	_require_manager()
+	label = (template_label or "").strip()
+	body = (message or "").strip()
+	account = (whatsapp_account or "").strip()
+	if not label:
+		frappe.throw(_("Template label is required."))
+	if not body:
+		frappe.throw(_("Template message is required."))
+	if not account or not frappe.db.exists("WA Account", account):
+		frappe.throw(_("Choose a WhatsApp account."))
+	_assert_account_access(account)
+	kind = template_type if template_type in ("Utility", "Marketing", "Authentication") else "Marketing"
+	target = (name or "").strip()
+	if target and frappe.db.exists("WA Template", target):
+		doc = frappe.get_doc("WA Template", target)
+		if doc.whatsapp_account and doc.whatsapp_account != account:
+			_assert_account_access(doc.whatsapp_account)
+	else:
+		doc = frappe.new_doc("WA Template")
+	doc.language = _template_language(language or getattr(doc, "language", None))
+	doc.template_label = label
+	doc.message = body
+	doc.template_type = kind
+	doc.whatsapp_account = account
+	doc.footer = (footer or "").strip()
+	header_kinds = ("Text", "Image", "Document", "GIF", "Video")
+	doc.header_type = header_type if header_type in header_kinds else (doc.header_type or "Text")
+	doc.header_text = (header_text or "").strip()
+	_apply_template_buttons(doc, buttons)
+	if doc.is_new():
+		doc.insert(ignore_permissions=True)
+	else:
+		doc.save(ignore_permissions=True)
+	return {
+		"name": doc.name,
+		"template_label": doc.template_label,
+		"template_name": doc.template_name,
+		"status": doc.status,
+		"whatsapp_account": doc.whatsapp_account,
+	}
+
+
+def _apply_template_buttons(doc, buttons: str | list | None) -> None:
+	if buttons is None:
+		return
+	rows = buttons
+	if isinstance(buttons, str):
+		try:
+			rows = json.loads(buttons) if buttons.strip() else []
+		except (TypeError, ValueError):
+			frappe.throw(_("Buttons must be a list."))
+	if not isinstance(rows, list):
+		frappe.throw(_("Buttons must be a list."))
+	allowed = ("Quick Reply", "Copy Code", "URL", "Voice Call", "Phone Number")
+	doc.set("buttons", [])
+	for row in rows:
+		if not isinstance(row, dict):
+			continue
+		text = (row.get("button_text") or "").strip()
+		if not text:
+			continue
+		kind = row.get("button_type") if row.get("button_type") in allowed else "Quick Reply"
+		doc.append(
+			"buttons",
+			{
+				"button_type": kind,
+				"button_text": text,
+				"url": (row.get("url") or "").strip(),
+				"phone_number": (row.get("phone_number") or "").strip(),
+			},
+		)
+
+
+@frappe.whitelist()
+def get_whatsapp_template(name: str) -> dict:
+	_require_manager()
+	name = (name or "").strip()
+	if not name or not frappe.db.exists("WA Template", name):
+		frappe.throw(_("Template not found."))
+	doc = frappe.get_doc("WA Template", name)
+	if doc.whatsapp_account:
+		_assert_account_access(doc.whatsapp_account)
+	return {
+		"name": doc.name,
+		"template_label": doc.template_label,
+		"template_name": doc.template_name,
+		"template_type": doc.template_type,
+		"language": doc.language,
+		"status": doc.status,
+		"header_type": doc.header_type,
+		"header_text": doc.header_text,
+		"message": doc.message,
+		"footer": doc.footer,
+		"whatsapp_account": doc.whatsapp_account,
+		"buttons": [
+			{
+				"button_type": row.button_type,
+				"button_text": row.button_text,
+				"url": row.url,
+				"phone_number": row.phone_number,
+			}
+			for row in (doc.buttons or [])
+		],
+	}
+
+
+@frappe.whitelist()
+def delete_whatsapp_template(name: str) -> dict:
+	"""Remove the local template. Meta is unchanged until the next sync."""
+	_require_manager()
+	name = (name or "").strip()
+	if not name or not frappe.db.exists("WA Template", name):
+		frappe.throw(_("Template not found."))
+	account = frappe.db.get_value("WA Template", name, "whatsapp_account")
+	if account:
+		_assert_account_access(account)
+	frappe.delete_doc("WA Template", name, ignore_permissions=True, force=True)
+	return {"name": name, "deleted": True}
+
+
+@frappe.whitelist()
+def sync_whatsapp_templates(account: str | None = None) -> dict:
+	"""Pull templates from Meta for one account, or every account this manager can use."""
+	_require_manager()
+	from nudg.install import _apply_grants
+
+	_apply_grants(
+		{"WA Template": ("read", "write", "create", "report")},
+		role_name="WhatsApp Manager",
+		require_whatsapp=False,
+	)
+	frappe.clear_cache(doctype="WA Template")
+	if hasattr(frappe.local, "role_permissions"):
+		frappe.local.role_permissions = {}
+	from whatsapp.whatsapp.doctype.wa_template.wa_template import sync_from_account
+
+	target = (account or "").strip()
+	if target:
+		_assert_account_access(target)
+		return sync_from_account(target)
+	from nudg.security import get_user_wa_accounts
+
+	names = get_user_wa_accounts(frappe.session.user) or []
+	if not names:
+		frappe.throw(_("No WhatsApp account is available to sync."))
+	return {"accounts": [{"account": item, **(sync_from_account(item) or {})} for item in names]}
+
+
+def _assert_account_access(account: str) -> None:
+	from nudg.security import _get_roles, is_account_manager
+
+	user = frappe.session.user
+	if user == "Administrator" or "System Manager" in _get_roles(user):
+		return
+	if not is_account_manager(account, user):
+		frappe.throw(_("You cannot change this WhatsApp account."), frappe.PermissionError)
+
+
+def _template_language(requested: str | None) -> str:
+	wanted = (requested or "en").strip() or "en"
+	for candidate in (wanted, "en", "en_US"):
+		if frappe.db.exists("WA Language", candidate):
+			return candidate
+	found = frappe.db.get_value("WA Language", {}, "name")
+	if found:
+		return found
+	frappe.throw(_("No WhatsApp language is set up on this site."))
 
 
 @frappe.whitelist()
@@ -772,6 +1191,13 @@ def update_team_member(
 	if role in ("WhatsApp User", "WhatsApp Manager"):
 		u.roles = [r for r in u.roles if r.role not in ("WhatsApp User", "WhatsApp Manager")]
 		u.append("roles", {"role": role})
+		if u.name not in ("Administrator", "Guest"):
+			from nudg.desk_access import profile_name_for_roles
+
+			profile = profile_name_for_roles({row.role for row in u.roles})
+			if profile:
+				u.module_profile = profile
+			u.flags.nudg_profile_set = True
 
 	if enabled is not None:
 		u.enabled = 1 if enabled else 0
