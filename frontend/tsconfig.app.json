@@ -1,0 +1,20 @@
+{
+  "extends": "frappe-ui/tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "types": ["vite/client"],
+    "ignoreDeprecations": "6.0",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@whatsapp/ui": ["vendor/whatsapp-ui/src/index.ts"],
+      "@whatsapp/ui/*": ["vendor/whatsapp-ui/src/*"]
+    },
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.vue", "vendor/whatsapp-ui/src/shims-icons.d.ts"],
+  "exclude": ["node_modules", "src/**/*.test.ts"]
+}
