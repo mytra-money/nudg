@@ -11,10 +11,6 @@ dist/
 .vite/
 .docs/
 
-# Recreated by `bench build --app nudg`
-nudg/public/frontend/
-nudg/www/nudg.html
-
 # Local beta seed data
 /seed_saas_data.py
 /nudg/seed_saas_data.py
