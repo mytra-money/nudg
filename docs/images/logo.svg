@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient (Rich Emerald to Deep Teal) -->
+    <linearGradient id="wdBgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#128C7E"/>
+      <stop offset="50%" stop-color="#075E54"/>
+      <stop offset="100%" stop-color="#054640"/>
+    </linearGradient>
+
+    <!-- Subtle Inner Border Highlight -->
+    <linearGradient id="wdBorderGlow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.35"/>
+      <stop offset="50%" stop-color="#FFFFFF" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.25"/>
+    </linearGradient>
+
+    <!-- Translucent Glass Sheen -->
+    <linearGradient id="wdSheen" x1="0%" y1="0%" x2="100%" y2="80%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.16"/>
+      <stop offset="40%" stop-color="#FFFFFF" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Chat Bubble Gradient -->
+    <linearGradient id="wdBubbleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#F0FDF4"/>
+    </linearGradient>
+
+    <!-- Send Arrow & Accent Mint Gradient -->
+    <linearGradient id="wdAccentMint" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#25D366"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+
+    <!-- Secondary Cyan/Teal Gradient -->
+    <linearGradient id="wdAccentTeal" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34D399"/>
+      <stop offset="100%" stop-color="#10B981"/>
+    </linearGradient>
+
+    <!-- Smooth Drop Shadows -->
+    <filter id="wdCardShadow" x="-10%" y="-10%" width="120%" height="125%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#02201C" flood-opacity="0.35"/>
+    </filter>
+
+    <filter id="wdBubbleShadow" x="-15%" y="-15%" width="130%" height="135%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="3" stdDeviation="3.5" flood-color="#021C18" flood-opacity="0.28"/>
+    </filter>
+
+    <filter id="wdGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+
+  <!-- Squircle Base with Drop Shadow -->
+  <rect x="6" y="6" width="116" height="116" rx="28" fill="url(#wdBgGrad)" filter="url(#wdCardShadow)"/>
+
+  <!-- Top Sheen / Glass Highlight across corner -->
+  <path d="M6 34 C6 18.5 18.5 6 34 6 L94 6 C109.5 6 122 18.5 122 34 L122 56 L6 76 Z" fill="url(#wdSheen)" rx="28"/>
+
+  <!-- Crisp Inset Border Glow (Frappe aesthetic hallmark) -->
+  <rect x="6" y="6" width="116" height="116" rx="28" fill="none" stroke="url(#wdBorderGlow)" stroke-width="1.5"/>
+
+  <!-- Secondary Background Echo Bubble (Omnichannel Collaboration Depth) -->
+  <g opacity="0.22">
+    <path d="M72 32 C87.464 32 100 44.536 100 60 C100 66.8 97.5 73.1 93.3 78 L96 90 L83.5 86.8 C79.8 88.8 76 89.6 72 89.6 C56.536 89.6 44 77.064 44 61.6 C44 46.136 56.536 33.6 72 33.6 Z" fill="#FFFFFF"/>
+  </g>
+
+  <!-- Primary Chat Bubble -->
+  <g filter="url(#wdBubbleShadow)">
+    <!-- Modern Frappe-style Smooth Speech Bubble -->
+    <path d="M58 26 C40.327 26 26 39.431 26 56 C26 62.8 28.5 69.1 32.8 74.2 L28 89.5 C27.6 90.7 28.8 91.8 30 91.2 L47.2 84.8 C50.6 85.6 54.2 86 58 86 C75.673 86 90 72.569 90 56 C90 39.431 75.673 26 58 26 Z"
+          fill="url(#wdBubbleGrad)"/>
+  </g>
+
+  <!-- Collaborative Desk & Messenger Send Icon (Centerpiece) -->
+  <!-- Wing 1 (Main Send Arrow in Emerald Green) -->
+  <path d="M44 54.5 L73 40.5 C74.8 39.6 76.8 41.5 76 43.3 L63.5 72 C62.8 73.6 60.6 73.8 59.5 72.4 L53 64.5 L44.8 65.5 C43.2 65.7 42.4 64.1 43.1 62.8 L47.5 54.5 Z"
+        fill="url(#wdAccentMint)"/>
+
+  <!-- Wing 2 (Accent Fold / Depth Layer) -->
+  <path d="M53 64.5 L61.5 56.5 L74 41 L59.5 72.4 C60.2 70 57.5 66.8 53 64.5 Z"
+        fill="url(#wdAccentTeal)" opacity="0.85"/>
+
+  <!-- Central Dynamic Dash / Lightning Track -->
+  <path d="M44 54.5 L61.5 56.5" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Live Pulse / Active Desk Presence Node (Upper Right of Bubble) -->
+  <circle cx="87" cy="34" r="7" fill="#128C7E" stroke="#FFFFFF" stroke-width="2.5"/>
+  <circle cx="87" cy="34" r="4" fill="#25D366"/>
+  <circle cx="87" cy="34" r="1.5" fill="#FFFFFF"/>
+</svg>

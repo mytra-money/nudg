@@ -19,6 +19,9 @@ nudg/www/nudg.html
 /seed_saas_data.py
 /nudg/seed_saas_data.py
 
+# Internal notes. Not published.
+/private-docs/
+
 # Tool caches
 .pytest_cache/
 .mypy_cache/
