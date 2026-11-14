@@ -1,0 +1,119 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-11-06 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-06 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "NUDG",
+ "name": "WhatsApp Automation Rule",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "share": 1,
+   "print": 1,
+   "email": 1
+  },
+  {
+   "role": "WhatsApp User",
+   "read": 1,
+   "write": 0,
+   "create": 0,
+   "delete": 0,
+   "report": 1,
+   "export": 0,
+   "share": 0,
+   "print": 1,
+   "email": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1,
+ "autoname": "field:rule_name",
+ "naming_rule": "By fieldname",
+ "title_field": "rule_name",
+ "search_fields": "rule_name,trigger,status",
+ "fields": [
+  {
+   "fieldname": "rule_name",
+   "fieldtype": "Data",
+   "label": "Rule Name",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "trigger",
+   "fieldtype": "Select",
+   "label": "Trigger",
+   "options": "Incoming Message\nStatus Failed\nWindow Closed\nKeyword Match\nKeyword Rule\nOut of Office",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "condition_operator",
+   "fieldtype": "Select",
+   "label": "Condition Operator",
+   "options": "\nExact\nContains\nStarts With\nRegex",
+   "default": "Contains"
+  },
+  {
+   "fieldname": "condition_json",
+   "fieldtype": "Code",
+   "label": "Condition JSON",
+   "options": "JSON"
+  },
+  {
+   "fieldname": "action",
+   "fieldtype": "Select",
+   "label": "Action",
+   "options": "Send Template\nAssign\nQuick Reply\nSend Text",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "action_reference",
+   "fieldtype": "Data",
+   "label": "Action Reference",
+   "description": "Template / User / Quick Reply name"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Active\nInactive",
+   "default": "Active",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "whatsapp_account",
+   "fieldtype": "Link",
+   "options": "WA Account",
+   "label": "WhatsApp Account",
+   "in_standard_filter": 1
+  }
+ ],
+ "field_order": [
+  "rule_name",
+  "trigger",
+  "condition_operator",
+  "condition_json",
+  "action",
+  "action_reference",
+  "status",
+  "whatsapp_account"
+ ]
+}

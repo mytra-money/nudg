@@ -1,0 +1,18 @@
+{
+ "app": "nudg",
+ "doctype": "Dock",
+ "items": [
+  {
+   "added": 0,
+   "hidden": 0,
+   "icon": "message-circle",
+   "link_to": "NUDG",
+   "link_type": "Workspace",
+   "title": "NUDG"
+  }
+ ],
+ "mount_on": "frappe",
+ "name": "nudg",
+ "standard": 1,
+ "user": ""
+}

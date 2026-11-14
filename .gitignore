@@ -1,0 +1,29 @@
+node_modules/
+frontend/node_modules/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.DS_Store
+.env
+.env.*
+dist/
+*.tsbuildinfo
+.vite/
+.docs/
+
+# Recreated by `bench build --app nudg`
+nudg/public/frontend/
+nudg/www/nudg.html
+
+# Local beta seed data
+/seed_saas_data.py
+/nudg/seed_saas_data.py
+
+# Tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage/
+*.log

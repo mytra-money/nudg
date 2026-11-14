@@ -1,0 +1,4 @@
+include nudg/modules.txt
+include nudg/patches.txt
+recursive-include nudg/public *
+recursive-include nudg/www *

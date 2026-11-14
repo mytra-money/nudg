@@ -1,0 +1,61 @@
+/* Copyright (c) 2026, NUDG and contributors */
+/* For license information, please see license.txt */
+
+.nudg-navbar-icon {
+  position: relative;
+}
+
+.nudg-navbar-icon .nav-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.5rem;
+  color: var(--text-muted, #6c757d);
+  transition: color 0.15s ease-in-out;
+}
+
+.nudg-navbar-icon .nav-link:hover,
+.nudg-navbar-icon .nav-link:focus {
+  color: #25d366;
+}
+
+.whatsapp-icon-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nudg-nav-icon {
+  width: 17px;
+  height: 17px;
+  transition: transform 0.15s ease-in-out;
+}
+
+.nudg-navbar-icon .nav-link:hover .nudg-nav-icon {
+  transform: scale(1.1);
+}
+
+.nudg-navbar-badge {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  padding: 1px 4px;
+  border-radius: 9px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.1;
+  background-color: #25d366;
+  color: #ffffff;
+  min-width: 15px;
+  text-align: center;
+  box-shadow: 0 0 0 1px var(--navbar-bg, #ffffff);
+  pointer-events: none;
+  animation: pulse-badge 0.3s ease-in-out;
+}
+
+@keyframes pulse-badge {
+  0% { transform: scale(0.7); }
+  50% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}

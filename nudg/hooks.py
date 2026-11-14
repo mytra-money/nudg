@@ -1,0 +1,72 @@
+app_name = "nudg"
+app_title = "NUDG"
+app_publisher = "NUDG"
+app_description = "NUDG – Every conversation moves business forward."
+app_email = "admin@example.com"
+app_license = "MIT"
+app_icon_url = "/assets/nudg/desk.svg"
+app_icon_title = "NUDG"
+app_icon_route = "/desk/nudg"
+
+app_include_js = ["/assets/nudg/js/nudg_navbar.js"]
+app_include_css = ["/assets/nudg/css/nudg_navbar.css"]
+
+# Frappe v16+ target with official frappe/whatsapp integration
+required_apps = ["whatsapp"]
+
+add_to_apps_screen = [
+	{
+		"name": "nudg",
+		"logo": "/assets/nudg/desk.svg",
+		"title": "NUDG",
+		"route": "/desk/nudg",
+		"has_permission": "nudg.api.has_app_permission",
+	}
+]
+
+website_route_rules = [
+	{"from_route": "/nudg/<path:app_path>", "to_route": "nudg"},
+	{"from_route": "/nudg", "to_route": "nudg"},
+]
+
+after_install = "nudg.install.after_install"
+after_migrate = ["nudg.install.after_migrate"]
+
+permission_query_conditions = {
+	"NUDG Conversation": "nudg.security.get_tenant_conversation_query",
+	"UTM Campaign": "nudg.security.get_tenant_campaign_query",
+	"WhatsApp Automation Rule": "nudg.security.get_tenant_rule_query",
+	"WhatsApp Quick Reply": "nudg.security.get_tenant_quick_reply_query",
+	"WhatsApp Catalog": "nudg.security.get_tenant_catalog_query",
+}
+
+has_permission = {
+	"NUDG Conversation": "nudg.security.has_tenant_permission",
+	"UTM Campaign": "nudg.security.has_tenant_permission",
+	"WhatsApp Automation Rule": "nudg.security.has_tenant_permission",
+	"WhatsApp Quick Reply": "nudg.security.has_tenant_permission",
+	"WhatsApp Catalog": "nudg.security.has_tenant_permission",
+}
+
+export_python_type_annotations = True
+
+doc_events = {
+	"User": {
+		"after_insert": [
+			"nudg.security.on_user_created",
+			"nudg.desk_access.assign_module_profile",
+		],
+	},
+	"WA Message": {
+		"after_insert": "nudg.services.automation.on_wa_message",
+		"on_update": "nudg.services.automation.on_wa_message",
+	},
+}
+
+scheduler_events = {
+	"cron": {
+		"* * * * *": [
+			"nudg.services.campaigns.check_and_run_scheduled_campaigns",
+		]
+	},
+}

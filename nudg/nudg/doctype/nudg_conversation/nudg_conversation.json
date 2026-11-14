@@ -1,0 +1,143 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-11-06 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-08 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "NUDG",
+ "name": "NUDG Conversation",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "share": 1,
+   "print": 1,
+   "email": 1
+  },
+  {
+   "role": "WhatsApp User",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 0,
+   "report": 1,
+   "export": 0,
+   "share": 0,
+   "print": 1,
+   "email": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1,
+ "autoname": "hash",
+ "title_field": "profile",
+ "search_fields": "profile,assignee,tags",
+ "fields": [
+  {
+   "fieldname": "profile",
+   "fieldtype": "Link",
+   "options": "WA Profile",
+   "label": "Profile",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "whatsapp_account",
+   "fieldtype": "Link",
+   "options": "WA Account",
+   "label": "WhatsApp Account",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "reference_doctype",
+   "fieldtype": "Link",
+   "options": "DocType",
+   "label": "Reference DocType"
+  },
+  {
+   "fieldname": "reference_name",
+   "fieldtype": "Dynamic Link",
+   "options": "reference_doctype",
+   "label": "Reference Document"
+  },
+  {
+   "fieldname": "assignee",
+   "fieldtype": "Link",
+   "options": "User",
+   "label": "Assignee",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "assignment_status",
+   "fieldtype": "Select",
+   "label": "Assignment Status",
+   "options": "Unassigned\nAssigned\nClosed",
+   "default": "Unassigned",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "conversation_status",
+   "fieldtype": "Select",
+   "label": "Conversation Status",
+   "options": "template_only\nneeds_reply\nwindow_open\nfailed\nblocked\nclosed",
+   "default": "template_only",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "priority",
+   "fieldtype": "Select",
+   "label": "Priority",
+   "options": "Low\nMedium\nHigh",
+   "default": "Medium"
+  },
+  {
+   "fieldname": "tags",
+   "fieldtype": "Data",
+   "label": "Tags",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "last_assigned_on",
+   "fieldtype": "Datetime",
+   "label": "Last Assigned On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "assignment_source",
+   "fieldtype": "Select",
+   "label": "Assignment Source",
+   "options": "\nManual\nAssignment Rule\nRound Robin",
+   "read_only": 1
+  }
+ ],
+ "field_order": [
+  "profile",
+  "whatsapp_account",
+  "reference_doctype",
+  "reference_name",
+  "assignee",
+  "assignment_status",
+  "priority",
+  "tags",
+  "last_assigned_on",
+  "assignment_source"
+ ]
+}

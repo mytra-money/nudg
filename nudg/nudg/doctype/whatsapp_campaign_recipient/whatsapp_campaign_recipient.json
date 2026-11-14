@@ -1,0 +1,77 @@
+{
+ "actions": [],
+ "creation": "2026-11-06 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-06 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "NUDG",
+ "name": "WhatsApp Campaign Recipient",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0,
+ "istable": 1,
+ "editable_grid": 1,
+ "fields": [
+  {
+   "fieldname": "profile",
+   "fieldtype": "Link",
+   "options": "WA Profile",
+   "label": "Profile",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "phone_number",
+   "fieldtype": "Data",
+   "label": "Phone Number",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Pending\nSent\nDelivered\nRead\nFailed\nSkipped\nSkipped: Opted Out",
+   "default": "Pending",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "variables_json",
+   "fieldtype": "Code",
+   "options": "JSON",
+   "label": "Variables JSON",
+   "description": "JSON dictionary or list of dynamic template parameters (e.g. {\"1\": \"Alice\", \"2\": \"ORD-101\"} or [\"Alice\", \"ORD-101\"])."
+  },
+  {
+   "fieldname": "message",
+   "fieldtype": "Link",
+   "options": "WA Message",
+   "label": "Message"
+  },
+  {
+   "fieldname": "message_id",
+   "fieldtype": "Data",
+   "label": "Message ID (wamid)",
+   "description": "Provider message ID (wamid) returned by WhatsApp."
+  },
+  {
+   "fieldname": "error_message",
+   "fieldtype": "Small Text",
+   "label": "Error Message"
+  }
+ ],
+ "field_order": [
+  "profile",
+  "phone_number",
+  "status",
+  "variables_json",
+  "message",
+  "message_id",
+  "error_message"
+ ]
+}

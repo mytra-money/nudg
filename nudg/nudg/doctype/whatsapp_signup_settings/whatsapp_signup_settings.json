@@ -1,0 +1,76 @@
+{
+ "actions": [],
+ "creation": "2026-11-14 11:30:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "enabled",
+  "app_id",
+  "config_id",
+  "graph_api_version",
+  "app_secret"
+ ],
+ "fields": [
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "app_id",
+   "fieldtype": "Data",
+   "label": "Meta App ID",
+   "reqd": 1
+  },
+  {
+   "fieldname": "config_id",
+   "fieldtype": "Data",
+   "label": "Embedded Signup Config ID",
+   "reqd": 1
+  },
+  {
+   "default": "v23.0",
+   "fieldname": "graph_api_version",
+   "fieldtype": "Data",
+   "label": "Graph API Version",
+   "reqd": 1
+  },
+  {
+   "fieldname": "app_secret",
+   "fieldtype": "Password",
+   "label": "Meta App Secret"
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-11-14 11:30:00.000000",
+ "modified_by": "Administrator",
+ "module": "NUDG",
+ "name": "WhatsApp Signup Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "role": "WhatsApp Manager",
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
