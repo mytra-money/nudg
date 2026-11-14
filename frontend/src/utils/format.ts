@@ -1,5 +1,5 @@
 import type { ChatMessage, WindowState } from '@/types'
-import { formatErrorMessage } from '@/errors'
+import { formatErrorMessage } from '@/utils/errors'
 
 const WINDOW_MS = 24 * 60 * 60 * 1000
 
@@ -85,7 +85,7 @@ export function deskRoute(doctype: string, name: string) {
   return `/app/${slug}/${encodeURIComponent(name)}`
 }
 
-/** In-app screen for a DocType, when NUDG already has one. */
+/** In-app screen for a DocType, when Nudg already has one. */
 export function whatsappScreen(doctype: string): { path: string; manager?: boolean } | null {
   const key = doctype.trim().toLowerCase()
   const screens: Record<string, { path: string; manager?: boolean }> = {

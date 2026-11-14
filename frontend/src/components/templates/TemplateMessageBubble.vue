@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { formatWhatsAppMessage } from '@whatsapp/ui/utils/formatMessage'
 import TemplateButtonsPreview from '@/components/templates/TemplateButtonsPreview.vue'
 import TemplateHeaderPreview from '@/components/templates/TemplateHeaderPreview.vue'
-import type { SampleSource } from '@/templatePreview'
+import type { SampleSource } from '@/utils/templatePreview'
 import type { TemplateButton } from '@/types'
 
 const props = defineProps<{

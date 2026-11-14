@@ -2,8 +2,9 @@
 import { computed, ref } from 'vue'
 import { Badge, Button, Dialog, Select, TextInput, toast } from 'frappe-ui'
 import DeskTemplatePreview from '@/components/DeskTemplatePreview.vue'
-import { deskRoute, formatDay, initials } from '@/format'
-import { isManager, useDesk } from '@/desk'
+import { errorText, formatDay, initials } from '@/utils/format'
+import { saveWhatsappTemplate } from '@/services/catalogApi'
+import { isManager, useDesk } from '@/stores/desk'
 import type { Template } from '@/types'
 
 const desk = useDesk()
@@ -117,8 +118,66 @@ function selectTemplate(t: Template) {
   selected.value = t.name
 }
 
-function openDesk(name = 'new') {
-  window.location.href = deskRoute('WA Template', name)
+const templateEditorOpen = ref(false)
+const templateSaving = ref(false)
+const templateForm = ref({
+  name: '',
+  template_label: '',
+  template_type: 'Marketing',
+  message: '',
+  footer: '',
+  header_text: '',
+  whatsapp_account: '',
+})
+
+function openTemplateEditor(template?: Template) {
+  const accounts = desk.inbox.value?.accounts || []
+  templateForm.value = {
+    name: template?.name && template.name !== 'new' ? template.name : '',
+    template_label: template?.template_label || '',
+    template_type: template?.template_type || 'Marketing',
+    message: template?.message || '',
+    footer: template?.footer || '',
+    header_text: template?.header_text || '',
+    whatsapp_account: template?.whatsapp_account || accounts[0]?.name || '',
+  }
+  templateEditorOpen.value = true
+}
+
+async function saveTemplate() {
+  if (!templateForm.value.template_label.trim() || !templateForm.value.message.trim()) {
+    toast.error('Label and message are required.')
+    return
+  }
+  if (!templateForm.value.whatsapp_account) {
+    toast.error('Choose a WhatsApp account.')
+    return
+  }
+  if (!live) {
+    toast.success('Template saved in the sample.')
+    templateEditorOpen.value = false
+    return
+  }
+  templateSaving.value = true
+  try {
+    const saved = await saveWhatsappTemplate({
+      name: templateForm.value.name || undefined,
+      template_label: templateForm.value.template_label.trim(),
+      message: templateForm.value.message.trim(),
+      whatsapp_account: templateForm.value.whatsapp_account,
+      template_type: templateForm.value.template_type,
+      footer: templateForm.value.footer.trim() || undefined,
+      header_text: templateForm.value.header_text.trim() || undefined,
+    })
+    templateEditorOpen.value = false
+    toast.success('Template saved and sent to Meta.')
+    if (saved?.name) selected.value = saved.name
+    await desk.refresh()
+  } catch (caught) {
+    toast.error(errorText(caught))
+  } finally {
+    templateSaving.value = false
+  }
 }
 
 function clearFilters() {
@@ -152,7 +211,7 @@ function clearFilters() {
         class="bg-[#075E54] text-white hover:bg-[#128C7E]"
         icon-left="lucide-plus"
         label="New Template"
-        @click="openDesk()"
+        @click="openTemplateEditor()"
       />
     </header>
 
@@ -371,9 +430,9 @@ function clearFilters() {
               <Button
                 v-if="isManager"
                 variant="subtle"
-                label="Edit in Desk"
+                label="Edit"
                 icon-left="lucide-pencil"
-                @click="openDesk(current.name)"
+                @click="openTemplateEditor(current)"
               />
               <Button
                 variant="solid"
@@ -550,6 +609,58 @@ function clearFilters() {
             :disabled="!recipient"
             :loading="desk.sending.value"
             @click="send"
+          />
+        </div>
+      </template>
+    </Dialog>
+
+    <Dialog v-model="templateEditorOpen" :title="templateForm.name ? 'Edit template' : 'New template'">
+      <div class="space-y-3 py-1 text-xs">
+        <p class="text-ink-gray-6">Saving sends this template to Meta for review. Approved templates can be used in campaigns and chats.</p>
+        <label class="block">
+          <span class="font-semibold text-ink-gray-7">Label</span>
+          <input v-model="templateForm.template_label" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2" />
+        </label>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="block">
+            <span class="font-semibold text-ink-gray-7">Type</span>
+            <select v-model="templateForm.template_type" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2">
+              <option>Marketing</option>
+              <option>Utility</option>
+              <option>Authentication</option>
+            </select>
+          </label>
+          <label class="block">
+            <span class="font-semibold text-ink-gray-7">WhatsApp account</span>
+            <select v-model="templateForm.whatsapp_account" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2">
+              <option v-for="account in desk.inbox.value?.accounts || []" :key="account.name" :value="account.name">
+                {{ account.account_name || account.name }}
+              </option>
+            </select>
+          </label>
+        </div>
+        <label class="block">
+          <span class="font-semibold text-ink-gray-7">Header</span>
+          <input v-model="templateForm.header_text" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2" />
+        </label>
+        <label class="block">
+          <span class="font-semibold text-ink-gray-7">Message</span>
+          <textarea v-model="templateForm.message" rows="4" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2" />
+        </label>
+        <label class="block">
+          <span class="font-semibold text-ink-gray-7">Footer</span>
+          <input v-model="templateForm.footer" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2" />
+        </label>
+      </div>
+      <template #actions>
+        <div class="flex w-full justify-end gap-2">
+          <Button variant="subtle" label="Cancel" @click="templateEditorOpen = false" />
+          <Button
+            variant="solid"
+            class="bg-[#075E54] text-white hover:bg-[#128C7E]"
+            label="Save"
+            :loading="templateSaving"
+            @click="saveTemplate"
           />
         </div>
       </template>

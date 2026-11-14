@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { call } from 'frappe-ui'
-import OverviewView from '@/components/OverviewView.vue'
+import OverviewView from '@/pages/Overview.vue'
 
 vi.mock('frappe-ui', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
@@ -29,6 +29,6 @@ describe('OverviewView status', () => {
     expect(wrapper.text()).toContain('Could not load integration status')
     expect(wrapper.text()).toContain('Failed to get method')
     expect(wrapper.text()).not.toContain('DocTypes')
-    expect(wrapper.text()).toContain('NUDG')
+    expect(wrapper.text()).toContain('Nudg')
   })
 })

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { Badge, Button, call, Dialog, toast } from 'frappe-ui'
-import { errorText } from '@/format'
-import { deskForm, listQuickReplies } from '@/phase2'
-import { isManager, useDesk } from '@/desk'
+import { errorText } from '@/utils/format'
+import { listQuickReplies, saveQuickReply, updateWhatsappAccount } from '@/services/catalogApi'
+import { isManager, useDesk } from '@/stores/desk'
 import { router } from '@/router'
 
 const desk = useDesk()
@@ -75,6 +75,9 @@ const newTitle = ref('')
 const newShortcut = ref('')
 const newChannel = ref('')
 const newBody = ref('')
+const editingReply = ref<string | null>(null)
+const accountEditor = ref<{ name: string; account_name: string; status: string; auto_read_receipts: boolean } | null>(null)
+const accountEditorOpen = ref(false)
 
 // Enriched sample quick replies for demo/preview mode
 const fallbackQuickReplies: any[] = [
@@ -137,12 +140,23 @@ function openIntegrations() {
   void router.push('/integrations')
 }
 
-function openDesk(doctype: string, name?: string) {
-  window.location.href = name ? deskForm(doctype, name) : deskForm(doctype)
+function startReply(row?: any) {
+  editingReply.value = row?.name || null
+  newTitle.value = row?.title || ''
+  newShortcut.value = row?.shortcut || ''
+  newBody.value = row?.body || ''
+  newChannel.value = row?.whatsapp_account || ''
+  showCreateModal.value = true
 }
 
-function openDeskPath(path: string) {
-  window.location.href = path
+function startAccountEdit(account: any) {
+  accountEditor.value = {
+    name: account.name,
+    account_name: account.account_name || account.name,
+    status: account.status || 'Active',
+    auto_read_receipts: Boolean(account.auto_read_receipts),
+  }
+  accountEditorOpen.value = true
 }
 
 async function load() {
@@ -164,6 +178,27 @@ async function load() {
     }
   } finally {
     loading.value = false
+  }
+}
+
+async function saveAccount() {
+  if (!accountEditor.value || desk.mode.value !== 'live') {
+    accountEditor.value = null
+    accountEditorOpen.value = false
+    return
+  }
+  try {
+    await updateWhatsappAccount({
+      name: accountEditor.value.name,
+      status: accountEditor.value.status,
+      auto_read_receipts: accountEditor.value.auto_read_receipts ? 1 : 0,
+    })
+    showToast('WhatsApp account updated.')
+    accountEditor.value = null
+    accountEditorOpen.value = false
+    await desk.load()
+  } catch (caught) {
+    showToast(errorText(caught), true)
   }
 }
 
@@ -201,20 +236,19 @@ async function handleSaveQuickReply() {
   const cleanShortcut = newShortcut.value.trim().replace(/^\/+/, '')
   if (desk.mode.value === 'live') {
     try {
-      await call('frappe.client.insert', {
-        doc: {
-          doctype: 'WhatsApp Quick Reply',
-          title: newTitle.value.trim(),
-          shortcut: cleanShortcut || undefined,
-          body: newBody.value.trim(),
-          whatsapp_account: newChannel.value || undefined,
-          status: 'Active',
-        },
+      await saveQuickReply({
+        name: editingReply.value || undefined,
+        title: newTitle.value.trim(),
+        shortcut: cleanShortcut || undefined,
+        body: newBody.value.trim(),
+        whatsapp_account: newChannel.value || undefined,
+        status: 'Active',
       })
-      showToast(`Quick reply "${newTitle.value.trim()}" created.`)
+      showToast(editingReply.value ? `Quick reply "${newTitle.value.trim()}" updated.` : `Quick reply "${newTitle.value.trim()}" created.`)
       newTitle.value = ''
       newShortcut.value = ''
       newBody.value = ''
+      editingReply.value = null
       showCreateModal.value = false
       await load()
     } catch (caught) {
@@ -378,7 +412,7 @@ onMounted(() => {
               </svg>
             </div>
             <div>
-              <h1 class="text-2xl font-bold tracking-tight text-ink-gray-9">NUDG Settings</h1>
+              <h1 class="text-2xl font-bold tracking-tight text-ink-gray-9">Nudg Settings</h1>
               <p class="text-xs sm:text-sm text-ink-gray-6">
                 Configure canned quick replies, routing rules, and WABA profile metadata.
               </p>
@@ -395,14 +429,6 @@ onMounted(() => {
             icon-left="lucide-refresh-cw"
             label="Refresh"
             @click="handleRefresh"
-          />
-
-          <Button
-            v-if="isManager"
-            variant="subtle"
-            size="sm"
-            label="WA Settings"
-            @click="openDeskPath('/app/wa-settings')"
           />
 
           <Button
@@ -544,7 +570,7 @@ onMounted(() => {
               class="bg-[#075E54] text-white hover:bg-[#128C7E]"
               icon-left="lucide-plus"
               label="New Quick Reply"
-              @click="showCreateModal = true"
+              @click="startReply()"
             />
           </div>
         </div>
@@ -589,9 +615,9 @@ onMounted(() => {
                   v-if="isManager"
                   type="button"
                   class="text-xs font-semibold text-ink-gray-7 hover:text-[#075E54]"
-                  @click="openDesk('WhatsApp Quick Reply', row.name)"
+                  @click="startReply(row)"
                 >
-                  Open in Desk
+                  Edit
                 </button>
                 <button
                   type="button"
@@ -638,15 +664,15 @@ onMounted(() => {
             </div>
             <h3 class="text-sm font-semibold text-ink-gray-9">Frappe Assignment Rules</h3>
             <p class="mt-1 text-xs text-ink-gray-6 leading-relaxed">
-              Assignments are synchronized with <code class="rounded bg-surface-gray-2 px-1 text-[11px]">NUDG Conversation</code>. Use standard Frappe Assignment Rules for round-robin and workload-based routing.
+              Assign conversations from the inbox, and add agents from the Team tab.
             </p>
             <button
               v-if="isManager"
               type="button"
               class="mt-3 text-xs font-semibold text-[#075E54] hover:underline"
-              @click="openDeskPath('/app/assignment-rule')"
+              @click="activeTab = 'team'; loadTeamMembers()"
             >
-              Open Assignment Rules
+              Open team
             </button>
           </div>
 
@@ -700,9 +726,9 @@ onMounted(() => {
                 v-if="isManager"
                 type="button"
                 class="rounded-lg border border-outline-gray-2 px-3.5 py-2 text-xs font-semibold text-ink-gray-8 hover:bg-surface-gray-2"
-                @click="openDesk('WA Account', account.name)"
+                @click="startAccountEdit(account)"
               >
-                Open in Desk
+                Edit
               </button>
             </div>
           </div>
@@ -731,9 +757,9 @@ onMounted(() => {
               v-if="isManager"
               type="button"
               class="rounded-lg border border-outline-gray-2 px-3.5 py-2 text-xs font-semibold text-ink-gray-8 hover:bg-surface-gray-2 transition-all"
-              @click="openDeskPath('/app/wa-settings')"
+              @click="openIntegrations"
             >
-              Open in Desk
+              Connect a number
             </button>
           </div>
 
@@ -775,7 +801,7 @@ onMounted(() => {
             <div>
               <h2 class="text-lg font-bold text-ink-gray-9">Team Members &amp; Agents</h2>
               <p class="mt-1 text-xs text-ink-gray-6">
-                Manage agent accounts, scoped roles, and WhatsApp permissions directly in NUDG without opening Desk.
+                Manage agent accounts, scoped roles, and WhatsApp permissions directly in Nudg without opening Desk.
               </p>
             </div>
             <Button
@@ -995,10 +1021,36 @@ onMounted(() => {
       </template>
     </Dialog>
 
+    <Dialog v-model="accountEditorOpen" :title="accountEditor ? 'Edit ' + accountEditor.account_name : 'WhatsApp account'">
+      <div v-if="accountEditor" class="space-y-4 py-1 text-xs">
+        <p class="text-ink-gray-6">A new number is connected from Integrations. Here you can pause this number or turn read receipts on.</p>
+        <div>
+          <label class="block font-semibold text-ink-gray-7">Status</label>
+          <select
+            v-model="accountEditor.status"
+            class="mt-1 block w-full rounded-lg border border-outline-gray-2 bg-white px-3 py-2 text-xs text-ink-gray-9"
+          >
+            <option value="Active">Active</option>
+            <option value="Inactive">Inactive</option>
+          </select>
+        </div>
+        <label class="flex items-center gap-2 text-ink-gray-8">
+          <input v-model="accountEditor.auto_read_receipts" type="checkbox" />
+          Send read receipts
+        </label>
+      </div>
+      <template #actions>
+        <div class="flex w-full justify-end gap-2">
+          <Button variant="subtle" label="Cancel" @click="accountEditorOpen = false" />
+          <Button variant="solid" class="bg-[#075E54] text-white hover:bg-[#128C7E]" label="Save" @click="saveAccount" />
+        </div>
+      </template>
+    </Dialog>
+
         <!-- MODAL: Create New Quick Reply -->
     <Dialog
       v-model="showCreateModal"
-      title="New Canned Quick Reply"
+      title="Quick Reply"
       size="xl"
     >
       <div class="space-y-4 py-1 text-xs">
@@ -1063,7 +1115,7 @@ onMounted(() => {
           <Button
             variant="solid"
             class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-            label="Create Quick Reply"
+            :label="editingReply ? 'Save Quick Reply' : 'Create Quick Reply'"
             @click="handleSaveQuickReply"
           />
         </div>

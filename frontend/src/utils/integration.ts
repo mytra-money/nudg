@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { call } from 'frappe-ui'
-import { errorText } from '@/format'
+import { errorText } from '@/utils/format'
 import type { IntegrationStatus } from '@/types'
 
 export function isLiveDesk() {

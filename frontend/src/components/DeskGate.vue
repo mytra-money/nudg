@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import ErrorState from '@/components/ErrorState.vue'
 import LoadingState from '@/components/LoadingState.vue'
-import { useDesk } from '@/desk'
+import { useDesk } from '@/stores/desk'
 
 const desk = useDesk()
 

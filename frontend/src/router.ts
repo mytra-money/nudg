@@ -1,16 +1,17 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { isManager } from '@/desk'
-import AnalyticsView from '@/components/AnalyticsView.vue'
-import AutomationView from '@/components/AutomationView.vue'
-import CatalogsView from '@/components/CatalogsView.vue'
-import InboxView from '@/components/InboxView.vue'
-import IntegrationsView from '@/components/IntegrationsView.vue'
-import LogsView from '@/components/LogsView.vue'
-import MarketingView from '@/components/MarketingView.vue'
-import OverviewView from '@/components/OverviewView.vue'
-import PlaceholderView from '@/components/PlaceholderView.vue'
-import SettingsView from '@/components/SettingsView.vue'
-import TemplatesView from '@/components/TemplatesView.vue'
+import { isManager } from '@/stores/desk'
+import AnalyticsView from '@/pages/Analytics.vue'
+import AutomationView from '@/pages/Automation.vue'
+import CatalogsView from '@/pages/Catalogs.vue'
+import ErpnextView from '@/pages/Erpnext.vue'
+import InboxView from '@/pages/Inbox.vue'
+import IntegrationsView from '@/pages/Integrations.vue'
+import LogsView from '@/pages/Logs.vue'
+import MarketingView from '@/pages/Marketing.vue'
+import OverviewView from '@/pages/Overview.vue'
+import PlaceholderView from '@/pages/Placeholder.vue'
+import SettingsView from '@/pages/Settings.vue'
+import TemplatesView from '@/pages/Templates.vue'
 
 export interface NavItem {
   to: string
@@ -49,6 +50,16 @@ export const router = createRouter({
     { path: '/automation', component: AutomationView, meta: { title: 'Automation', desk: true, manager: true } },
     { path: '/analytics', component: AnalyticsView, meta: { title: 'Analytics', desk: true } },
     { path: '/integrations', component: IntegrationsView, meta: { title: 'Integrations', desk: true, manager: true } },
+    {
+      path: '/integrations/erpnext',
+      component: ErpnextView,
+      meta: {
+        title: 'ERPNext',
+        desk: true,
+        manager: true,
+        parent: { label: 'Integrations', to: '/integrations' },
+      },
+    },
     {
       path: '/integrations/catalogs',
       component: CatalogsView,

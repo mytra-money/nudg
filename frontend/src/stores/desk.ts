@@ -1,8 +1,8 @@
 import { computed, ref } from 'vue'
 import { call, toast } from 'frappe-ui'
-import { conversationStatusOf } from '@/conversationStatus'
-import { contentKind, errorText, serviceWindow } from '@/format'
-import { rememberSampleMessage, sampleInbox, sampleLogs, sampleThread, templates as sampleTemplates } from '@/sample'
+import { conversationStatusOf } from '@/utils/conversationStatus'
+import { contentKind, errorText, serviceWindow } from '@/utils/format'
+import { rememberSampleMessage, sampleInbox, sampleLogs, sampleThread, templates as sampleTemplates } from '@/mocks/sample'
 import type { ChatMessage, Inbox, LogRow, Template, Thread } from '@/types'
 
 const inbox = ref<Inbox | null>(null)
@@ -53,7 +53,7 @@ function live() {
 function syncTabTitle() {
   if (typeof document === 'undefined') return
   const waiting = (inbox.value?.conversations || []).filter((row) => conversationStatusOf(row) === 'needs_reply').length
-  document.title = waiting ? `(${waiting}) NUDG` : 'NUDG'
+  document.title = waiting ? `(${waiting}) Nudg` : 'Nudg'
 }
 
 function applyPresence(data: any, kind: 'typing' | 'viewing') {

@@ -159,6 +159,38 @@ export async function refreshAnalytics(account?: string) {
   return call<any>('nudg.desk_api.refresh_analytics', { account })
 }
 
+export async function updateWhatsappAccount(payload: {
+  name: string
+  status?: string
+  auto_read_receipts?: number
+}) {
+  return call<any>('nudg.desk_api.update_whatsapp_account', payload)
+}
+
+export async function saveQuickReply(payload: {
+  title: string
+  body: string
+  shortcut?: string
+  whatsapp_account?: string
+  status?: string
+  name?: string
+}) {
+  return call<any>('nudg.desk_api.save_quick_reply', payload)
+}
+
+export async function saveWhatsappTemplate(payload: {
+  template_label: string
+  message: string
+  whatsapp_account: string
+  template_type?: string
+  language?: string
+  footer?: string
+  header_text?: string
+  name?: string
+}) {
+  return call<any>('nudg.desk_api.save_whatsapp_template', payload)
+}
+
 export function deskForm(doctype: string, name?: string) {
   const slug = encodeURIComponent(doctype.toLowerCase().replace(/ /g, '-'))
   if (name) return `/app/${slug}/${encodeURIComponent(name)}`

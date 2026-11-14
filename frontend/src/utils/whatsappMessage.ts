@@ -5,7 +5,7 @@ import type {
   WhatsAppStatus,
   WhatsAppTemplateButton,
 } from '@whatsapp/ui/components/Messages'
-import { formatErrorMessage } from '@/errors'
+import { formatErrorMessage } from '@/utils/errors'
 import type { ChatMessage, TemplateButton } from '@/types'
 
 const STATUSES = new Set<WhatsAppStatus>(['Pending', 'Sent', 'Delivered', 'Read', 'Failed'])

@@ -10,7 +10,7 @@ import {
   publicMediaUrl,
   resolveSampleValues,
   variableNames,
-} from '@/templatePreview'
+} from '@/utils/templatePreview'
 
 describe('template preview variables', () => {
   it('replaces variables with stored examples', () => {

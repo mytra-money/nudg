@@ -6,8 +6,8 @@ import type {
   WhatsAppContentType,
   WhatsAppMessage,
 } from '@whatsapp/ui/components/Messages'
-import { useDesk } from '@/desk'
-import { toWhatsAppMessages } from '@/whatsappMessage'
+import { useDesk } from '@/stores/desk'
+import { toWhatsAppMessages } from '@/utils/whatsappMessage'
 import type { WindowState } from '@/types'
 
 function mimeFor(type: WhatsAppContentType, fileUrl?: string) {

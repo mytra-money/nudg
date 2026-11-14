@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { headerKind, mediaFileName, mediaTypeLabel, publicMediaUrl } from '@/templatePreview'
+import { headerKind, mediaFileName, mediaTypeLabel, publicMediaUrl } from '@/utils/templatePreview'
 
 const props = defineProps<{
   headerType?: string

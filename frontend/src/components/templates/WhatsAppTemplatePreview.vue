@@ -2,8 +2,8 @@
 import { computed, ref, watch } from 'vue'
 import TemplateMessageBubble from '@/components/templates/TemplateMessageBubble.vue'
 import TemplateVariableEditor from '@/components/templates/TemplateVariableEditor.vue'
-import { initials, formatTime } from '@/format'
-import { fillVariables, previewVariableNames, resolveSampleValues } from '@/templatePreview'
+import { initials, formatTime } from '@/utils/format'
+import { fillVariables, previewVariableNames, resolveSampleValues } from '@/utils/templatePreview'
 import type { Template } from '@/types'
 
 const props = withDefaults(

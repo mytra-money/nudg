@@ -4,9 +4,9 @@ import { Badge, Button, Select, toast } from 'frappe-ui'
 import EmptyState from '@/components/EmptyState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 import LoadingState from '@/components/LoadingState.vue'
-import { errorText, formatDay, formatTime } from '@/format'
-import { getAnalytics, refreshAnalytics } from '@/phase2'
-import { useDesk } from '@/desk'
+import { errorText, formatDay, formatTime } from '@/utils/format'
+import { getAnalytics, refreshAnalytics } from '@/services/catalogApi'
+import { useDesk } from '@/stores/desk'
 
 const desk = useDesk()
 const live = Boolean(window.csrf_token)
@@ -313,7 +313,7 @@ onUnmounted(() => window.clearInterval(timer))
     <EmptyState
       v-else-if="!latest"
       title="No Analytics Snapshot Found"
-      description="Click 'Compute Snapshot' to calculate and save your first NUDG metric record."
+      description="Click 'Compute Snapshot' to calculate and save your first Nudg metric record."
     >
       <Button
         variant="solid"

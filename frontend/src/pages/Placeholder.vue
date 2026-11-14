@@ -9,6 +9,6 @@ defineProps<{
 <template>
   <EmptyState
     :title="`${title} is not available yet`"
-    :description="`${title} is part of the NUDG shell. This module is not available yet.`"
+    :description="`${title} is part of the Nudg shell. This module is not available yet.`"
   />
 </template>

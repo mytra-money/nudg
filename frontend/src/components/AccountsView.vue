@@ -3,8 +3,8 @@ import { computed, onMounted, ref } from 'vue'
 import { Button, Dialog } from 'frappe-ui'
 import EmbeddedSignup from '@/components/EmbeddedSignup.vue'
 import ManualConnectDialog from '@/components/ManualConnectDialog.vue'
-import { useDesk } from '@/desk'
-import { accounts as sampleAccounts } from '@/sample'
+import { useDesk } from '@/stores/desk'
+import { accounts as sampleAccounts } from '@/mocks/sample'
 import type { Account } from '@/types'
 
 const desk = useDesk()

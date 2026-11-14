@@ -4,10 +4,10 @@ import { Badge, Button, Dialog, Select, TextInput, toast } from 'frappe-ui'
 import EmptyState from '@/components/EmptyState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 import LoadingState from '@/components/LoadingState.vue'
-import { errorText, formatDay, formatTime, initials } from '@/format'
-import { formatErrorMessage } from '@/errors'
-import { createCampaign, deskForm, getCampaign, listCampaigns, runCampaign, updateCampaign } from '@/phase2'
-import { isManager, useDesk } from '@/desk'
+import { errorText, formatDay, formatTime, initials } from '@/utils/format'
+import { formatErrorMessage } from '@/utils/errors'
+import { createCampaign, getCampaign, listCampaigns, runCampaign, updateCampaign } from '@/services/catalogApi'
+import { isManager, useDesk } from '@/stores/desk'
 
 const desk = useDesk()
 const live = Boolean(window.csrf_token)
@@ -186,10 +186,6 @@ const templateOptions = computed(() => {
 function canEdit(row: any) {
   const status = row?.status || 'Draft'
   return status === 'Draft' || status === 'Scheduled'
-}
-
-function openDesk(name?: string) {
-  window.location.href = deskForm('UTM Campaign', name)
 }
 
 function startCreate() {
@@ -374,7 +370,7 @@ onMounted(() => {
           class="bg-[#075E54] text-white hover:bg-[#128C7E]"
           icon-left="lucide-plus"
           label="New Campaign"
-          @click="openDesk()"
+          @click="startCreate()"
         />
       </div>
     </header>
@@ -434,7 +430,7 @@ onMounted(() => {
         v-if="isManager"
         label="Create Your First Campaign"
         icon-left="lucide-plus"
-        @click="openDesk()"
+        @click="startCreate()"
       />
     </EmptyState>
 
@@ -581,11 +577,11 @@ onMounted(() => {
                 @click="confirmRunOpen = true"
               />
               <Button
-                v-if="isManager"
+                v-if="isManager && canEdit(selected)"
                 variant="subtle"
-                label="Edit in Desk"
+                label="Edit"
                 icon-left="lucide-pencil"
-                @click="openDesk(selected.name)"
+                @click="startEdit(selected)"
               />
             </div>
           </div>
@@ -755,7 +751,7 @@ onMounted(() => {
     <Dialog v-model="editorOpen" :title="editorMode === 'edit' ? 'Edit campaign' : 'New campaign'">
       <div class="space-y-3 py-1 text-sm">
         <p class="text-xs text-ink-gray-6">
-          The campaign is saved here in NUDG. Name, description, WhatsApp account, and template stay on this page.
+          The campaign is saved here in Nudg. Name, description, WhatsApp account, and template stay on this page.
         </p>
         <label class="block text-xs font-medium text-ink-gray-7">
           Name

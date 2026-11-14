@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { call } from 'frappe-ui'
-import CatalogsView from '@/components/CatalogsView.vue'
+import CatalogsView from '@/pages/Catalogs.vue'
 
 vi.mock('frappe-ui', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()

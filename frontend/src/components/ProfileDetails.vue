@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { Avatar, Badge, Button, Combobox, Dialog, Dropdown, Tooltip } from 'frappe-ui'
-import { isManager } from '@/desk'
-import { deskRoute, whatsappScreen } from '@/format'
-import { listAssignableUsers } from '@/phase2'
+import { isManager } from '@/stores/desk'
+import { whatsappScreen } from '@/utils/format'
+import { listAssignableUsers } from '@/services/catalogApi'
 import { router } from '@/router'
 import type { AssignmentInfo, Thread } from '@/types'
 
@@ -24,17 +24,12 @@ function linkedScreen(doctype: string) {
 }
 
 function canOpen(doctype: string) {
-  if (isManager.value) return true
   return Boolean(linkedScreen(doctype))
 }
 
 function openLinked(doctype: string, name: string) {
-  if (isManager.value) {
-    window.location.href = deskRoute(doctype, name)
-    return
-  }
   const screen = linkedScreen(doctype)
-  if (!screen) return
+  if (!screen || !name) return
   void router.push(screen.path)
 }
 

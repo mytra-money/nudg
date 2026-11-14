@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import AccountsView from '@/components/AccountsView.vue'
-import { useDesk } from '@/desk'
+import { useDesk } from '@/stores/desk'
 
 const desk = useDesk()
 const route = useRoute()
@@ -30,6 +30,19 @@ const isAccountsActive = computed(() => route.path === '/integrations' || route.
         >
           <span class="lucide-radio size-4" />
           <span>WhatsApp numbers</span>
+        </RouterLink>
+
+        <RouterLink
+          to="/integrations/erpnext"
+          class="flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold sm:text-sm transition-all"
+          :class="
+            route.path.includes('/erpnext')
+              ? 'bg-[#075E54]/10 text-[#075E54] border border-[#075E54]/20 shadow-xs'
+              : 'text-ink-gray-6 hover:bg-surface-gray-2 hover:text-ink-gray-9'
+          "
+        >
+          <span class="lucide-building-2 size-4" />
+          <span>ERPNext</span>
         </RouterLink>
 
         <RouterLink

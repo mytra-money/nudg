@@ -10,10 +10,10 @@ import {
   CONVERSATION_STATUS_FILTERS,
   CONVERSATION_STATUS_LABEL,
   conversationStatusOf,
-} from '@/conversationStatus'
-import { useDeskComposer } from '@/composer'
-import { formatDay, formatRemaining, formatTime, initials, previewText, rawErrorText } from '@/format'
-import { useDesk } from '@/desk'
+} from '@/utils/conversationStatus'
+import { useDeskComposer } from '@/composables/useComposer'
+import { formatDay, formatRemaining, formatTime, initials, previewText, rawErrorText } from '@/utils/format'
+import { useDesk } from '@/stores/desk'
 import {
   assignConversation,
   listCatalogItems,
@@ -21,8 +21,8 @@ import {
   sendCatalogProduct,
   unassignConversation,
   useQuickReply,
-} from '@/phase2'
-import { errorText } from '@/format'
+} from '@/services/catalogApi'
+import { errorText } from '@/utils/format'
 import type { Conversation, ConversationNote, Template } from '@/types'
 
 const desk = useDesk()
@@ -603,7 +603,7 @@ async function clearAssignment() {
             <span class="lucide-message-square size-8" aria-hidden="true" />
           </div>
           <div>
-            <h3 class="text-lg font-bold tracking-tight text-ink-gray-9">NUDG Omnichannel Chat</h3>
+            <h3 class="text-lg font-bold tracking-tight text-ink-gray-9">Nudg Omnichannel Chat</h3>
             <p class="mt-1.5 text-xs leading-relaxed text-ink-gray-6">
               Select a customer conversation from the list to view complete message history, reply within the 24-hour SLA window, or send approved Meta templates.
             </p>

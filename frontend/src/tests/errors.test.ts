@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatErrorMessage } from '@/errors'
+import { formatErrorMessage } from '@/utils/errors'
 
 describe('formatErrorMessage', () => {
   it('turns a Meta OAuth code 190 into a clean minimal error', () => {

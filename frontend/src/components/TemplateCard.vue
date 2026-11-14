@@ -2,16 +2,10 @@
 import { ref } from 'vue'
 import { Button, TabButtons } from 'frappe-ui'
 import DeskTemplatePreview from '@/components/DeskTemplatePreview.vue'
-import { isManager } from '@/desk'
-import { deskRoute } from '@/format'
 import type { Template } from '@/types'
 
 const props = defineProps<{ template: Template }>()
 defineEmits<{ use: [] }>()
-
-function openDesk() {
-  window.location.href = deskRoute('WA Template', props.template.name)
-}
 
 const mode = ref<'preview' | 'raw'>('preview')
 </script>
@@ -50,7 +44,6 @@ const mode = ref<'preview' | 'raw'>('preview')
     <DeskTemplatePreview :template="template" :mode="mode" />
     <div class="flex flex-wrap gap-2">
       <Button variant="solid" label="Send to a profile" :disabled="template.status !== 'Approved'" @click="$emit('use')" />
-      <Button v-if="isManager" variant="subtle" label="Open in Desk" @click="openDesk" />
     </div>
   </div>
 </template>

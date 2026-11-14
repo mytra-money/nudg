@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { call } from 'frappe-ui'
-import LogsView from '@/components/LogsView.vue'
+import LogsView from '@/pages/Logs.vue'
 
 vi.mock('frappe-ui', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()

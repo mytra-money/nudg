@@ -5,19 +5,18 @@ import { Badge, Button, Dialog, toast } from 'frappe-ui'
 import EmptyState from '@/components/EmptyState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 import LoadingState from '@/components/LoadingState.vue'
-import { errorText } from '@/format'
-import { useDesk } from '@/desk'
+import { errorText } from '@/utils/format'
+import { useDesk } from '@/stores/desk'
 import {
   createCatalog,
   createCatalogItem,
-  deskForm,
   listCatalogItems,
   listCatalogs,
   sendCatalogProduct,
   syncCatalog,
   updateCatalog,
   updateCatalogItem,
-} from '@/phase2'
+} from '@/services/catalogApi'
 
 const desk = useDesk()
 const showLogs = computed(() => desk.inbox.value?.can_read_logs !== false)
@@ -170,14 +169,6 @@ const itemForm = ref({ item_name: '', sku: '', description: '', price: '', curre
 const savingCatalog = ref(false)
 
 const accountOptions = computed(() => desk.inbox.value?.accounts || [])
-
-function openCatalogDesk(name?: string) {
-  window.location.href = deskForm('WhatsApp Catalog', name)
-}
-
-function openItemDesk(name?: string) {
-  window.location.href = deskForm('WhatsApp Catalog Item', name)
-}
 
 function startCatalog(existing?: any) {
   catalogEditorMode.value = existing ? 'edit' : 'create'
@@ -599,18 +590,18 @@ onMounted(() => {
 
           <button
             type="button"
-            @click="openCatalogDesk()"
+            @click="startCatalog()"
             class="inline-flex items-center gap-1.5 rounded-lg border border-outline-gray-2 bg-white px-3.5 py-2 text-xs font-semibold text-ink-gray-8 shadow-2xs hover:bg-surface-gray-2 transition-all"
           >
             <svg class="h-4 w-4 text-[#075E54]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
             </svg>
-            <span>New Catalog in Desk</span>
+            <span>New Catalog</span>
           </button>
 
           <button
             type="button"
-            @click="openItemDesk()"
+            @click="startItem()"
             class="inline-flex items-center gap-1.5 rounded-lg bg-[#075E54] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#128C7E] transition-all"
           >
             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -707,7 +698,7 @@ onMounted(() => {
               <h2 class="text-sm font-semibold text-ink-gray-9">Collections ({{ catalogs.length }})</h2>
               <button
                 type="button"
-                @click="openCatalogDesk()"
+                @click="startCatalog()"
                 class="text-xs font-semibold text-[#075E54] hover:underline"
               >
                 + New
@@ -814,10 +805,10 @@ onMounted(() => {
 
               <button
                 type="button"
-                @click="openCatalogDesk(selectedCatalog.name)"
+                @click="startCatalog(selectedCatalog)"
                 class="inline-flex items-center gap-1.5 rounded-lg border border-outline-gray-2 bg-white px-3.5 py-2 text-xs font-semibold text-ink-gray-8 shadow-2xs hover:bg-surface-gray-2 transition-all"
               >
-                <span>Edit in Desk</span>
+                <span>Edit</span>
                 <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                 </svg>
@@ -825,7 +816,7 @@ onMounted(() => {
 
               <button
                 type="button"
-                @click="openItemDesk()"
+                @click="startItem()"
                 class="inline-flex items-center gap-1.5 rounded-lg bg-[#075E54] px-3.5 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-[#128C7E] transition-all"
               >
                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -916,8 +907,8 @@ onMounted(() => {
                   variant="subtle"
                   size="sm"
                   icon-left="lucide-pencil"
-                  label="Edit in Desk"
-                  @click="openItemDesk(item.name)"
+                  label="Edit"
+                  @click="startItem(item)"
                 />
 
                 <Button
@@ -946,7 +937,7 @@ onMounted(() => {
             <p class="mt-1 text-xs text-ink-gray-5">Add WhatsApp Catalog Item records to display products in this catalog.</p>
             <button
               type="button"
-              @click="openItemDesk()"
+              @click="startItem()"
               class="mt-3 rounded-lg bg-[#075E54] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#128C7E]"
             >
               + Add Catalog Item

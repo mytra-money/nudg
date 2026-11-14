@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { fillVariables, type SampleSource } from '@/templatePreview'
+import { fillVariables, type SampleSource } from '@/utils/templatePreview'
 import type { TemplateButton } from '@/types'
 
 const props = defineProps<{

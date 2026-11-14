@@ -1,4 +1,4 @@
-import { serviceWindow } from '@/format'
+import { serviceWindow } from '@/utils/format'
 import type { Account, ChatMessage, Conversation, Inbox, LogRow, Profile, Template, Thread } from '@/types'
 
 function ago(minutes: number) {

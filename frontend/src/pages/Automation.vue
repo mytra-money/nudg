@@ -4,10 +4,10 @@ import { Badge, Button, Dialog, Select, TextInput, toast } from 'frappe-ui'
 import EmptyState from '@/components/EmptyState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 import LoadingState from '@/components/LoadingState.vue'
-import { errorText, formatDay, formatTime, initials } from '@/format'
-import { formatErrorMessage } from '@/errors'
-import { createAutomationRule, deskForm, listAutomationRules, listAutomationRuns, updateAutomationRule } from '@/phase2'
-import { isManager, useDesk } from '@/desk'
+import { errorText, formatDay, formatTime, initials } from '@/utils/format'
+import { formatErrorMessage } from '@/utils/errors'
+import { createAutomationRule, listAutomationRules, listAutomationRuns, updateAutomationRule } from '@/services/catalogApi'
+import { isManager, useDesk } from '@/stores/desk'
 
 const desk = useDesk()
 const live = Boolean(window.csrf_token)
@@ -177,10 +177,6 @@ const ruleAccountOptions = computed(() =>
     value: row.name,
   })),
 )
-
-function openDesk(name?: string) {
-  window.location.href = deskForm('WhatsApp Automation Rule', name)
-}
 
 function startCreate() {
   editorMode.value = 'create'
@@ -378,7 +374,7 @@ onMounted(() => {
           class="bg-[#075E54] text-white hover:bg-[#128C7E]"
           icon-left="lucide-plus"
           label="New Rule"
-          @click="openDesk()"
+          @click="startCreate()"
         />
       </div>
     </header>
@@ -525,7 +521,7 @@ onMounted(() => {
               v-if="isManager"
               type="button"
               class="mt-3 text-xs font-semibold text-[#075E54] hover:underline"
-              @click="openDesk()"
+              @click="startCreate()"
             >
               New rule
             </button>
@@ -584,9 +580,9 @@ onMounted(() => {
                 v-if="isManager"
                 type="button"
                 class="font-medium text-[#075E54] hover:underline"
-                @click="openDesk(row.name)"
+                @click="startEdit(row)"
               >
-                Edit in Desk
+                Edit
               </button>
             </div>
           </div>
@@ -774,9 +770,9 @@ onMounted(() => {
             v-if="isManager"
             variant="solid"
             class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-            label="Edit Rule in Desk"
+            label="Edit Rule"
             icon-left="lucide-pencil"
-            @click="openDesk(selectedRule.name)"
+            @click="startEdit(selectedRule); ruleDialogOpen = false"
           />
           <Button label="Close" @click="ruleDialogOpen = false" />
         </div>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, inject } from 'vue'
 import { Select, sidebarCollapsedKey } from 'frappe-ui'
-import { useDesk } from '@/desk'
+import { useDesk } from '@/stores/desk'
 
 const desk = useDesk()
 const collapsed = inject(sidebarCollapsedKey, computed(() => false))

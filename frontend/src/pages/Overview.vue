@@ -4,9 +4,9 @@ import { Avatar, Badge, Button } from 'frappe-ui'
 import EmptyState from '@/components/EmptyState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 import LoadingState from '@/components/LoadingState.vue'
-import { isManager, useDesk } from '@/desk'
-import { formatRemaining, formatTime, initials, previewText } from '@/format'
-import { useIntegrationStatus } from '@/integration'
+import { isManager, useDesk } from '@/stores/desk'
+import { formatRemaining, formatTime, initials, previewText } from '@/utils/format'
+import { useIntegrationStatus } from '@/utils/integration'
 import { router } from '@/router'
 
 const { live, status, loading, error, bootInstalled, load } = useIntegrationStatus()
@@ -112,10 +112,10 @@ const recentLogs = computed(() => logs.value.slice(0, 4))
               Meta Cloud API
             </span>
             <span class="text-xs text-ink-gray-5">·</span>
-            <span class="text-xs font-medium text-ink-gray-6">Omnichannel NUDG</span>
+            <span class="text-xs font-medium text-ink-gray-6">Omnichannel Nudg</span>
           </div>
           <h1 class="mt-1.5 text-2xl font-bold tracking-tight text-ink-gray-9 sm:text-3xl">
-            NUDG Overview
+            Nudg Overview
           </h1>
           <p class="mt-1 text-sm text-ink-gray-6">
             Real-time customer conversation SLAs, 24-hour service windows, and WhatsApp Business infrastructure.
@@ -206,7 +206,7 @@ const recentLogs = computed(() => logs.value.slice(0, 4))
             <div>
               <p class="font-semibold text-ink-gray-9">Demo Environment Active</p>
               <p class="text-ink-gray-6">
-                You are currently previewing NUDG with simulated WhatsApp data. Conversations, templates, and logs can be tested interactively.
+                You are currently previewing Nudg with simulated WhatsApp data. Conversations, templates, and logs can be tested interactively.
               </p>
             </div>
           </div>

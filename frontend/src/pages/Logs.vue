@@ -2,9 +2,9 @@
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { Badge, Button, Dialog, toast } from 'frappe-ui'
-import { formatErrorMessage } from '@/errors'
-import { deskRoute, formatDay, formatTime, whatsappScreen } from '@/format'
-import { isManager, useDesk } from '@/desk'
+import { formatErrorMessage } from '@/utils/errors'
+import { formatDay, formatTime, whatsappScreen } from '@/utils/format'
+import { isManager, useDesk } from '@/stores/desk'
 import { router } from '@/router'
 import type { LogRow } from '@/types'
 
@@ -215,10 +215,6 @@ function exportCsv() {
   showToast('Audit logs exported to CSV!')
 }
 
-function openInDesk() {
-  window.location.href = '/app/wa-log'
-}
-
 function linkedScreen(doctype?: string) {
   if (!doctype) return null
   const screen = whatsappScreen(doctype)
@@ -229,12 +225,9 @@ function linkedScreen(doctype?: string) {
 
 function openReference(doctype?: string, docname?: string) {
   if (!doctype || !docname) return
-  if (isManager.value) {
-    window.location.href = deskRoute(doctype, docname)
-    return
-  }
-  if (!linkedScreen(doctype)) return
-  void router.push(linkedScreen(doctype)!.path)
+  const screen = linkedScreen(doctype)
+  if (!screen) return
+  void router.push(screen.path)
 }
 
 function openInspectModal(row: LogRow) {
@@ -393,14 +386,6 @@ onMounted(() => {
             icon-left="lucide-download"
             label="Export CSV"
             @click="exportCsv"
-          />
-
-          <Button
-            v-if="isManager"
-            variant="subtle"
-            size="sm"
-            label="Open in Desk"
-            @click="openInDesk"
           />
 
         </div>

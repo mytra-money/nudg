@@ -19,7 +19,7 @@ import DeskGate from '@/components/DeskGate.vue'
 import EmbeddedSignup from '@/components/EmbeddedSignup.vue'
 import ManualConnectDialog from '@/components/ManualConnectDialog.vue'
 import EmptyState from '@/components/EmptyState.vue'
-import { isManager, useDesk } from '@/desk'
+import { isManager, useDesk } from '@/stores/desk'
 import { shellNav } from '@/router'
 
 const desk = useDesk()
@@ -63,7 +63,7 @@ const subtitle = computed(() => {
   return desk.inbox.value?.site || sessionSite || 'Site'
 })
 
-const title = computed(() => route.meta.title || 'NUDG')
+const title = computed(() => route.meta.title || 'Nudg')
 const breadcrumb = computed(() => route.meta.parent || null)
 const userLabel = sessionLive ? sessionUser || 'Signed in' : 'Local preview'
 
@@ -135,7 +135,7 @@ onUnmounted(() => window.clearInterval(timer))
   <div class="flex h-dvh w-screen flex-col overflow-hidden bg-surface-gray-1 text-ink-gray-9 md:flex-row">
     <nav
       class="flex shrink-0 gap-1 overflow-x-auto border-b border-outline-gray-2 bg-white px-2 py-2 md:hidden"
-      aria-label="NUDG"
+      aria-label="Nudg"
     >
       <RouterLink
         v-for="link in visibleNav"
@@ -155,13 +155,13 @@ onUnmounted(() => window.clearInterval(timer))
     <div class="relative z-20 hidden h-full shrink-0 md:flex">
       <Sidebar
         v-model:collapsed="sidebarCollapsed"
-        aria-label="NUDG"
+        aria-label="Nudg"
         width="14rem"
         collapsed-width="3rem"
       >
-        <SidebarHeader title="NUDG" :subtitle="subtitle">
+        <SidebarHeader title="Nudg" :subtitle="subtitle">
           <template #prefix>
-            <span class="grid size-full place-items-center rounded bg-[#075E54] text-[10px] font-bold tracking-wide text-white shadow-sm">NUDG</span>
+            <span class="grid size-full place-items-center rounded bg-[#075E54] text-[10px] font-bold tracking-wide text-white shadow-sm">Nudg</span>
           </template>
         </SidebarHeader>
         <AccountSelect />

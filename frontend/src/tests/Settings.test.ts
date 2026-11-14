@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { call } from 'frappe-ui'
-import SettingsView from '@/components/SettingsView.vue'
+import SettingsView from '@/pages/Settings.vue'
 
 vi.mock('frappe-ui', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
@@ -21,7 +21,7 @@ describe('SettingsView', () => {
     const wrapper = mount(SettingsView)
     await flushPromises()
 
-    expect(wrapper.text()).toContain('NUDG Settings')
+    expect(wrapper.text()).toContain('Nudg Settings')
     expect(wrapper.text()).toContain('Quick Replies')
     expect(wrapper.text()).toContain('Routing & Assignment')
     expect(wrapper.text()).toContain('WABA Profile')
