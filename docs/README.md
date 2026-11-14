@@ -1,6 +1,6 @@
-# NUDG docs
+# Nudg docs
 
-Install NUDG on a Frappe site, then open it at `/nudg`.
+Install Nudg on a Frappe site, then open it at `/nudg`.
 
 ## Start here
 

@@ -1,6 +1,6 @@
 # Installation
 
-NUDG needs the official `whatsapp` app for a live inbox. NUDG still installs if that app is missing. The page opens for a logged-in user, and the inbox stays empty until WhatsApp is connected.
+Nudg needs the official `whatsapp` app for a live inbox. Nudg still installs if that app is missing. The page opens for a logged-in user, and the inbox stays empty until WhatsApp is connected.
 
 ## Commands
 
@@ -31,11 +31,11 @@ Account tokens and webhook secrets stay on the official WhatsApp DocTypes, with 
 
 | URL | What it is |
 | --- | --- |
-| `/nudg` | The NUDG app. Guests are sent to login. |
+| `/nudg` | The Nudg app. Guests are sent to login. |
 | `/desk/nudg` | The Desk workspace tile. |
 
 `/whatsapp-inbox` is a different app. Use `/nudg`.
 
 ## After install
 
-Connect the number from NUDG, or enter the official WhatsApp account in Desk. See [Configuration](CONFIGURATION.md).
+Connect the number from Nudg, or enter the official WhatsApp account in Desk. See [Configuration](CONFIGURATION.md).

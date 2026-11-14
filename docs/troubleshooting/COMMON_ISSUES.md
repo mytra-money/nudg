@@ -2,9 +2,9 @@
 
 ## The site is still on Frappe 15
 
-NUDG and the official `whatsapp` app need Frappe 16 or newer. Check the running version in the bench console with `frappe.__version__`. A site that is still on 15 cannot load the official app.
+Nudg and the official `whatsapp` app need Frappe 16 or newer. Check the running version in the bench console with `frappe.__version__`. A site that is still on 15 cannot load the official app.
 
-## NUDG is not installed
+## Nudg is not installed
 
 `/nudg` returns 404 until the app is installed:
 

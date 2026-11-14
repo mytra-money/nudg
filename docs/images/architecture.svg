@@ -13,7 +13,7 @@
 
   <!-- Title -->
   <text x="40" y="45" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="20" font-weight="700" fill="#0F172A">
-    NUDG Dual-Mode Decoupled Architecture
+    Nudg Dual-Mode Decoupled Architecture
   </text>
   <text x="40" y="70" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="400" fill="#64748B">
     Supports both native Self-Hosted Frappe instances and standalone multi-tenant SaaS / Third-Party CRM modes.
@@ -23,7 +23,7 @@
   <g transform="translate(60, 100)" filter="url(#boxShadow)">
     <rect width="980" height="60" rx="10" fill="#075E54" />
     <text x="490" y="36" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="16" font-weight="700" fill="#FFFFFF" text-anchor="middle">
-      NUDG Single Page App (Vue 3 + Vite + Tailwind + Frappe UI)
+      Nudg Single Page App (Vue 3 + Vite + Tailwind + Frappe UI)
     </text>
     <text x="490" y="52" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="400" fill="#A7F3D0" text-anchor="middle">
       /nudg • Multi-Agent Team Inbox • Broadcast Campaigns • Automations • Catalog Store • Desk Workspace

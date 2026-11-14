@@ -1,10 +1,10 @@
 <div align="center" markdown="1">
 
-<img src="docs/images/logo.svg" alt="NUDG logo" width="84" />
+<img src="docs/images/logo.svg" alt="Nudg logo" width="84" />
 
-# NUDG
+# Nudg
 
-**NUDG – Every conversation moves business forward.**
+**Nudg – Every conversation moves business forward.**
 
 [![Frappe v16+ Compatible](https://img.shields.io/badge/Frappe-v16%2B-075E54?style=flat-square&logo=frappe)](https://frappeframework.com/)
 [![Tests Passing](https://img.shields.io/badge/Tests-198%20backend%20%7C%2042%20frontend%20passed-25D366?style=flat-square&logo=githubactions)](nudg/tests/)
@@ -15,9 +15,9 @@
 
 </div>
 
-![NUDG Banner](docs/images/banner.svg)
+![Nudg Banner](docs/images/banner.svg)
 
-NUDG helps sales, support, and marketing teams manage customer conversations over WhatsApp in one shared workspace — with live agent presence, canned replies, standard UTM campaign broadcasts, and catalog commerce.
+Nudg helps sales, support, and marketing teams manage customer conversations over WhatsApp in one shared workspace — with live agent presence, canned replies, standard UTM campaign broadcasts, and catalog commerce.
 
 It is built for companies that want an enterprise customer engagement desk with **zero third-party SaaS markups**, running either as a **standalone SaaS platform (`nudg.mytra.money`)** or **directly inside your own Frappe Framework instance**.
 
@@ -25,7 +25,7 @@ It is built for companies that want an enterprise customer engagement desk with 
 
 ## Getting started
 
-1. **Open NUDG**: Navigate to [nudg.mytra.money](https://nudg.mytra.money) (or `http://your-site.localhost:8000/nudg`).
+1. **Open Nudg**: Navigate to [nudg.mytra.money](https://nudg.mytra.money) (or `http://your-site.localhost:8000/nudg`).
 2. **Connect your WhatsApp Account**: Go to **Integrations** to connect your Meta WhatsApp number in 1 click using **Embedded Signup**, or manually enter your Meta Phone Number ID, WhatsApp Business Account ID (WABA ID), and Permanent Access Token.
 3. **Invite your team**: Assign team members the **WhatsApp User** role for support/sales agents, or **WhatsApp Manager** for team leads. Standard User Permissions isolate accounts automatically.
 4. **Configure Quick Replies**: Add canned responses with `/` shortcut triggers (e.g. `/greet`, `/pricing`, `/refund`) to answer routine queries in seconds.
@@ -80,9 +80,9 @@ Put routine operations on autopilot:
 
 ---
 
-## ⚔️ NUDG vs Other Commercial Solutions
+## ⚔️ Nudg vs Other Commercial Solutions
 
-| Feature | Other Commercial Solutions | NUDG (Ours) |
+| Feature | Other Commercial Solutions | Nudg (Ours) |
 | :--- | :---: | :---: |
 | **Shared Team Inbox** | Limited / Per-Agent Add-on | ✅ **Agent collision detection, live presence, audio alerts, and round-robin routing** |
 | **Broadcast Campaigns** | Per-Message Surcharge | ✅ **Direct integration with standard `UTM Campaign` with dynamic parameters (`{{1}}`, `{{2}}`)** |
@@ -105,16 +105,16 @@ Put routine operations on autopilot:
 | **WhatsApp Manager** | Team setup, round-robin rules, UTM broadcasts, automations, WABA credentials |
 | **System Manager** | Full access including Desk and site maintenance (for administrators) |
 
-Day-to-day agent work happens in the NUDG app (`/nudg`), with administrative views (`/marketing`, `/automation`, `/integrations`) automatically hidden from regular agents.
+Day-to-day agent work happens in the Nudg app (`/nudg`), with administrative views (`/marketing`, `/automation`, `/integrations`) automatically hidden from regular agents.
 
 ---
 
 ## ERPNext integration (optional)
 
-ERPNext is **completely optional**. NUDG has **zero hard dependencies on ERPNext or Frappe CRM**:
+ERPNext is **completely optional**. Nudg has **zero hard dependencies on ERPNext or Frappe CRM**:
 
 - **Pure SaaS Mode (`nudg.mytra.money`)**: Runs on vanilla Frappe Framework v16+. Catalog items, quick replies, and UTM campaigns are managed completely independently.
-- **Self-Hosted Mode (with ERPNext)**: If ERPNext is detected on your bench, NUDG automatically enables:
+- **Self-Hosted Mode (with ERPNext)**: If ERPNext is detected on your bench, Nudg automatically enables:
   - 1-click **"Import from ERPNext Items"** on WhatsApp Catalog.
   - Quick document linking to Leads, Quotations, Sales Orders, and Issues.
 
@@ -164,7 +164,7 @@ bench --site <site> execute nudg.seed_saas_data.seed_all
 
 ## Testing & Verification
 
-NUDG includes a hermetic mock testing harness simulating Meta Graph API v18.0+:
+Nudg includes a hermetic mock testing harness simulating Meta Graph API v18.0+:
 
 ```bash
 # Run backend unit and contract tests (198 passing)
@@ -180,7 +180,7 @@ yarn test
 
 ## About Mytra
 
-NUDG is developed as an open-source customer communication platform:
+Nudg is developed as an open-source customer communication platform:
 - Cloud Platform: [nudg.mytra.money](https://nudg.mytra.money)
 - Powered by: [Mytra](https://mytra.money)
 
