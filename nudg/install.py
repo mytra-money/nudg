@@ -1,4 +1,4 @@
-"""Idempotent role setup for NUDG.
+"""Idempotent role setup for Nudg.
 
 ``after_install`` and ``after_migrate`` both call ``ensure_role``. Running
 either one again does not delete roles, Custom DocPerm rows, or documents.
@@ -20,7 +20,7 @@ DESK_GRANTS = {
 	"WhatsApp Catalog": ("read", "report", "print"),
 	"WhatsApp Catalog Item": ("read", "report", "print"),
 	"WhatsApp Quick Reply": ("read", "write", "create", "report", "print"),
-	"NUDG Conversation": ("read", "write", "create", "report", "print"),
+	"Nudg Conversation": ("read", "write", "create", "report", "print"),
 	"UTM Campaign": ("read", "report", "print"),
 	"WhatsApp Automation Rule": ("read", "report", "print"),
 	"WhatsApp Automation Run": ("read", "report", "print"),
@@ -36,7 +36,7 @@ AGENT_LOCKED = (
 
 MANAGER_GRANTS = {
 	"WA Account": ("read", "write", "create", "report", "print"),
-	"NUDG Conversation": ("read", "write", "create", "delete", "report", "print"),
+	"Nudg Conversation": ("read", "write", "create", "delete", "report", "print"),
 	"UTM Campaign": ("read", "write", "create", "delete", "report", "print"),
 	"WhatsApp Automation Rule": ("read", "write", "create", "delete", "report", "print"),
 	"WhatsApp Automation Run": ("read", "write", "report", "print"),
@@ -55,7 +55,7 @@ def check_frappe_version():
 			major = int(parts[0])
 			if major < 16:
 				frappe.throw(
-					frappe._("NUDG requires Frappe Framework version 16.0 or newer. Detected version: {0}").format(version),
+					frappe._("Nudg requires Frappe Framework version 16.0 or newer. Detected version: {0}").format(version),
 					frappe.ValidationError,
 				)
 
@@ -81,7 +81,7 @@ def _ensure_desk_modules():
 
 
 def setup_standard_custom_fields():
-	"""Standard and optional custom fields for NUDG (Zero hard dependency on ERPNext/CRM)."""
+	"""Standard and optional custom fields for Nudg (Zero hard dependency on ERPNext/CRM)."""
 	if not getattr(frappe.local, "db", None):
 		return
 
@@ -244,7 +244,7 @@ def setup_standard_custom_fields():
 			for dt in custom_fields.keys():
 				frappe.clear_cache(doctype=dt)
 		except Exception:
-			frappe.log_error(title="NUDG setup_standard_custom_fields error")
+			frappe.log_error(title="Nudg setup_standard_custom_fields error")
 
 
 def ensure_role():

@@ -1,4 +1,4 @@
-# Copyright (c) 2026, NUDG and contributors
+# Copyright (c) 2026, Nudg and contributors
 # For license information, please see license.txt
 
 """Adversarial Contract Compliance and Security Test Suite for Milestone 2.
@@ -354,7 +354,7 @@ class TestAdversarialM2Contracts(unittest.TestCase):
 
 	def test_notes_isolated_from_messages_array_in_get_thread(self):
 		"""Internal notes stay out of the customer-facing messages array."""
-		self.mock_db.exists.side_effect = lambda dt, name=None: dt in ("DocType", "WA Message", "NUDG Conversation")
+		self.mock_db.exists.side_effect = lambda dt, name=None: dt in ("DocType", "WA Message", "Nudg Conversation")
 		self.mock_db.get_value.return_value = "CONV-001"
 
 		sample_message = frappe._dict({

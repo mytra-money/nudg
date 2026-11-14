@@ -1,1 +1,1 @@
-"""Business services for NUDG product modules."""
+"""Business services for Nudg product modules."""

@@ -1,4 +1,4 @@
-# Copyright (c) 2026, NUDG and contributors
+# Copyright (c) 2026, Nudg and contributors
 # For license information, please see license.txt
 
 """Embedded Signup v4: exchange the popup code and store the customer token."""

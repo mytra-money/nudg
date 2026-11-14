@@ -1,4 +1,4 @@
-# Copyright (c) 2026, NUDG and contributors
+# Copyright (c) 2026, Nudg and contributors
 # For license information, please see license.txt
 
 """User Permission Scoping on WA Account (Single Source of Truth).
@@ -188,7 +188,7 @@ def _account_query_for(doctype: str, fieldname: str = "whatsapp_account", user: 
 
 
 def get_tenant_conversation_query(user: str | None = None) -> str:
-	return _account_query_for("NUDG Conversation", "whatsapp_account", user)
+	return _account_query_for("Nudg Conversation", "whatsapp_account", user)
 
 
 def get_tenant_campaign_query(user: str | None = None) -> str:

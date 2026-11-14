@@ -1,4 +1,4 @@
-# Copyright (c) 2026, NUDG and contributors
+# Copyright (c) 2026, Nudg and contributors
 # For license information, please see license.txt
 
 """Campaign list, scheduler, and broadcast runner with variable interpolation and funnel analytics."""
@@ -564,7 +564,7 @@ def create_campaign(
 	scheduled_at: str | None = None,
 	recipients: Any = None,
 ) -> dict:
-	"""Create a draft UTM Campaign without leaving NUDG."""
+	"""Create a draft UTM Campaign without leaving Nudg."""
 	frappe.has_permission("UTM Campaign", "create", throw=True)
 	name = (name or "").strip()
 	if not name:
@@ -599,7 +599,7 @@ def update_campaign(
 	scheduled_at: str | None = None,
 	recipients: Any = None,
 ) -> dict:
-	"""Update a draft or scheduled campaign from NUDG."""
+	"""Update a draft or scheduled campaign from Nudg."""
 	doc = frappe.get_doc("UTM Campaign", name)
 	frappe.has_permission("UTM Campaign", "write", doc=doc, throw=True)
 	status = doc.get("whatsapp_status") or "Draft"

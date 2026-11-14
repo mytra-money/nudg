@@ -1,7 +1,7 @@
-# Copyright (c) 2026, NUDG and contributors
+# Copyright (c) 2026, Nudg and contributors
 # For license information, please see license.txt
 
-"""SaaS Gateway / Managed Cloud Connector for NUDG.
+"""SaaS Gateway / Managed Cloud Connector for Nudg.
 
 Dispatches outbound messages and synchronizes templates via an external SaaS forwarder /
 gateway API (e.g., Mytra Cloud Gateway, Lyqd SaaS Hub, or a managed Meta WABA proxy).

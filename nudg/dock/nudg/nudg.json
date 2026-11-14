@@ -3,12 +3,12 @@
  "doctype": "Dock",
  "items": [
   {
-   "added": 0,
+   "added": 1,
    "hidden": 0,
    "icon": "message-circle",
-   "link_to": "NUDG",
-   "link_type": "Workspace",
-   "title": "NUDG"
+   "link_type": "URL",
+   "title": "Nudg",
+   "url": "/nudg"
   }
  ],
  "mount_on": "frappe",

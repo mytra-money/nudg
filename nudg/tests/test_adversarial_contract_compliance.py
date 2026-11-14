@@ -1,4 +1,4 @@
-# Copyright (c) 2026, NUDG and contributors
+# Copyright (c) 2026, Nudg and contributors
 # For license information, please see license.txt
 
 """Empirical Adversarial Test Suite for Meta Cloud API v18.0+ Contracts, Webhooks, and Concurrency.

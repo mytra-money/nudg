@@ -19,7 +19,7 @@ from nudg.services import (
 
 def _require_login():
 	if frappe.session.user == "Guest":
-		frappe.throw(_("Log in to open NUDG."), frappe.PermissionError)
+		frappe.throw(_("Log in to open Nudg."), frappe.PermissionError)
 
 
 def _require_manager():
@@ -307,8 +307,8 @@ def close_conversation(profile: str) -> dict:
 def ensure_conversation(profile: str) -> dict:
 	_require_login()
 	name = assignments.ensure_conversation(profile)
-	doc = frappe.get_doc("NUDG Conversation", name)
-	frappe.has_permission("NUDG Conversation", "read", doc=doc, throw=True)
+	doc = frappe.get_doc("Nudg Conversation", name)
+	frappe.has_permission("Nudg Conversation", "read", doc=doc, throw=True)
 	return assignments._serialize(doc)
 
 
@@ -1101,7 +1101,7 @@ def create_team_member(
 	password: str,
 	role: str = "WhatsApp User",
 ) -> dict:
-	"""Create a new team user directly in NUDG with email, name, password, and scoped WA Account permission."""
+	"""Create a new team user directly in Nudg with email, name, password, and scoped WA Account permission."""
 	_require_manager()
 	user = frappe.session.user
 	from nudg.security import is_account_manager, ensure_account_user_permission, _get_roles

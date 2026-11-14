@@ -1,4 +1,4 @@
-# Copyright (c) 2026, NUDG and contributors
+# Copyright (c) 2026, Nudg and contributors
 # For license information, please see license.txt
 
 from __future__ import annotations
@@ -58,14 +58,14 @@ class TestInboxAndPresenceParity(unittest.TestCase):
 	# -------------------------------------------------------------------------
 
 	def test_note_doctype_schema_structure(self):
-		"""Assert NUDG Conversation schema contains required fields."""
+		"""Assert Nudg Conversation schema contains required fields."""
 		app_path = Path(frappe.get_app_path("nudg"))
 		schema_file = app_path / "nudg" / "doctype" / "nudg_conversation" / "nudg_conversation.json"
 		self.assertTrue(schema_file.exists(), f"Schema missing: {schema_file}")
 
 		data = json.loads(schema_file.read_text())
 		self.assertEqual(data.get("doctype"), "DocType")
-		self.assertEqual(data.get("name"), "NUDG Conversation")
+		self.assertEqual(data.get("name"), "Nudg Conversation")
 
 		fields = {f["fieldname"]: f for f in data.get("fields", [])}
 		self.assertIn("profile", fields)

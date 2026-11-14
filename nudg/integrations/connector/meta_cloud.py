@@ -1,4 +1,4 @@
-# Copyright (c) 2026, NUDG and contributors
+# Copyright (c) 2026, Nudg and contributors
 # For license information, please see license.txt
 
 """Direct Meta WhatsApp Cloud API Connector (v18.0+ specification).
@@ -156,7 +156,7 @@ class DirectMetaCloudApiConnector(BaseWhatsAppConnector):
 		headers = {
 			"Authorization": f"Bearer {access_token}",
 			"Content-Type": "application/json",
-			"User-Agent": "NUDG/1.0",
+			"User-Agent": "Nudg/1.0",
 		}
 
 		retries = 0

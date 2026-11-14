@@ -1,1 +1,1 @@
-"""NUDG DocType module."""
+"""Nudg DocType module."""

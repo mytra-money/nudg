@@ -1,7 +1,7 @@
 """Read-only adapter for the official frappe/whatsapp app (v1.2.0).
 
 This is the only module that may import ``whatsapp.*``. Imports are inside
-functions so NUDG still loads when that app is absent.
+functions so Nudg still loads when that app is absent.
 
 Exposes installation status, ``get_messages``, ``send_message``, and
 ``send_template``. Catalog Meta sync lives in ``catalog_adapter``.

@@ -95,7 +95,7 @@ def get_integration_status() -> dict:
 	The dict is built by the adapter and contains no tokens or message bodies.
 	"""
 	if frappe.session.user == "Guest":
-		frappe.throw(_("Log in to open NUDG."), frappe.PermissionError)
+		frappe.throw(_("Log in to open Nudg."), frappe.PermissionError)
 	if not has_app_permission():
 		frappe.throw(_("Not permitted to read WhatsApp messages."), frappe.PermissionError)
 	return adapter.get_integration_status()
@@ -149,7 +149,7 @@ def get_inbox(account: str | None = None, tag: str | None = None, tags: str | No
 
 	default_account = _default_account()
 	assignment_map = {}
-	if frappe.db.exists("DocType", "NUDG Conversation"):
+	if frappe.db.exists("DocType", "Nudg Conversation"):
 		for profile in profiles:
 			assignments.ensure_conversation(profile.name, profile.whatsapp_account)
 		assignment_map = assignments.get_conversation_map(profile_names)
@@ -166,7 +166,7 @@ def get_inbox(account: str | None = None, tag: str | None = None, tags: str | No
 		assignment = assignment_map.get(profile.name) or {}
 
 		if assignment.get("name") and assignment.get("conversation_status") != status:
-			frappe.db.set_value("NUDG Conversation", assignment["name"], "conversation_status", status, update_modified=False)
+			frappe.db.set_value("Nudg Conversation", assignment["name"], "conversation_status", status, update_modified=False)
 			assignment["conversation_status"] = status
 
 		raw_tags = assignment.get("tags") or ""
@@ -259,7 +259,7 @@ def _get_conversation_notes(profile: str) -> list[dict]:
 def publish_presence(conversation_id: str, action: str) -> dict:
 	"""Broadcast live agent presence (viewing, typing) over Socket.IO via frappe.publish_realtime."""
 	if frappe.session.user == "Guest":
-		frappe.throw(_("Log in to open NUDG."), frappe.PermissionError)
+		frappe.throw(_("Log in to open Nudg."), frappe.PermissionError)
 
 	if not conversation_id or not str(conversation_id).strip() or not action or not str(action).strip():
 		frappe.throw(_("conversation_id and action are required."), frappe.ValidationError)
@@ -267,7 +267,7 @@ def publish_presence(conversation_id: str, action: str) -> dict:
 	conversation_id = str(conversation_id).strip()
 	action = str(action).strip()
 
-	if not frappe.db.exists("NUDG Conversation", conversation_id) and not frappe.db.exists("WA Profile", conversation_id):
+	if not frappe.db.exists("Nudg Conversation", conversation_id) and not frappe.db.exists("WA Profile", conversation_id):
 		raise frappe.DoesNotExistError(_(f"Conversation {conversation_id} not found"))
 
 	if not has_app_permission():
@@ -276,7 +276,7 @@ def publish_presence(conversation_id: str, action: str) -> dict:
 	roles = frappe.get_roles() if hasattr(frappe, "get_roles") else []
 	if not ("WhatsApp User" in roles or "System Manager" in roles or frappe.session.user == "Administrator"):
 		try:
-			if not frappe.has_permission("NUDG Conversation", "read"):
+			if not frappe.has_permission("Nudg Conversation", "read"):
 				raise frappe.PermissionError(_("Not permitted"))
 		except frappe.PermissionError:
 			raise
@@ -359,8 +359,8 @@ def get_thread(profile: str) -> dict:
 
 	notes = _get_conversation_notes(profile)
 	tags_list = []
-	if frappe.db.exists("DocType", "NUDG Conversation"):
-		raw_tags = frappe.db.get_value("NUDG Conversation", {"profile": profile}, "tags") or ""
+	if frappe.db.exists("DocType", "Nudg Conversation"):
+		raw_tags = frappe.db.get_value("Nudg Conversation", {"profile": profile}, "tags") or ""
 		tags_list = [t.strip() for t in str(raw_tags).split(",") if t.strip()]
 
 	# Auto Read Receipts (Meta Cloud API + DB status sync)
@@ -418,7 +418,7 @@ def _send_auto_read_receipts(profile: str) -> None:
 def assign_agent(profile: str, agent: str | None = None) -> dict:
 	"""Assign a conversation to an agent, with real-time Socket.IO notification."""
 	if frappe.session.user == "Guest":
-		frappe.throw(_("Log in to open NUDG."), frappe.PermissionError)
+		frappe.throw(_("Log in to open Nudg."), frappe.PermissionError)
 	if not profile:
 		frappe.throw(_("Profile is required."))
 
@@ -431,7 +431,7 @@ def assign_agent(profile: str, agent: str | None = None) -> dict:
 		account = frappe.db.get_value("WA Profile", profile, "whatsapp_account")
 		if agent and phone:
 			try:
-				chatbot.transfer_to_agent(phone, account=account, agent=agent, notes=_("Assigned from NUDG"))
+				chatbot.transfer_to_agent(phone, account=account, agent=agent, notes=_("Assigned from Nudg"))
 			except Exception:
 				pass
 		elif not agent and phone:
@@ -456,7 +456,7 @@ def assign_agent(profile: str, agent: str | None = None) -> dict:
 def get_assignable_agents(account: str | None = None) -> list[dict]:
 	"""Return list of active agents permitted for the account."""
 	if frappe.session.user == "Guest":
-		frappe.throw(_("Log in to open NUDG."), frappe.PermissionError)
+		frappe.throw(_("Log in to open Nudg."), frappe.PermissionError)
 
 	from nudg.security import get_user_wa_accounts
 	permitted = set(get_user_wa_accounts())
@@ -482,7 +482,7 @@ def get_assignable_agents(account: str | None = None) -> list[dict]:
 def transfer_conversation_to_agent(profile: str, agent: str | None = None, notes: str | None = None) -> dict:
 	"""Hand off a chatbot session to a human agent."""
 	if frappe.session.user == "Guest":
-		frappe.throw(_("Log in to open NUDG."), frappe.PermissionError)
+		frappe.throw(_("Log in to open Nudg."), frappe.PermissionError)
 	phone = frappe.db.get_value("WA Profile", profile, "phone_number")
 	account = frappe.db.get_value("WA Profile", profile, "whatsapp_account")
 	if not phone:
@@ -498,7 +498,7 @@ def transfer_conversation_to_agent(profile: str, agent: str | None = None, notes
 def resume_conversation_chatbot(profile: str) -> dict:
 	"""Resume automated chatbot for a conversation."""
 	if frappe.session.user == "Guest":
-		frappe.throw(_("Log in to open NUDG."), frappe.PermissionError)
+		frappe.throw(_("Log in to open Nudg."), frappe.PermissionError)
 	phone = frappe.db.get_value("WA Profile", profile, "phone_number")
 	account = frappe.db.get_value("WA Profile", profile, "whatsapp_account")
 	if not phone:
@@ -518,14 +518,14 @@ def get_unread_count() -> dict[str, int]:
 		assigned_to_me = 0
 		unassigned = 0
 
-		if frappe.db.exists("DocType", "NUDG Conversation"):
+		if frappe.db.exists("DocType", "Nudg Conversation"):
 			needs_reply = frappe.db.count(
-				"NUDG Conversation",
+				"Nudg Conversation",
 				filters={"conversation_status": ["in", ["needs_reply", "window_open"]]},
 			)
 
 			assigned_to_me = frappe.db.count(
-				"NUDG Conversation",
+				"Nudg Conversation",
 				filters={
 					"assignee": user,
 					"assignment_status": "Assigned",
@@ -534,7 +534,7 @@ def get_unread_count() -> dict[str, int]:
 			)
 
 			unassigned = frappe.db.count(
-				"NUDG Conversation",
+				"Nudg Conversation",
 				filters={"assignment_status": "Unassigned"},
 			)
 
@@ -558,7 +558,7 @@ def get_unread_count() -> dict[str, int]:
 @frappe.whitelist()
 def get_logs(account: str | None = None) -> list:
 	if frappe.session.user == "Guest":
-		frappe.throw(_("Log in to open NUDG."), frappe.PermissionError)
+		frappe.throw(_("Log in to open Nudg."), frappe.PermissionError)
 	if not frappe.db.exists("DocType", "WA Log"):
 		return []
 	if not frappe.has_permission("WA Log", "read"):
@@ -596,7 +596,7 @@ def _ready() -> bool:
 	the inbox from the site API, or an empty payload when that API is absent.
 	"""
 	if frappe.session.user == "Guest":
-		frappe.throw(_("Log in to open NUDG."), frappe.PermissionError)
+		frappe.throw(_("Log in to open Nudg."), frappe.PermissionError)
 	if not frappe.db.exists("DocType", "WA Message"):
 		return False
 	if not frappe.has_permission("WA Message", "read"):

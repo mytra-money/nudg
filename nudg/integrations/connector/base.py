@@ -1,7 +1,7 @@
-# Copyright (c) 2026, NUDG and contributors
+# Copyright (c) 2026, Nudg and contributors
 # For license information, please see license.txt
 
-"""Abstract base connector and standard exceptions for NUDG."""
+"""Abstract base connector and standard exceptions for Nudg."""
 
 from __future__ import annotations
 

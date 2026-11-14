@@ -1,6 +1,6 @@
 """Adapter package for the official ``whatsapp`` app.
 
-Import this package from the rest of NUDG. Do not import
+Import this package from the rest of Nudg. Do not import
 ``whatsapp.*`` anywhere else. Official imports live in ``adapter`` and run
 inside functions, so this desk still imports when that app is not installed.
 """

@@ -1,4 +1,4 @@
-// Copyright (c) 2026, NUDG and contributors
+// Copyright (c) 2026, Nudg and contributors
 // For license information, please see license.txt
 
 (function () {
@@ -84,7 +84,7 @@
 			return;
 		}
 
-		const title = (typeof __ === "function" && __("NUDG")) || "NUDG";
+		const title = (typeof __ === "function" && __("Nudg")) || "Nudg";
 		const html = `
 			<li class="nav-item dropdown-mobile nudg-navbar-icon" title="${title}">
 				<a class="btn-reset nav-link text-muted" href="/nudg" aria-label="${title}">

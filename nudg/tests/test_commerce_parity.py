@@ -1,4 +1,4 @@
-# Copyright (c) 2026, NUDG and contributors
+# Copyright (c) 2026, Nudg and contributors
 # For license information, please see license.txt
 
 """Hermetic unit tests for Interactive Commerce (SPM/MPM) & Inbound Cart Webhooks."""

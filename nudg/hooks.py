@@ -1,11 +1,11 @@
 app_name = "nudg"
-app_title = "NUDG"
-app_publisher = "NUDG"
-app_description = "NUDG – Every conversation moves business forward."
+app_title = "Nudg"
+app_publisher = "Nudg"
+app_description = "Nudg – Every conversation moves business forward."
 app_email = "admin@example.com"
 app_license = "MIT"
 app_icon_url = "/assets/nudg/desk.svg"
-app_icon_title = "NUDG"
+app_icon_title = "Nudg"
 app_icon_route = "/nudg"
 
 app_include_js = ["/assets/nudg/js/nudg_navbar.js"]
@@ -18,7 +18,7 @@ add_to_apps_screen = [
 	{
 		"name": "nudg",
 		"logo": "/assets/nudg/desk.svg",
-		"title": "NUDG",
+		"title": "Nudg",
 		"route": "/nudg",
 		"has_permission": "nudg.api.has_app_permission",
 	}
@@ -33,6 +33,7 @@ after_install = "nudg.install.after_install"
 after_migrate = ["nudg.install.after_migrate"]
 
 permission_query_conditions = {
+	"Nudg Conversation": "nudg.security.get_tenant_conversation_query",
 	"NUDG Conversation": "nudg.security.get_tenant_conversation_query",
 	"UTM Campaign": "nudg.security.get_tenant_campaign_query",
 	"WhatsApp Automation Rule": "nudg.security.get_tenant_rule_query",
@@ -41,6 +42,7 @@ permission_query_conditions = {
 }
 
 has_permission = {
+	"Nudg Conversation": "nudg.security.has_tenant_permission",
 	"NUDG Conversation": "nudg.security.has_tenant_permission",
 	"UTM Campaign": "nudg.security.has_tenant_permission",
 	"WhatsApp Automation Rule": "nudg.security.has_tenant_permission",

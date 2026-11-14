@@ -1,7 +1,7 @@
-# Copyright (c) 2026, NUDG and contributors
+# Copyright (c) 2026, Nudg and contributors
 # For license information, please see license.txt
 
-"""Chatbot and Agent Handoff integration for NUDG.
+"""Chatbot and Agent Handoff integration for Nudg.
 
 Softly coupled with `frappe_whatsapp_chatbot`: if the chatbot app is installed,
 agent transfer and chatbot session handoffs are fully supported; if not,

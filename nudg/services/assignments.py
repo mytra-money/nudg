@@ -1,7 +1,7 @@
-# Copyright (c) 2026, NUDG and contributors
+# Copyright (c) 2026, Nudg and contributors
 # For license information, please see license.txt
 
-"""Manual and rule-driven assignment, tags, notes, and auto-routing for NUDG Conversation."""
+"""Manual and rule-driven assignment, tags, notes, and auto-routing for Nudg Conversation."""
 
 from __future__ import annotations
 
@@ -37,12 +37,12 @@ def _safe_parse_datetime(dt_val: Any) -> datetime.datetime:
 
 def ensure_conversation(profile: str, whatsapp_account: str | None = None, organization: str | None = None) -> str:
 	"""Return the desk conversation name for a WA Profile, creating one if needed."""
-	existing = frappe.db.get_value("NUDG Conversation", {"profile": profile}, "name")
+	existing = frappe.db.get_value("Nudg Conversation", {"profile": profile}, "name")
 	if existing:
 		if whatsapp_account:
-			current = frappe.db.get_value("NUDG Conversation", existing, "whatsapp_account")
+			current = frappe.db.get_value("Nudg Conversation", existing, "whatsapp_account")
 			if not current and whatsapp_account:
-				frappe.db.set_value("NUDG Conversation", existing, "whatsapp_account", whatsapp_account)
+				frappe.db.set_value("Nudg Conversation", existing, "whatsapp_account", whatsapp_account)
 		return existing
 
 	account = whatsapp_account
@@ -51,7 +51,7 @@ def ensure_conversation(profile: str, whatsapp_account: str | None = None, organ
 
 	doc = frappe.get_doc(
 		{
-			"doctype": "NUDG Conversation",
+			"doctype": "Nudg Conversation",
 			"profile": profile,
 			"whatsapp_account": account,
 			"assignment_status": "Unassigned",
@@ -123,8 +123,8 @@ def assign_conversation(profile: str, user: str, source: str = "Manual") -> dict
 		)
 
 	name = ensure_conversation(profile)
-	doc = frappe.get_doc("NUDG Conversation", name)
-	frappe.has_permission("NUDG Conversation", "write", doc=doc, throw=True)
+	doc = frappe.get_doc("Nudg Conversation", name)
+	frappe.has_permission("Nudg Conversation", "write", doc=doc, throw=True)
 
 	doc.assignee = canonical
 	doc.assignment_status = "Assigned"
@@ -138,8 +138,8 @@ def assign_conversation(profile: str, user: str, source: str = "Manual") -> dict
 
 def unassign_conversation(profile: str) -> dict:
 	name = ensure_conversation(profile)
-	doc = frappe.get_doc("NUDG Conversation", name)
-	frappe.has_permission("NUDG Conversation", "write", doc=doc, throw=True)
+	doc = frappe.get_doc("Nudg Conversation", name)
+	frappe.has_permission("Nudg Conversation", "write", doc=doc, throw=True)
 	doc.assignee = None
 	doc.assignment_status = "Unassigned"
 	doc.assignment_source = "Manual"
@@ -150,8 +150,8 @@ def unassign_conversation(profile: str) -> dict:
 
 def close_conversation(profile: str) -> dict:
 	name = ensure_conversation(profile)
-	doc = frappe.get_doc("NUDG Conversation", name)
-	frappe.has_permission("NUDG Conversation", "write", doc=doc, throw=True)
+	doc = frappe.get_doc("Nudg Conversation", name)
+	frappe.has_permission("Nudg Conversation", "write", doc=doc, throw=True)
 	doc.assignment_status = "Closed"
 	doc.save()
 	_close_todos(doc.name)
@@ -191,8 +191,8 @@ def set_conversation_tags(profile: str, tags: Any) -> dict:
 
 	tags_str, tags_list = _normalize_tags(tags)
 	name = ensure_conversation(profile)
-	doc = frappe.get_doc("NUDG Conversation", name)
-	frappe.has_permission("NUDG Conversation", "write", doc=doc, throw=True)
+	doc = frappe.get_doc("Nudg Conversation", name)
+	frappe.has_permission("Nudg Conversation", "write", doc=doc, throw=True)
 
 	doc.tags = tags_str
 	doc.save(ignore_permissions=True)
@@ -218,7 +218,7 @@ def set_conversation_tags(profile: str, tags: Any) -> dict:
 # -----------------------------------------------------------------------------
 
 def get_eligible_desk_agents() -> list[str]:
-	"""Return list of active, enabled system users eligible for NUDG assignment."""
+	"""Return list of active, enabled system users eligible for Nudg assignment."""
 	users_with_role = frappe.get_all(
 		"Has Role",
 		filters={"role": "WhatsApp User", "parenttype": "User"},
@@ -252,12 +252,12 @@ def auto_assign_round_robin(conversation_doc: str | Any) -> dict:
 	"""Distribute an unassigned conversation fairly across active desk agents using round-robin."""
 	if isinstance(conversation_doc, str):
 		name = ensure_conversation(conversation_doc)
-		doc = frappe.get_doc("NUDG Conversation", name)
+		doc = frappe.get_doc("Nudg Conversation", name)
 	else:
 		doc = conversation_doc
 
 	try:
-		if not frappe.has_permission("NUDG Conversation", "write", doc=doc):
+		if not frappe.has_permission("Nudg Conversation", "write", doc=doc):
 			raise frappe.PermissionError(_("Not permitted to reassign conversation"))
 	except frappe.PermissionError:
 		raise
@@ -275,7 +275,7 @@ def auto_assign_round_robin(conversation_doc: str | Any) -> dict:
 	# 1. Inspect recent assignments for active agents
 	latest_assignments: dict[str, Any] = {a: None for a in agents}
 	recent_rows = frappe.get_all(
-		"NUDG Conversation",
+		"Nudg Conversation",
 		filters={"assignee": ["in", agents], "assignment_status": "Assigned"},
 		fields=["assignee", "last_assigned_on"],
 		order_by="last_assigned_on desc",
@@ -336,7 +336,7 @@ def get_conversation_map(profiles: list[str]) -> dict[str, dict]:
 	if not profiles:
 		return {}
 	rows = frappe.get_all(
-		"NUDG Conversation",
+		"Nudg Conversation",
 		filters={"profile": ["in", profiles]},
 		fields=[
 			"name",
@@ -356,15 +356,15 @@ def get_conversation_map(profiles: list[str]) -> dict[str, dict]:
 
 def list_conversation_notes(profile: str) -> list[dict]:
 	"""Internal notes live on Frappe Comment and are never sent as WhatsApp messages."""
-	if not profile or not frappe.db.exists("DocType", "NUDG Conversation"):
+	if not profile or not frappe.db.exists("DocType", "Nudg Conversation"):
 		return []
-	name = frappe.db.get_value("NUDG Conversation", {"profile": profile}, "name")
+	name = frappe.db.get_value("Nudg Conversation", {"profile": profile}, "name")
 	if not isinstance(name, str) or not name:
 		return []
 	rows = frappe.get_all(
 		"Comment",
 		filters={
-			"reference_doctype": "NUDG Conversation",
+			"reference_doctype": "Nudg Conversation",
 			"reference_name": name,
 			"comment_type": "Comment",
 		},
@@ -397,8 +397,8 @@ def add_conversation_note(profile: str, note_text: str) -> dict:
 	if not text:
 		frappe.throw(_("Write a note before saving."))
 	name = ensure_conversation(profile)
-	doc = frappe.get_doc("NUDG Conversation", name)
-	if not frappe.has_permission("NUDG Conversation", "write", doc=doc):
+	doc = frappe.get_doc("Nudg Conversation", name)
+	if not frappe.has_permission("Nudg Conversation", "write", doc=doc):
 		frappe.throw(_("Not permitted to note this conversation."), frappe.PermissionError)
 	author = frappe.session.user
 	try:
@@ -409,7 +409,7 @@ def add_conversation_note(profile: str, note_text: str) -> dict:
 		{
 			"doctype": "Comment",
 			"comment_type": "Comment",
-			"reference_doctype": "NUDG Conversation",
+			"reference_doctype": "Nudg Conversation",
 			"reference_name": name,
 			"content": text,
 			"comment_email": frappe.session.user,
@@ -442,14 +442,14 @@ def _sync_todo(doc):
 		assign_to.add(
 			{
 				"assign_to": [doc.assignee],
-				"doctype": getattr(doc, "doctype", "NUDG Conversation"),
+				"doctype": getattr(doc, "doctype", "Nudg Conversation"),
 				"name": doc.name,
 				"description": _("WhatsApp conversation {0}").format(getattr(doc, "profile", "")),
 				"notify": 0,
 			}
 		)
 	except Exception:
-		frappe.log_error(title="NUDG assign ToDo")
+		frappe.log_error(title="Nudg assign ToDo")
 
 
 def _close_todos(name: str):
@@ -457,7 +457,7 @@ def _close_todos(name: str):
 		return
 	todos = frappe.get_all(
 		"ToDo",
-		filters={"reference_type": "NUDG Conversation", "reference_name": name, "status": "Open"},
+		filters={"reference_type": "Nudg Conversation", "reference_name": name, "status": "Open"},
 		pluck="name",
 	)
 	for todo in todos:
