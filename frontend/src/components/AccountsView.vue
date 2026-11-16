@@ -112,7 +112,7 @@ const filteredAccounts = computed(() => {
       </div>
       <template #actions>
         <div class="flex w-full justify-end">
-          <Button variant="subtle" label="Close" @click="showConnectModal = false" />
+          <Button variant="solid" class="!bg-[#e5e7eb] !text-[#111827] hover:!bg-[#d1d5db]" label="Close" @click="showConnectModal = false" />
         </div>
       </template>
     </Dialog>

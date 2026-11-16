@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
-import { Button, call } from 'frappe-ui'
+import { Button, call, toast } from 'frappe-ui'
+import { userFacingError } from '@/utils/errors'
 
 const emit = defineEmits<{ connected: []; manual: [] }>()
 
@@ -52,7 +53,7 @@ async function loadConfig() {
     const res = (await call('nudg.desk_api.get_embedded_signup_config')) as SignupConfig
     config.value = res
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Could not load Embedded Signup settings.'
+    error.value = userFacingError(err, 'Could not load Embedded Signup settings.')
   }
 }
 
@@ -79,7 +80,7 @@ function onFacebookMessage(event: MessageEvent) {
     return
   }
   if (name === 'ERROR') {
-    error.value = data.data?.error_message || 'Embedded Signup reported an error.'
+    error.value = 'Facebook could not finish signup. Close the window and try again.'
     pendingCode = ''
     return
   }
@@ -124,7 +125,7 @@ async function launchSignup() {
     )
   } catch (err) {
     busy.value = false
-    error.value = err instanceof Error ? err.message : 'Could not open Facebook login.'
+    error.value = userFacingError(err, 'Could not open Facebook login.')
   }
 }
 
@@ -142,13 +143,21 @@ async function finishSignup() {
       phone_number_id: sessionInfo.phone_number_id || undefined,
     })) as { account_name?: string; pin?: string; warnings?: string[] }
     pin.value = result.pin || ''
-    const warning = (result.warnings || []).filter(Boolean).join(' ')
-    status.value = warning
-      ? `Connected ${result.account_name}. ${warning}`
-      : `Connected ${result.account_name}.`
+    const warning = (result.warnings || [])
+      .map((item) => userFacingError(item, 'WhatsApp could not finish setup. Try connecting again.'))
+      .find(Boolean)
+    if (warning) {
+      status.value = ''
+      error.value = warning
+      toast.error(warning)
+    } else {
+      status.value = `Connected ${result.account_name}.`
+      toast.success(status.value)
+    }
     emit('connected')
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Could not finish Embedded Signup.'
+    error.value = userFacingError(err, 'Could not finish connecting WhatsApp.')
+    toast.error(error.value)
   } finally {
     pendingCode = ''
     finishing = false
@@ -178,20 +187,28 @@ function loadFacebookSdk(app: string, version: string) {
 
 <template>
   <div>
-    <div class="flex flex-wrap gap-2">
+    <div class="flex flex-col items-center gap-3">
       <Button
         variant="solid"
-        class="bg-[#1877F2] text-white hover:bg-[#166FE5]"
+        class="min-w-[16rem] justify-center !bg-[#1877F2] !text-white hover:!bg-[#166FE5]"
         :loading="busy"
         :disabled="!config?.ready"
         label="Login with Facebook"
         @click="launchSignup"
       />
-      <Button variant="subtle" label="I already have credentials" @click="emit('manual')" />
+      <Button
+        variant="solid"
+        class="min-w-[16rem] justify-center !bg-[#e5e7eb] !text-[#111827] hover:!bg-[#d1d5db]"
+        label="I already have credentials"
+        @click="emit('manual')"
+      />
     </div>
-    <p v-if="config && !config.ready" class="mt-2 text-xs text-ink-gray-6">Facebook login is not available yet.</p>
-    <p v-if="status" class="mt-2 text-xs text-emerald-800">{{ status }}</p>
-    <p v-if="pin" class="mt-1 text-xs font-medium text-ink-gray-8">Two-step PIN: {{ pin }}. Save it. It is not shown again.</p>
-    <p v-if="error" class="mt-2 text-xs text-red-700">{{ error }}</p>
+    <p v-if="config && !config.ready" class="mt-3 text-center text-xs text-ink-gray-7">Facebook login is not available yet.</p>
+    <p v-if="status" class="mt-3 text-center text-sm text-emerald-800">{{ status }}</p>
+    <p v-if="pin" class="mt-1 text-center text-sm font-medium text-ink-gray-8">Two-step PIN: {{ pin }}. Save it. It is not shown again.</p>
+    <div v-if="error" class="mx-auto mt-4 max-w-md rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-center" role="alert">
+      <p class="text-sm font-semibold text-red-900">Error</p>
+      <p class="mt-1 text-sm text-red-800">{{ error }}</p>
+    </div>
   </div>
 </template>

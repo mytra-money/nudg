@@ -6,6 +6,7 @@ import ErrorState from '@/components/ErrorState.vue'
 import LoadingState from '@/components/LoadingState.vue'
 import { isManager, useDesk } from '@/stores/desk'
 import { formatRemaining, formatTime, initials, previewText } from '@/utils/format'
+import { userFacingError } from '@/utils/errors'
 import { useIntegrationStatus } from '@/utils/integration'
 import { router } from '@/router'
 
@@ -518,7 +519,7 @@ const recentLogs = computed(() => logs.value.slice(0, 4))
                         {{ log.account }}
                       </span>
                     </div>
-                    <p class="mt-1 truncate text-xs text-ink-gray-6">{{ log.message }}</p>
+                    <p class="mt-1 truncate text-xs text-ink-gray-6">{{ userFacingError(log.message, log.level === 'Error' ? 'Something went wrong.' : 'Activity recorded.') }}</p>
                   </div>
                   <span class="shrink-0 text-[11px] text-ink-gray-5">
                     {{ formatTime(log.timestamp) }}

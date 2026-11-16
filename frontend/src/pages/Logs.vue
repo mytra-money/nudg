@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { Badge, Button, Dialog, toast } from 'frappe-ui'
-import { formatErrorMessage } from '@/utils/errors'
+import { userFacingError } from '@/utils/errors'
 import { formatDay, formatTime, whatsappScreen } from '@/utils/format'
 import { isManager, useDesk } from '@/stores/desk'
 import { router } from '@/router'
@@ -141,8 +141,8 @@ function showToast(message: string, isError = false) {
 }
 
 function displayMessage(row: LogRow) {
-  if (row.message) return row.message
-  return formatErrorMessage(row.response_data) || 'Audit event logged'
+  const raw = row.message || row.response_data || ''
+  return userFacingError(raw, row.level === 'Error' ? 'Something went wrong.' : 'Audit event logged')
 }
 
 function parsePayload(raw?: string) {

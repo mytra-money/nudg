@@ -362,7 +362,7 @@ onUnmounted(() => window.clearInterval(timer))
       </div>
       <template #actions>
         <div class="flex w-full justify-end">
-          <Button variant="subtle" label="Close" @click="showAccountModal = false" />
+          <Button variant="solid" class="!bg-[#e5e7eb] !text-[#111827] hover:!bg-[#d1d5db]" label="Close" @click="showAccountModal = false" />
         </div>
       </template>
     </Dialog>

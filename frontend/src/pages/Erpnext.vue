@@ -5,6 +5,7 @@ import { Button, call, toast } from 'frappe-ui'
 import ErrorState from '@/components/ErrorState.vue'
 import LoadingState from '@/components/LoadingState.vue'
 import { errorText } from '@/utils/format'
+import { userFacingError } from '@/utils/errors'
 import { useDesk } from '@/stores/desk'
 
 const desk = useDesk()
@@ -113,7 +114,7 @@ onMounted(load)
               <div>
                 <div class="font-medium text-ink-gray-9">{{ site.name }}</div>
                 <div class="text-ink-gray-6">{{ site.site_url }} · {{ site.status }} · {{ site.whatsapp_account }}</div>
-                <div v-if="site.last_error" class="text-red-600">{{ site.last_error }}</div>
+                <div v-if="site.last_error" class="text-red-600">{{ userFacingError(site.last_error, 'This site could not connect.') }}</div>
               </div>
               <Button variant="subtle" :loading="busy" @click="toggleSite(site)">{{ site.status === 'Connected' ? 'Disable' : 'Enable' }}</Button>
             </li>

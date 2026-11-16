@@ -18,17 +18,39 @@ GRAPH_DEFAULT = "v23.0"
 SETTINGS_DOCTYPE = "WA Signup Settings"
 _TOKEN_RE = re.compile(r"EAA[A-Za-z0-9]+")
 _CODE_RE = re.compile(r"(code=)[^&\s]+", re.IGNORECASE)
+_ACCESS_RE = re.compile(r"(access_token=)[^&\s]+", re.IGNORECASE)
+_PERMISSION_MARKERS = (
+	"missing permission",
+	"does not exist",
+	"unsupported post",
+	"does not support this operation",
+)
 
 
 class EmbeddedSignupError(frappe.ValidationError):
-	pass
+	def __init__(self, message: str, detail: str | None = None):
+		super().__init__(message)
+		self.detail = detail or message
 
 
 def redact(text: str | None) -> str:
 	if not text:
 		return ""
 	cleaned = _TOKEN_RE.sub("EAA[REDACTED]", str(text))
-	return _CODE_RE.sub(r"\1[REDACTED]", cleaned)
+	cleaned = _CODE_RE.sub(r"\1[REDACTED]", cleaned)
+	return _ACCESS_RE.sub(r"\1[REDACTED]", cleaned)
+
+
+def user_message(detail: str | None) -> str:
+	"""Short text safe to show in the desk. The Graph sentence stays in the log."""
+	text = (detail or "").lower()
+	if "already registered" in text or "already verified" in text:
+		return _("This number is already registered.")
+	if any(marker in text for marker in _PERMISSION_MARKERS):
+		return _("WhatsApp could not finish setup. A Meta app admin needs to grant WhatsApp permissions, then connect again.")
+	if "could not reach" in text or "timed out" in text or "timeout" in text:
+		return _("Could not reach WhatsApp. Check the connection and try again.")
+	return _("WhatsApp could not finish setup. Try connecting again.")
 
 
 def make_pin() -> str:
@@ -101,24 +123,26 @@ def complete_signup(
 
 	settings = _require_settings()
 	token = exchange_code(settings["app_id"], settings["app_secret"], code, settings["graph_api_version"])
+	version = settings["graph_api_version"]
+	found: dict[str, Any] = {}
 	if not waba_id or not phone_number_id:
-		found = discover_assets(token, settings["app_id"], settings["app_secret"], settings["graph_api_version"])
-		waba_id = waba_id or found.get("waba_id") or ""
-		phone_number_id = phone_number_id or found.get("phone_number_id") or ""
+		found = _discover_or_empty(token, settings["app_id"], settings["app_secret"], version)
+		waba_id = waba_id or str(found.get("waba_id") or "")
+		phone_number_id = phone_number_id or str(found.get("phone_number_id") or "")
 	if not waba_id.isdigit() or not phone_number_id.isdigit():
 		frappe.throw(_("Embedded Signup did not return a WhatsApp account ID and phone number ID."))
 
-	warnings: list[str] = []
-	try:
-		subscribe_app(waba_id, token, settings["graph_api_version"])
-	except EmbeddedSignupError as exc:
-		warnings.append(str(exc))
-
 	pin = make_pin()
-	try:
-		register_phone(phone_number_id, token, pin, settings["graph_api_version"])
-	except EmbeddedSignupError as exc:
-		warnings.append(str(exc))
+	subscribed, registered, warnings = _finish_cloud(waba_id, phone_number_id, token, pin, version)
+	if warnings:
+		if not found:
+			found = _discover_or_empty(token, settings["app_id"], settings["app_secret"], version)
+		alt_waba, alt_phone = _alternate_ids(waba_id, phone_number_id, found)
+		if alt_waba and alt_phone:
+			alt_subscribed, alt_registered, alt_warnings = _finish_cloud(alt_waba, alt_phone, token, pin, version)
+			if not alt_warnings:
+				waba_id, phone_number_id = alt_waba, alt_phone
+				subscribed, registered, warnings = alt_subscribed, alt_registered, alt_warnings
 
 	account = _upsert_account(
 		account_name=account_name or f"WhatsApp {phone_number_id[-4:]}",
@@ -126,7 +150,7 @@ def complete_signup(
 		business_id=waba_id,
 		access_token=token,
 		app_id=settings["app_id"],
-		pin=pin,
+		pin=pin if registered else "",
 	)
 	return {
 		"status": "success",
@@ -134,7 +158,8 @@ def complete_signup(
 		"account_name": account_name or f"WhatsApp {phone_number_id[-4:]}",
 		"phone_number_id": phone_number_id,
 		"waba_id": waba_id,
-		"pin": pin,
+		"pin": pin if registered else "",
+		"ready": bool(subscribed and registered),
 		"warnings": warnings,
 	}
 
@@ -151,7 +176,7 @@ def exchange_code(app_id: str, app_secret: str, code: str, version: str) -> str:
 	return token
 
 
-def discover_assets(token: str, app_id: str, app_secret: str, version: str) -> dict[str, str]:
+def discover_assets(token: str, app_id: str, app_secret: str, version: str) -> dict[str, Any]:
 	app_token = f"{app_id}|{app_secret}"
 	debug = _graph(
 		"GET",
@@ -168,6 +193,7 @@ def discover_assets(token: str, app_id: str, app_secret: str, version: str) -> d
 				waba_id = str(ids[0])
 				break
 	phone_number_id = ""
+	phone_ids: list[str] = []
 	if waba_id:
 		numbers = _graph(
 			"GET",
@@ -175,9 +201,10 @@ def discover_assets(token: str, app_id: str, app_secret: str, version: str) -> d
 			token=token,
 		)
 		rows = (numbers or {}).get("data") or []
-		if rows:
-			phone_number_id = str(rows[0].get("id") or "")
-	return {"waba_id": waba_id, "phone_number_id": phone_number_id}
+		phone_ids = [str(row.get("id") or "") for row in rows if row.get("id")]
+		if phone_ids:
+			phone_number_id = phone_ids[0]
+	return {"waba_id": waba_id, "phone_number_id": phone_number_id, "phone_number_ids": phone_ids}
 
 
 def subscribe_app(waba_id: str, token: str, version: str) -> None:
@@ -189,12 +216,17 @@ def subscribe_app(waba_id: str, token: str, version: str) -> None:
 
 
 def register_phone(phone_number_id: str, token: str, pin: str, version: str) -> None:
-	_graph(
-		"POST",
-		f"https://graph.facebook.com/{version}/{phone_number_id}/register",
-		token=token,
-		payload={"messaging_product": "whatsapp", "pin": pin},
-	)
+	try:
+		_graph(
+			"POST",
+			f"https://graph.facebook.com/{version}/{phone_number_id}/register",
+			token=token,
+			payload={"messaging_product": "whatsapp", "pin": pin},
+		)
+	except EmbeddedSignupError as exc:
+		if _already_registered(exc.detail):
+			return
+		raise
 
 
 def _require_settings() -> dict[str, str]:
@@ -224,13 +256,39 @@ def _read_secret(doc) -> str:
 
 
 def _graph(method: str, url: str, params: dict | None = None, payload: dict | None = None, token: str | None = None) -> dict:
+	try:
+		return _request_graph(method, url, params, payload, token, query_token=False)
+	except EmbeddedSignupError as exc:
+		if token and _permission_denied(exc.detail):
+			try:
+				return _request_graph(method, url, params, payload, token, query_token=True)
+			except EmbeddedSignupError as retry_exc:
+				_log_meta(retry_exc.detail)
+				raise
+		_log_meta(exc.detail)
+		raise
+
+
+def _request_graph(
+	method: str,
+	url: str,
+	params: dict | None,
+	payload: dict | None,
+	token: str | None,
+	query_token: bool,
+) -> dict:
+	query = dict(params or {})
 	headers = {}
 	if token:
-		headers["Authorization"] = f"Bearer {token}"
+		if query_token:
+			query["access_token"] = token
+		else:
+			headers["Authorization"] = f"Bearer {token}"
 	try:
-		response = requests.request(method, url, params=params, json=payload, headers=headers, timeout=30)
+		response = requests.request(method, url, params=query or None, json=payload, headers=headers, timeout=30)
 	except requests.RequestException as exc:
-		raise EmbeddedSignupError(_("Could not reach Meta: {0}").format(redact(str(exc)))) from exc
+		detail = redact(str(exc))
+		raise EmbeddedSignupError(user_message(detail), detail) from exc
 	try:
 		body = response.json()
 	except ValueError:
@@ -239,8 +297,71 @@ def _graph(method: str, url: str, params: dict | None = None, payload: dict | No
 		message = ""
 		if isinstance(body, dict) and isinstance(body.get("error"), dict):
 			message = body["error"].get("message") or ""
-		raise EmbeddedSignupError(redact(message or response.text or f"Meta returned HTTP {response.status_code}"))
+		detail = redact(message or response.text or f"Meta returned HTTP {response.status_code}")
+		raise EmbeddedSignupError(user_message(detail), detail)
 	return body if isinstance(body, dict) else {}
+
+
+def _permission_denied(detail: str | None) -> bool:
+	text = (detail or "").lower()
+	return any(marker in text for marker in _PERMISSION_MARKERS)
+
+
+def _already_registered(detail: str | None) -> bool:
+	text = (detail or "").lower()
+	return "already registered" in text or "already verified" in text
+
+
+def _discover_or_empty(token: str, app_id: str, app_secret: str, version: str) -> dict[str, Any]:
+	try:
+		return discover_assets(token, app_id, app_secret, version)
+	except EmbeddedSignupError as exc:
+		_log_meta(exc.detail)
+		return {}
+
+
+def _alternate_ids(waba_id: str, phone_number_id: str, found: dict[str, Any]) -> tuple[str, str]:
+	alt_waba = str(found.get("waba_id") or "")
+	phones = [str(item) for item in (found.get("phone_number_ids") or []) if item]
+	if phone_number_id in phones:
+		alt_phone = phone_number_id
+	else:
+		alt_phone = str(found.get("phone_number_id") or "")
+	if not alt_waba.isdigit() or not alt_phone.isdigit():
+		return "", ""
+	if alt_waba == waba_id and alt_phone == phone_number_id:
+		return "", ""
+	return alt_waba, alt_phone
+
+
+def _finish_cloud(waba_id: str, phone_number_id: str, token: str, pin: str, version: str) -> tuple[bool, bool, list[str]]:
+	subscribed = False
+	registered = False
+	warnings: list[str] = []
+	try:
+		subscribe_app(waba_id, token, version)
+		subscribed = True
+	except EmbeddedSignupError as exc:
+		_log_meta(exc.detail)
+		warnings.append(str(exc))
+	try:
+		register_phone(phone_number_id, token, pin, version)
+		registered = True
+	except EmbeddedSignupError as exc:
+		_log_meta(exc.detail)
+		warnings.append(str(exc))
+	unique: list[str] = []
+	for warning in warnings:
+		if warning not in unique:
+			unique.append(warning)
+	return subscribed, registered, unique
+
+
+def _log_meta(detail: str) -> None:
+	try:
+		frappe.log_error(message=redact(detail)[:14000], title="WhatsApp setup")
+	except Exception:
+		return
 
 
 def _upsert_account(account_name: str, phone_id: str, business_id: str, access_token: str, app_id: str, pin: str) -> str:
@@ -255,7 +376,7 @@ def _upsert_account(account_name: str, phone_id: str, business_id: str, access_t
 	doc.access_token = access_token
 	doc.app_id = app_id
 	doc.status = "Active"
-	if frappe.get_meta("WA Account").get_field("two_step_pin"):
+	if pin and frappe.get_meta("WA Account").get_field("two_step_pin"):
 		doc.two_step_pin = pin
 	if existing:
 		doc.save(ignore_permissions=True)

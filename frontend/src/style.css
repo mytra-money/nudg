@@ -74,6 +74,18 @@ pre,
   scrollbar-width: none;
 }
 
+/* Subtle buttons use a near-white fill and disappear on white dialogs. */
+button.bg-surface-gray-2:not(:disabled),
+a.bg-surface-gray-2 {
+  background-color: #e5e7eb !important;
+  color: #111827 !important;
+}
+
+button.bg-surface-gray-2:not(:disabled):hover,
+a.bg-surface-gray-2:hover {
+  background-color: #d1d5db !important;
+}
+
 /* WhatsApp & Mytra Brand Accent Tokens + Surface Elevation */
 :root {
   --wa-teal-deep: #075E54;

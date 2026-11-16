@@ -20,6 +20,40 @@ class TestEmbeddedSignup(unittest.TestCase):
 		self.assertIn("EAA[REDACTED]", cleaned)
 		self.assertIn("code=[REDACTED]", cleaned)
 
+	def test_user_message_hides_the_graph_sentence(self):
+		raw = (
+			"Unsupported post request. Object with ID '2436551013419081' does not exist, "
+			"cannot be loaded due to missing permissions"
+		)
+		message = embedded_signup.user_message(raw)
+		self.assertNotIn("2436551013419081", message)
+		self.assertNotIn("graph", message.lower())
+		self.assertIn("permissions", message.lower())
+
+	def test_redact_hides_query_access_token(self):
+		cleaned = embedded_signup.redact("failed access_token=EAABsupersecret")
+		self.assertNotIn("EAABsupersecret", cleaned)
+		self.assertIn("access_token=[REDACTED]", cleaned)
+
+	@patch("nudg.integrations.embedded_signup.requests.request")
+	def test_permission_error_retries_with_query_token(self, request):
+		denied = MagicMock(status_code=400)
+		denied.text = "denied"
+		denied.json.return_value = {
+			"error": {"message": "Unsupported post request. Object does not exist, missing permissions"}
+		}
+		ok = MagicMock(status_code=200)
+		ok.json.return_value = {"success": True}
+		request.side_effect = [denied, ok]
+		result = embedded_signup._graph(
+			"POST",
+			"https://graph.facebook.com/v23.0/1/subscribed_apps",
+			token="EAABCustomerToken",
+		)
+		self.assertEqual(result, {"success": True})
+		self.assertEqual(request.call_args_list[1].kwargs["params"]["access_token"], "EAABCustomerToken")
+		self.assertNotIn("Authorization", request.call_args_list[1].kwargs["headers"])
+
 	def test_pin_is_six_digits(self):
 		pin = embedded_signup.make_pin()
 		self.assertEqual(len(pin), 6)

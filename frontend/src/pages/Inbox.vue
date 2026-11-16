@@ -12,7 +12,8 @@ import {
   conversationStatusOf,
 } from '@/utils/conversationStatus'
 import { useDeskComposer } from '@/composables/useComposer'
-import { formatDay, formatRemaining, formatTime, initials, previewText, rawErrorText } from '@/utils/format'
+import { formatDay, formatRemaining, formatTime, initials, previewText } from '@/utils/format'
+import { userFacingError } from '@/utils/errors'
 import { useDesk } from '@/stores/desk'
 import {
   assignConversation,
@@ -245,7 +246,7 @@ async function openCatalog() {
   try {
     catalogItems.value = await listCatalogItems()
   } catch (caught) {
-    catalogError.value = rawErrorText(caught)
+    catalogError.value = userFacingError(caught, 'Could not load catalog products.')
     toast.error(catalogError.value)
   } finally {
     catalogLoading.value = false
@@ -308,7 +309,7 @@ async function sendProduct(item: any) {
     catalogOpen.value = false
     await desk.openProfile(desk.profile.value)
   } catch (caught) {
-    catalogError.value = rawErrorText(caught)
+    catalogError.value = userFacingError(caught, 'Could not send this product.')
     toast.error(catalogError.value)
   } finally {
     catalogSending.value = false

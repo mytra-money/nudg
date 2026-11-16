@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { Button, call, Dialog, toast } from 'frappe-ui'
+import { userFacingError } from '@/utils/errors'
 
 const open = defineModel<boolean>({ default: false })
 const emit = defineEmits<{ connected: [] }>()
@@ -39,7 +40,7 @@ async function save() {
     open.value = false
     emit('connected')
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : 'Could not connect this number.')
+    toast.error(userFacingError(err, 'Could not connect this number.'))
   } finally {
     saving.value = false
   }
@@ -75,7 +76,7 @@ async function save() {
     </div>
     <template #actions>
       <div class="flex w-full items-center justify-end gap-2">
-        <Button variant="subtle" label="Cancel" @click="open = false" />
+        <Button variant="solid" class="!bg-[#e5e7eb] !text-[#111827] hover:!bg-[#d1d5db]" label="Cancel" @click="open = false" />
         <Button variant="solid" class="bg-[#075E54] text-white hover:bg-[#128C7E]" :loading="saving" label="Connect number" @click="save" />
       </div>
     </template>
