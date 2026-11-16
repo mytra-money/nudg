@@ -188,7 +188,7 @@ def _account_query_for(doctype: str, fieldname: str = "whatsapp_account", user: 
 
 
 def get_tenant_conversation_query(user: str | None = None) -> str:
-	return _account_query_for("Nudg Conversation", "whatsapp_account", user)
+	return _account_query_for("WA Conversation", "whatsapp_account", user)
 
 
 def get_tenant_campaign_query(user: str | None = None) -> str:
@@ -209,7 +209,7 @@ def get_tenant_campaign_query(user: str | None = None) -> str:
 
 
 def get_tenant_rule_query(user: str | None = None) -> str:
-	return _account_query_for("WhatsApp Automation Rule", "whatsapp_account", user)
+	return _account_query_for("WA Automation Rule", "whatsapp_account", user)
 
 
 def get_tenant_hours_query(user: str | None = None) -> str:
@@ -224,11 +224,11 @@ def get_tenant_quick_reply_query(user: str | None = None) -> str:
 	if not accounts:
 		return "1=0"
 	escaped = ", ".join(frappe.db.escape(a) for a in accounts)
-	return f"(`tabWhatsApp Quick Reply`.whatsapp_account IN ({escaped}) OR `tabWhatsApp Quick Reply`.whatsapp_account IS NULL OR `tabWhatsApp Quick Reply`.whatsapp_account = '')"
+	return f"(`tabWA Quick Reply`.whatsapp_account IN ({escaped}) OR `tabWA Quick Reply`.whatsapp_account IS NULL OR `tabWA Quick Reply`.whatsapp_account = '')"
 
 
 def get_tenant_catalog_query(user: str | None = None) -> str:
-	return _account_query_for("WhatsApp Catalog", "whatsapp_account", user)
+	return _account_query_for("WA Catalog", "whatsapp_account", user)
 
 
 # -----------------------------------------------------------------------------

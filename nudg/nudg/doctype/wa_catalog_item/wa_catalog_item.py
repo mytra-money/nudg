@@ -5,7 +5,7 @@ import frappe
 from frappe.model.document import Document
 
 
-class WhatsAppCatalogItem(Document):
+class WACatalogItem(Document):
 	def validate(self):
 		self._sync_from_erpnext_item()
 

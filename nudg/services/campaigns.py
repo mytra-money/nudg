@@ -408,7 +408,7 @@ def recalculate_campaign_funnel_counts(doc_or_name: Any) -> dict:
 			SUM(CASE WHEN status IN ('Delivered', 'Read') THEN 1 ELSE 0 END) as delivered_count,
 			SUM(CASE WHEN status = 'Read' THEN 1 ELSE 0 END) as read_count,
 			SUM(CASE WHEN status = 'Failed' THEN 1 ELSE 0 END) as failed_count
-		FROM `tabWhatsApp Campaign Recipient`
+		FROM `tabWA Campaign Recipient`
 		WHERE parent = %s
 		""",
 		(campaign_name,),
@@ -455,7 +455,7 @@ def update_campaign_recipient_status(
 	errors: list[dict] | None = None,
 ) -> bool:
 	"""Update child recipient status upon webhook delivery/read receipts."""
-	if not message_id or not frappe.db.exists("DocType", "WhatsApp Campaign Recipient"):
+	if not message_id or not frappe.db.exists("DocType", "WA Campaign Recipient"):
 		return False
 
 	status_map = {
@@ -472,7 +472,7 @@ def update_campaign_recipient_status(
 	row_data = frappe.db.sql(
 		"""
 		SELECT name, parent, status
-		FROM `tabWhatsApp Campaign Recipient`
+		FROM `tabWA Campaign Recipient`
 		WHERE message_id = %s OR message = %s
 		LIMIT 1
 		""",
@@ -497,7 +497,7 @@ def update_campaign_recipient_status(
 		raw_err = json.dumps(errors) if not isinstance(errors, str) else errors
 		updates["error_message"] = _redact_token_string(raw_err)[:500]
 
-	frappe.db.set_value("WhatsApp Campaign Recipient", row_name, updates, update_modified=False)
+	frappe.db.set_value("WA Campaign Recipient", row_name, updates, update_modified=False)
 
 	# Trigger funnel count recalculation on parent campaign
 	recalculate_campaign_funnel_counts(row_parent)

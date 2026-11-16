@@ -26,7 +26,7 @@ class TestTenantIsolation(unittest.TestCase):
 
 	def test_administrator_bypasses_tenant_isolation(self):
 		"""Administrator always has access regardless of account permissions."""
-		doc = frappe._dict({"doctype": "Nudg Conversation", "whatsapp_account": "ACC-SECRET"})
+		doc = frappe._dict({"doctype": "WA Conversation", "whatsapp_account": "ACC-SECRET"})
 		with patch("nudg.security._get_roles", return_value=["System Manager"]):
 			self.assertTrue(has_tenant_permission(doc, user="Administrator"))
 			query = get_tenant_conversation_query(user="Administrator")
@@ -40,21 +40,21 @@ class TestTenantIsolation(unittest.TestCase):
 
 	def test_has_tenant_permission_permits_matching_account(self):
 		"""Access is granted when user is authorized for the document's account."""
-		doc = frappe._dict({"doctype": "Nudg Conversation", "whatsapp_account": "ACC-ALPHA"})
+		doc = frappe._dict({"doctype": "WA Conversation", "whatsapp_account": "ACC-ALPHA"})
 		with patch("nudg.security._get_roles", return_value=["WhatsApp User"]), \
 		     patch("nudg.security.get_user_wa_accounts", return_value=["ACC-ALPHA"]):
 			self.assertTrue(has_tenant_permission(doc, user="agent_a@example.com"))
 
 	def test_has_tenant_permission_blocks_cross_tenant_access(self):
 		"""Access is denied when user attempts to access another tenant's document."""
-		doc = frappe._dict({"doctype": "Nudg Conversation", "whatsapp_account": "ACC-BETA"})
+		doc = frappe._dict({"doctype": "WA Conversation", "whatsapp_account": "ACC-BETA"})
 		with patch("nudg.security._get_roles", return_value=["WhatsApp User"]), \
 		     patch("nudg.security.get_user_wa_accounts", return_value=["ACC-ALPHA"]):
 			self.assertFalse(has_tenant_permission(doc, user="agent_a@example.com"))
 
 	def test_has_tenant_permission_allows_unassigned_document(self):
 		"""Documents without account restriction (global/unassigned) are accessible."""
-		doc = frappe._dict({"doctype": "Nudg Conversation", "whatsapp_account": None})
+		doc = frappe._dict({"doctype": "WA Conversation", "whatsapp_account": None})
 		with patch("nudg.security._get_roles", return_value=["WhatsApp User"]), \
 		     patch("nudg.security.get_user_wa_accounts", return_value=["ACC-ALPHA"]):
 			self.assertTrue(has_tenant_permission(doc, user="agent_a@example.com"))
@@ -65,7 +65,7 @@ class TestTenantIsolation(unittest.TestCase):
 		     patch("nudg.security.get_user_wa_accounts", return_value=["ACC-ALPHA"]):
 			self.mock_db.escape.side_effect = lambda v: f"'{v}'"
 			cond = get_tenant_conversation_query(user="agent_a@example.com")
-			self.assertIn("`tabNudg Conversation`.whatsapp_account IN ('ACC-ALPHA')", cond)
+			self.assertIn("`tabWA Conversation`.whatsapp_account IN ('ACC-ALPHA')", cond)
 
 	def test_tenant_campaign_query_allows_general_and_assigned(self):
 		"""UTM Campaign query condition isolates by account while keeping standard campaigns viewable."""

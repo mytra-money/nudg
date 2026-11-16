@@ -33,21 +33,21 @@ after_install = "nudg.install.after_install"
 after_migrate = ["nudg.install.after_migrate"]
 
 permission_query_conditions = {
-	"Nudg Conversation": "nudg.security.get_tenant_conversation_query",
+	"WA Conversation": "nudg.security.get_tenant_conversation_query",
 	"NUDG Conversation": "nudg.security.get_tenant_conversation_query",
 	"UTM Campaign": "nudg.security.get_tenant_campaign_query",
-	"WhatsApp Automation Rule": "nudg.security.get_tenant_rule_query",
-	"WhatsApp Quick Reply": "nudg.security.get_tenant_quick_reply_query",
-	"WhatsApp Catalog": "nudg.security.get_tenant_catalog_query",
+	"WA Automation Rule": "nudg.security.get_tenant_rule_query",
+	"WA Quick Reply": "nudg.security.get_tenant_quick_reply_query",
+	"WA Catalog": "nudg.security.get_tenant_catalog_query",
 }
 
 has_permission = {
-	"Nudg Conversation": "nudg.security.has_tenant_permission",
+	"WA Conversation": "nudg.security.has_tenant_permission",
 	"NUDG Conversation": "nudg.security.has_tenant_permission",
 	"UTM Campaign": "nudg.security.has_tenant_permission",
-	"WhatsApp Automation Rule": "nudg.security.has_tenant_permission",
-	"WhatsApp Quick Reply": "nudg.security.has_tenant_permission",
-	"WhatsApp Catalog": "nudg.security.has_tenant_permission",
+	"WA Automation Rule": "nudg.security.has_tenant_permission",
+	"WA Quick Reply": "nudg.security.has_tenant_permission",
+	"WA Catalog": "nudg.security.has_tenant_permission",
 }
 
 export_python_type_annotations = True

@@ -307,7 +307,7 @@ def _process_status_update(status: dict, channel_doc: Any) -> None:
 
 
 def _trigger_automations(profile: str | None, channel_name: str, message_name: str | None, trigger: str = "Incoming Message") -> None:
-	if not frappe.db.exists("DocType", "WhatsApp Automation Rule"):
+	if not frappe.db.exists("DocType", "WA Automation Rule"):
 		return
 	try:
 		from nudg.services.automation import process_trigger

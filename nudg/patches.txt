@@ -1,4 +1,5 @@
 [pre_model_sync]
 nudg.patches.v1_0.rename_nudg_labels
+nudg.patches.v1_0.rename_doctypes_to_wa
 
 [post_model_sync]

@@ -18,12 +18,12 @@ logger = logging.getLogger("nudg.services.catalog")
 
 
 def list_catalogs(account: str | None = None) -> list[dict]:
-	frappe.has_permission("WhatsApp Catalog", "read", throw=True)
+	frappe.has_permission("WA Catalog", "read", throw=True)
 	filters = {}
 	if account:
 		filters["whatsapp_account"] = account
 	return frappe.get_list(
-		"WhatsApp Catalog",
+		"WA Catalog",
 		filters=filters,
 		fields=[
 			"name",
@@ -42,14 +42,14 @@ def list_catalogs(account: str | None = None) -> list[dict]:
 
 
 def list_items(catalog: str | None = None, status: str | None = "Active") -> list[dict]:
-	frappe.has_permission("WhatsApp Catalog Item", "read", throw=True)
+	frappe.has_permission("WA Catalog Item", "read", throw=True)
 	filters: dict = {}
 	if catalog:
 		filters["catalog"] = catalog
 	if status:
 		filters["status"] = status
 	rows = frappe.get_list(
-		"WhatsApp Catalog Item",
+		"WA Catalog Item",
 		filters=filters,
 		fields=[
 			"name",
@@ -71,7 +71,7 @@ def list_items(catalog: str | None = None, status: str | None = "Active") -> lis
 	catalogs: dict[str, dict] = {}
 	if catalog_names:
 		for catalog_row in frappe.get_list(
-			"WhatsApp Catalog",
+			"WA Catalog",
 			filters={"name": ["in", catalog_names]},
 			fields=["name", "catalog_name", "meta_catalog_id"],
 			limit_page_length=len(catalog_names),
@@ -360,7 +360,7 @@ def _account_or_throw(account: str | None) -> str | None:
 
 def _catalog_dict(name: str) -> dict:
 	row = frappe.db.get_value(
-		"WhatsApp Catalog",
+		"WA Catalog",
 		name,
 		["name", "catalog_name", "whatsapp_account", "status", "meta_catalog_id", "sync_status", "sync_error", "description", "modified"],
 		as_dict=True,
@@ -374,17 +374,17 @@ def create_catalog(
 	description: str | None = None,
 	status: str | None = None,
 ) -> dict:
-	"""Create a WhatsApp Catalog from the catalogs screen."""
-	frappe.has_permission("WhatsApp Catalog", "create", throw=True)
+	"""Create a WA Catalog from the catalogs screen."""
+	frappe.has_permission("WA Catalog", "create", throw=True)
 	catalog_name = (catalog_name or "").strip()
 	if not catalog_name:
 		frappe.throw(_("Catalog name is required."))
-	if frappe.db.exists("WhatsApp Catalog", catalog_name):
+	if frappe.db.exists("WA Catalog", catalog_name):
 		frappe.throw(_("A catalog named {0} already exists.").format(catalog_name))
 	chosen = status if status in ("Draft", "Active", "Archived") else "Draft"
 	doc = frappe.get_doc(
 		{
-			"doctype": "WhatsApp Catalog",
+			"doctype": "WA Catalog",
 			"catalog_name": catalog_name,
 			"whatsapp_account": _account_or_throw(whatsapp_account),
 			"description": (description or "").strip(),
@@ -402,16 +402,16 @@ def update_catalog(
 	description: str | None = None,
 	status: str | None = None,
 ) -> dict:
-	doc = frappe.get_doc("WhatsApp Catalog", name)
-	frappe.has_permission("WhatsApp Catalog", "write", doc=doc, throw=True)
+	doc = frappe.get_doc("WA Catalog", name)
+	frappe.has_permission("WA Catalog", "write", doc=doc, throw=True)
 	new_name = (catalog_name or "").strip() or doc.catalog_name
 	if new_name != doc.name:
-		if frappe.db.exists("WhatsApp Catalog", new_name):
+		if frappe.db.exists("WA Catalog", new_name):
 			frappe.throw(_("A catalog named {0} already exists.").format(new_name))
 		from frappe.model.rename_doc import rename_doc
 
-		rename_doc("WhatsApp Catalog", doc.name, new_name, show_alert=False)
-		doc = frappe.get_doc("WhatsApp Catalog", new_name)
+		rename_doc("WA Catalog", doc.name, new_name, show_alert=False)
+		doc = frappe.get_doc("WA Catalog", new_name)
 	if status in ("Draft", "Active", "Archived"):
 		doc.status = status
 	doc.whatsapp_account = _account_or_throw(whatsapp_account)
@@ -422,7 +422,7 @@ def update_catalog(
 
 def _item_dict(name: str) -> dict:
 	row = frappe.db.get_value(
-		"WhatsApp Catalog Item",
+		"WA Catalog Item",
 		name,
 		["name", "catalog", "item_name", "sku", "description", "price", "currency", "image", "meta_retailer_id", "status", "sort_order"],
 		as_dict=True,
@@ -440,13 +440,13 @@ def create_catalog_item(
 	status: str | None = None,
 	image: str | None = None,
 ) -> dict:
-	frappe.has_permission("WhatsApp Catalog Item", "create", throw=True)
+	frappe.has_permission("WA Catalog Item", "create", throw=True)
 	catalog = (catalog or "").strip()
 	item_name = (item_name or "").strip()
-	if not catalog or not frappe.db.exists("WhatsApp Catalog", catalog):
+	if not catalog or not frappe.db.exists("WA Catalog", catalog):
 		frappe.throw(_("Choose a catalog first."))
-	catalog_doc = frappe.get_doc("WhatsApp Catalog", catalog)
-	frappe.has_permission("WhatsApp Catalog", "read", doc=catalog_doc, throw=True)
+	catalog_doc = frappe.get_doc("WA Catalog", catalog)
+	frappe.has_permission("WA Catalog", "read", doc=catalog_doc, throw=True)
 	if not item_name:
 		frappe.throw(_("Item name is required."))
 	try:
@@ -455,7 +455,7 @@ def create_catalog_item(
 		frappe.throw(_("Price must be a number."))
 	doc = frappe.get_doc(
 		{
-			"doctype": "WhatsApp Catalog Item",
+			"doctype": "WA Catalog Item",
 			"catalog": catalog,
 			"item_name": item_name,
 			"sku": (sku or "").strip(),
@@ -480,8 +480,8 @@ def update_catalog_item(
 	status: str | None = None,
 	image: str | None = None,
 ) -> dict:
-	doc = frappe.get_doc("WhatsApp Catalog Item", name)
-	frappe.has_permission("WhatsApp Catalog Item", "write", doc=doc, throw=True)
+	doc = frappe.get_doc("WA Catalog Item", name)
+	frappe.has_permission("WA Catalog Item", "write", doc=doc, throw=True)
 	item_name = (item_name or "").strip()
 	if not item_name:
 		frappe.throw(_("Item name is required."))

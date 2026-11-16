@@ -155,7 +155,7 @@ onUnmounted(() => window.clearInterval(timer))
 </script>
 
 <template>
-  <div class="flex h-dvh w-screen flex-col overflow-hidden bg-surface-gray-1 text-ink-gray-9 md:flex-row">
+  <div class="nudg-shell flex h-dvh w-screen flex-col overflow-hidden bg-surface-gray-1 text-ink-gray-9 md:flex-row">
     <div class="relative z-20 hidden h-full shrink-0 md:flex">
       <Sidebar
         v-model:collapsed="sidebarCollapsed"
@@ -163,9 +163,9 @@ onUnmounted(() => window.clearInterval(timer))
         width="14rem"
         collapsed-width="3rem"
       >
-        <SidebarHeader title="Nudg" :subtitle="subtitle">
+        <SidebarHeader title="" :subtitle="subtitle">
           <template #prefix>
-            <img :src="logoUrl" alt="" class="size-full rounded object-cover" />
+            <img :src="logoUrl" alt="Nudg" class="size-full object-cover" />
           </template>
         </SidebarHeader>
         <AccountSelect />

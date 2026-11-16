@@ -17,32 +17,32 @@ GRANTS = {
 }
 
 DESK_GRANTS = {
-	"WhatsApp Catalog": ("read", "report", "print"),
-	"WhatsApp Catalog Item": ("read", "report", "print"),
-	"WhatsApp Quick Reply": ("read", "write", "create", "report", "print"),
-	"Nudg Conversation": ("read", "write", "create", "report", "print"),
+	"WA Catalog": ("read", "report", "print"),
+	"WA Catalog Item": ("read", "report", "print"),
+	"WA Quick Reply": ("read", "write", "create", "report", "print"),
+	"WA Conversation": ("read", "write", "create", "report", "print"),
 	"UTM Campaign": ("read", "report", "print"),
-	"WhatsApp Automation Rule": ("read", "report", "print"),
-	"WhatsApp Automation Run": ("read", "report", "print"),
+	"WA Automation Rule": ("read", "report", "print"),
+	"WA Automation Run": ("read", "report", "print"),
 }
 
 # Broadcasts, automation, and catalogs are manager work. Agents keep the inbox.
 AGENT_LOCKED = (
 	"UTM Campaign",
-	"WhatsApp Automation Rule",
-	"WhatsApp Catalog",
-	"WhatsApp Catalog Item",
+	"WA Automation Rule",
+	"WA Catalog",
+	"WA Catalog Item",
 )
 
 MANAGER_GRANTS = {
 	"WA Account": ("read", "write", "create", "report", "print"),
-	"Nudg Conversation": ("read", "write", "create", "delete", "report", "print"),
+	"WA Conversation": ("read", "write", "create", "delete", "report", "print"),
 	"UTM Campaign": ("read", "write", "create", "delete", "report", "print"),
-	"WhatsApp Automation Rule": ("read", "write", "create", "delete", "report", "print"),
-	"WhatsApp Automation Run": ("read", "write", "report", "print"),
-	"WhatsApp Quick Reply": ("read", "write", "create", "delete", "report", "print"),
-	"WhatsApp Catalog": ("read", "write", "create", "delete", "report", "print"),
-	"WhatsApp Catalog Item": ("read", "write", "create", "delete", "report", "print"),
+	"WA Automation Rule": ("read", "write", "create", "delete", "report", "print"),
+	"WA Automation Run": ("read", "write", "report", "print"),
+	"WA Quick Reply": ("read", "write", "create", "delete", "report", "print"),
+	"WA Catalog": ("read", "write", "create", "delete", "report", "print"),
+	"WA Catalog Item": ("read", "write", "create", "delete", "report", "print"),
 }
 
 
@@ -189,7 +189,7 @@ def setup_standard_custom_fields():
 				"fieldname": "whatsapp_recipients",
 				"label": "Recipients",
 				"fieldtype": "Table",
-				"options": "WhatsApp Campaign Recipient",
+				"options": "WA Campaign Recipient",
 				"insert_after": "whatsapp_recipients_section",
 			},
 		]
@@ -225,8 +225,8 @@ def setup_standard_custom_fields():
 		]
 
 	# Optional ERPNext Item integration for self-hosted instances
-	if frappe.db.exists("DocType", "WhatsApp Catalog Item") and frappe.db.exists("DocType", "Item"):
-		custom_fields["WhatsApp Catalog Item"] = [
+	if frappe.db.exists("DocType", "WA Catalog Item") and frappe.db.exists("DocType", "Item"):
+		custom_fields["WA Catalog Item"] = [
 			{
 				"fieldname": "erpnext_item",
 				"label": "ERPNext Item (Optional)",

@@ -5,5 +5,5 @@ import frappe
 from frappe.model.document import Document
 
 
-class WhatsAppCatalog(Document):
+class WAAutomationRule(Document):
 	pass

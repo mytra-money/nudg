@@ -10,7 +10,7 @@ from frappe.model.document import Document
 from nudg.integrations.erpnext.safety import SiteURLError, validate_site_url
 
 
-class ERPNextSite(Document):
+class ConnectedSite(Document):
 	def before_insert(self):
 		if not self.inbound_secret:
 			self.inbound_secret = secrets.token_urlsafe(32)

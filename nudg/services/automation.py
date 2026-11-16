@@ -29,12 +29,12 @@ def _safe_now():
 
 
 def list_rules(account: str | None = None) -> list[dict]:
-	frappe.has_permission("WhatsApp Automation Rule", "read", throw=True)
+	frappe.has_permission("WA Automation Rule", "read", throw=True)
 	filters = {}
 	if account:
 		filters["whatsapp_account"] = account
 	rows = frappe.get_list(
-		"WhatsApp Automation Rule",
+		"WA Automation Rule",
 		filters=filters,
 		fields=[
 			"name",
@@ -57,12 +57,12 @@ def list_rules(account: str | None = None) -> list[dict]:
 
 
 def list_runs(rule: str | None = None, limit: int = 50) -> list[dict]:
-	frappe.has_permission("WhatsApp Automation Run", "read", throw=True)
+	frappe.has_permission("WA Automation Run", "read", throw=True)
 	filters = {}
 	if rule:
 		filters["rule"] = rule
 	return frappe.get_list(
-		"WhatsApp Automation Run",
+		"WA Automation Run",
 		filters=filters,
 		fields=[
 			"name",
@@ -85,7 +85,7 @@ def on_wa_message(doc, method=None):
 	Meta webhooks run as Guest. Rule actions need desk DocType permission, so
 	work is enqueued as Administrator when the session is Guest.
 	"""
-	if not frappe.db.exists("DocType", "WhatsApp Automation Rule"):
+	if not frappe.db.exists("DocType", "WA Automation Rule"):
 		return
 	if doc.get("reaction"):
 		return
@@ -117,7 +117,7 @@ def on_wa_message(doc, method=None):
 
 def process_trigger(trigger: str, profile: str | None, account: str | None, message_name: str | None):
 	"""Fetch active rules matching the trigger event and execute qualified ones."""
-	if not frappe.db.exists("DocType", "WhatsApp Automation Rule"):
+	if not frappe.db.exists("DocType", "WA Automation Rule"):
 		return
 
 	# Support evaluating both 'Incoming Message', 'Keyword Match', and 'Keyword Rule' triggers on inbound messages
@@ -126,7 +126,7 @@ def process_trigger(trigger: str, profile: str | None, account: str | None, mess
 		trigger_filter = ["in", ["Incoming Message", "Keyword Match", "Keyword Rule"]]
 
 	rules = frappe.get_all(
-		"WhatsApp Automation Rule",
+		"WA Automation Rule",
 		filters={"status": "Active", "trigger": trigger_filter},
 		fields=["name", "action", "action_reference", "condition_json", "whatsapp_account", "trigger"],
 	)
@@ -263,7 +263,7 @@ def _condition_matches(condition_json: str | None, doc: Any) -> bool:
 def _execute_rule(rule: Any, profile: str | None, message_name: str | None):
 	run = frappe.get_doc(
 		{
-			"doctype": "WhatsApp Automation Run",
+			"doctype": "WA Automation Run",
 			"rule": rule.name,
 			"profile": profile,
 			"status": "Queued",
@@ -366,7 +366,7 @@ def _account_or_throw(account: str | None) -> str | None:
 
 def _rule_dict(name: str) -> dict:
 	row = frappe.db.get_value(
-		"WhatsApp Automation Rule",
+		"WA Automation Rule",
 		name,
 		[
 			"name",
@@ -399,7 +399,7 @@ def create_rule(
 	condition_keyword: str | None = None,
 ) -> dict:
 	"""Create an automation rule from the Automation screen."""
-	frappe.has_permission("WhatsApp Automation Rule", "create", throw=True)
+	frappe.has_permission("WA Automation Rule", "create", throw=True)
 	rule_name = (rule_name or "").strip()
 	if not rule_name:
 		frappe.throw(_("Rule name is required."))
@@ -407,12 +407,12 @@ def create_rule(
 		frappe.throw(_("Choose a trigger."))
 	if action not in _ACTIONS:
 		frappe.throw(_("Choose an action."))
-	if frappe.db.exists("WhatsApp Automation Rule", rule_name):
+	if frappe.db.exists("WA Automation Rule", rule_name):
 		frappe.throw(_("A rule named {0} already exists.").format(rule_name))
 	operator, condition_json = _store_condition(condition_operator, condition_keyword)
 	doc = frappe.get_doc(
 		{
-			"doctype": "WhatsApp Automation Rule",
+			"doctype": "WA Automation Rule",
 			"rule_name": rule_name,
 			"trigger": trigger,
 			"action": action,
@@ -438,16 +438,16 @@ def update_rule(
 	condition_operator: str | None = None,
 	condition_keyword: str | None = None,
 ) -> dict:
-	doc = frappe.get_doc("WhatsApp Automation Rule", name)
-	frappe.has_permission("WhatsApp Automation Rule", "write", doc=doc, throw=True)
+	doc = frappe.get_doc("WA Automation Rule", name)
+	frappe.has_permission("WA Automation Rule", "write", doc=doc, throw=True)
 	new_name = (rule_name or "").strip() or doc.rule_name
 	if new_name != doc.name:
-		if frappe.db.exists("WhatsApp Automation Rule", new_name):
+		if frappe.db.exists("WA Automation Rule", new_name):
 			frappe.throw(_("A rule named {0} already exists.").format(new_name))
 		from frappe.model.rename_doc import rename_doc
 
-		rename_doc("WhatsApp Automation Rule", doc.name, new_name, show_alert=False)
-		doc = frappe.get_doc("WhatsApp Automation Rule", new_name)
+		rename_doc("WA Automation Rule", doc.name, new_name, show_alert=False)
+		doc = frappe.get_doc("WA Automation Rule", new_name)
 	if trigger:
 		if trigger not in _TRIGGERS:
 			frappe.throw(_("Choose a trigger."))

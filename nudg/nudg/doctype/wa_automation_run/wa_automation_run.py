@@ -5,5 +5,5 @@ import frappe
 from frappe.model.document import Document
 
 
-class WhatsAppQuickReply(Document):
+class WAAutomationRun(Document):
 	pass

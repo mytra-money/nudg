@@ -58,14 +58,14 @@ class TestInboxAndPresenceParity(unittest.TestCase):
 	# -------------------------------------------------------------------------
 
 	def test_note_doctype_schema_structure(self):
-		"""Assert Nudg Conversation schema contains required fields."""
+		"""Assert WA Conversation schema contains required fields."""
 		app_path = Path(frappe.get_app_path("nudg"))
-		schema_file = app_path / "nudg" / "doctype" / "nudg_conversation" / "nudg_conversation.json"
+		schema_file = app_path / "nudg" / "doctype" / "wa_conversation" / "wa_conversation.json"
 		self.assertTrue(schema_file.exists(), f"Schema missing: {schema_file}")
 
 		data = json.loads(schema_file.read_text())
 		self.assertEqual(data.get("doctype"), "DocType")
-		self.assertEqual(data.get("name"), "Nudg Conversation")
+		self.assertEqual(data.get("name"), "WA Conversation")
 
 		fields = {f["fieldname"]: f for f in data.get("fields", [])}
 		self.assertIn("profile", fields)

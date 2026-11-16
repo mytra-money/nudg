@@ -50,12 +50,12 @@ def list_catalog_items(catalog: str | None = None, status: str | None = "Active"
 
 @frappe.whitelist()
 def import_erpnext_items_to_catalog(catalog: str, item_group: str | None = None, limit: int = 50) -> dict:
-	"""Optional helper for self-hosted instances with ERPNext to bulk-import items into WhatsApp Catalog."""
+	"""Optional helper for self-hosted instances with ERPNext to bulk-import items into WA Catalog."""
 	_require_manager()
 	if not frappe.db.exists("DocType", "Item"):
 		frappe.throw(_("ERPNext Item DocType not found on this site. You can add catalog items manually."))
 
-	if not frappe.db.exists("WhatsApp Catalog", catalog):
+	if not frappe.db.exists("WA Catalog", catalog):
 		frappe.throw(_("Catalog {0} does not exist.").format(catalog))
 
 	filters = {"disabled": 0}
@@ -71,7 +71,7 @@ def import_erpnext_items_to_catalog(catalog: str, item_group: str | None = None,
 
 	imported = 0
 	for it in items:
-		if frappe.db.exists("WhatsApp Catalog Item", {"catalog": catalog, "sku": it.name}):
+		if frappe.db.exists("WA Catalog Item", {"catalog": catalog, "sku": it.name}):
 			continue
 		price = 0
 		currency = "INR"
@@ -85,7 +85,7 @@ def import_erpnext_items_to_catalog(catalog: str, item_group: str | None = None,
 				pass
 
 		doc = frappe.get_doc({
-			"doctype": "WhatsApp Catalog Item",
+			"doctype": "WA Catalog Item",
 			"catalog": catalog,
 			"item_name": it.item_name or it.name,
 			"sku": it.name,
@@ -192,8 +192,8 @@ def send_catalog_product(
 	if profile_doc.status == "Blocked":
 		frappe.throw(_("This profile is blocked. Unblock it before sending."))
 
-	item_doc = frappe.get_doc("WhatsApp Catalog Item", item)
-	catalog_doc = frappe.get_doc("WhatsApp Catalog", item_doc.catalog)
+	item_doc = frappe.get_doc("WA Catalog Item", item)
+	catalog_doc = frappe.get_doc("WA Catalog", item_doc.catalog)
 	problems = _catalog_send_problems(profile_doc.name, catalog_doc, item_doc)
 	if problems:
 		frappe.throw("\n\n".join(str(problem) for problem in problems), title=_("Catalog product was not sent"))
@@ -307,8 +307,8 @@ def close_conversation(profile: str) -> dict:
 def ensure_conversation(profile: str) -> dict:
 	_require_login()
 	name = assignments.ensure_conversation(profile)
-	doc = frappe.get_doc("Nudg Conversation", name)
-	frappe.has_permission("Nudg Conversation", "read", doc=doc, throw=True)
+	doc = frappe.get_doc("WA Conversation", name)
+	frappe.has_permission("WA Conversation", "read", doc=doc, throw=True)
 	return assignments._serialize(doc)
 
 
@@ -431,14 +431,14 @@ def delete_catalog(name: str) -> dict:
 	"""Delete a catalog and its items."""
 	_require_manager()
 	name = (name or "").strip()
-	if not name or not frappe.db.exists("WhatsApp Catalog", name):
+	if not name or not frappe.db.exists("WA Catalog", name):
 		frappe.throw(_("Catalog not found."))
-	doc = frappe.get_doc("WhatsApp Catalog", name)
+	doc = frappe.get_doc("WA Catalog", name)
 	if doc.whatsapp_account:
 		_assert_account_access(doc.whatsapp_account)
-	for item in frappe.get_all("WhatsApp Catalog Item", filters={"catalog": name}, pluck="name"):
-		frappe.delete_doc("WhatsApp Catalog Item", item, ignore_permissions=True, force=True)
-	frappe.delete_doc("WhatsApp Catalog", name, ignore_permissions=True, force=True)
+	for item in frappe.get_all("WA Catalog Item", filters={"catalog": name}, pluck="name"):
+		frappe.delete_doc("WA Catalog Item", item, ignore_permissions=True, force=True)
+	frappe.delete_doc("WA Catalog", name, ignore_permissions=True, force=True)
 	return {"name": name, "deleted": True}
 
 
@@ -476,13 +476,13 @@ def update_catalog_item(
 def delete_catalog_item(name: str) -> dict:
 	_require_manager()
 	name = (name or "").strip()
-	if not name or not frappe.db.exists("WhatsApp Catalog Item", name):
+	if not name or not frappe.db.exists("WA Catalog Item", name):
 		frappe.throw(_("Catalog item not found."))
-	catalog = frappe.db.get_value("WhatsApp Catalog Item", name, "catalog")
-	account = frappe.db.get_value("WhatsApp Catalog", catalog, "whatsapp_account") if catalog else None
+	catalog = frappe.db.get_value("WA Catalog Item", name, "catalog")
+	account = frappe.db.get_value("WA Catalog", catalog, "whatsapp_account") if catalog else None
 	if account:
 		_assert_account_access(account)
-	frappe.delete_doc("WhatsApp Catalog Item", name, ignore_permissions=True, force=True)
+	frappe.delete_doc("WA Catalog Item", name, ignore_permissions=True, force=True)
 	return {"name": name, "deleted": True}
 
 
@@ -546,12 +546,12 @@ def update_automation_rule(
 def delete_automation_rule(name: str) -> dict:
 	_require_manager()
 	name = (name or "").strip()
-	if not name or not frappe.db.exists("WhatsApp Automation Rule", name):
+	if not name or not frappe.db.exists("WA Automation Rule", name):
 		frappe.throw(_("Automation rule not found."))
-	account = frappe.db.get_value("WhatsApp Automation Rule", name, "whatsapp_account")
+	account = frappe.db.get_value("WA Automation Rule", name, "whatsapp_account")
 	if account:
 		_assert_account_access(account)
-	frappe.delete_doc("WhatsApp Automation Rule", name, ignore_permissions=True, force=True)
+	frappe.delete_doc("WA Automation Rule", name, ignore_permissions=True, force=True)
 	return {"name": name, "deleted": True}
 
 
@@ -792,8 +792,8 @@ def save_quick_reply(
 	if account:
 		_assert_account_access(account)
 	target = (name or "").strip()
-	if target and frappe.db.exists("WhatsApp Quick Reply", target):
-		doc = frappe.get_doc("WhatsApp Quick Reply", target)
+	if target and frappe.db.exists("WA Quick Reply", target):
+		doc = frappe.get_doc("WA Quick Reply", target)
 		doc.shortcut = shortcut
 		doc.body = body
 		doc.whatsapp_account = account or None
@@ -801,14 +801,14 @@ def save_quick_reply(
 			doc.status = status
 		doc.save(ignore_permissions=True)
 		if title != doc.name:
-			if frappe.db.exists("WhatsApp Quick Reply", title):
+			if frappe.db.exists("WA Quick Reply", title):
 				frappe.throw(_("A quick reply named {0} already exists.").format(title))
 			from frappe.model.rename_doc import rename_doc
 
-			rename_doc("WhatsApp Quick Reply", doc.name, title, merge=False)
-			doc = frappe.get_doc("WhatsApp Quick Reply", title)
+			rename_doc("WA Quick Reply", doc.name, title, merge=False)
+			doc = frappe.get_doc("WA Quick Reply", title)
 	else:
-		doc = frappe.new_doc("WhatsApp Quick Reply")
+		doc = frappe.new_doc("WA Quick Reply")
 		doc.title = title
 		doc.shortcut = shortcut
 		doc.body = body
@@ -822,12 +822,12 @@ def save_quick_reply(
 def delete_quick_reply(name: str) -> dict:
 	_require_manager()
 	name = (name or "").strip()
-	if not name or not frappe.db.exists("WhatsApp Quick Reply", name):
+	if not name or not frappe.db.exists("WA Quick Reply", name):
 		frappe.throw(_("Quick reply not found."))
-	account = frappe.db.get_value("WhatsApp Quick Reply", name, "whatsapp_account")
+	account = frappe.db.get_value("WA Quick Reply", name, "whatsapp_account")
 	if account:
 		_assert_account_access(account)
-	frappe.delete_doc("WhatsApp Quick Reply", name, ignore_permissions=True, force=True)
+	frappe.delete_doc("WA Quick Reply", name, ignore_permissions=True, force=True)
 	return {"name": name, "deleted": True}
 
 

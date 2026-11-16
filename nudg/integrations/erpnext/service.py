@@ -55,10 +55,10 @@ def connect_site(
 	except (ERPNextClientError, SiteURLError) as exc:
 		frappe.throw(_("Could not sign in to that ERPNext site: {0}").format(exc))
 
-	if frappe.db.exists("ERPNext Site", site_name):
-		doc = frappe.get_doc("ERPNext Site", site_name)
+	if frappe.db.exists("Connected Site", site_name):
+		doc = frappe.get_doc("Connected Site", site_name)
 	else:
-		doc = frappe.new_doc("ERPNext Site")
+		doc = frappe.new_doc("Connected Site")
 		doc.site_name = site_name
 	doc.site_url = canonical
 	doc.api_key = api_key.strip()
@@ -86,7 +86,7 @@ def accept_event(raw: bytes, site_header: str | None, signature: str | None, bea
 		frappe.throw(_("The ERPNext payload is too large."), frappe.ValidationError)
 
 	site_name = (site_header or "").strip()
-	site = frappe.get_doc("ERPNext Site", site_name) if site_name and frappe.db.exists("ERPNext Site", site_name) else None
+	site = frappe.get_doc("Connected Site", site_name) if site_name and frappe.db.exists("Connected Site", site_name) else None
 	secret = site.get_password("inbound_secret") if site else _UNKNOWN_SECRET
 	authorized = signatures_match(secret, raw, signature) if signature else token_matches(secret, bearer)
 	if site is None or not authorized:
@@ -197,11 +197,11 @@ def _opted_out(recipient: str, account: str) -> bool:
 
 
 def _note(site, message: str) -> None:
-	frappe.db.set_value("ERPNext Site", site.name, "last_error", message[:300], update_modified=False)
+	frappe.db.set_value("Connected Site", site.name, "last_error", message[:300], update_modified=False)
 
 
 def _note_sent(site) -> None:
-	frappe.db.set_value("ERPNext Site", site.name, "last_error", "", update_modified=False)
+	frappe.db.set_value("Connected Site", site.name, "last_error", "", update_modified=False)
 
 
 def _client_for_site(site) -> ERPNextClient:
@@ -213,9 +213,9 @@ def _client(site_url: str, api_key: str, api_secret: str) -> ERPNextClient:
 
 
 def _require_site(name: str):
-	if not name or not frappe.db.exists("ERPNext Site", name):
+	if not name or not frappe.db.exists("Connected Site", name):
 		frappe.throw(_("Connect the ERPNext site first."))
-	return frappe.get_doc("ERPNext Site", name)
+	return frappe.get_doc("Connected Site", name)
 
 
 def _allow_http() -> bool:

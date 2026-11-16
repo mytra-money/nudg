@@ -32,10 +32,10 @@ def _allowed_accounts() -> list[str] | None:
 @frappe.whitelist()
 def list_sites() -> list[dict]:
 	_manager()
-	if not frappe.db.exists("DocType", "ERPNext Site"):
+	if not frappe.db.exists("DocType", "Connected Site"):
 		return []
 	rows = frappe.get_list(
-		"ERPNext Site",
+		"Connected Site",
 		fields=["name", "site_url", "status", "whatsapp_account", "remote_user", "last_error", "modified"],
 		order_by="modified desc",
 		limit_page_length=50,
@@ -61,7 +61,7 @@ def connect_site(site_name: str, site_url: str, api_key: str, api_secret: str, w
 @frappe.whitelist()
 def set_site_enabled(site: str, enabled: int | str = 1) -> dict:
 	_manager()
-	doc = frappe.get_doc("ERPNext Site", site)
+	doc = frappe.get_doc("Connected Site", site)
 	allowed = _allowed_accounts()
 	if allowed is not None and doc.whatsapp_account not in allowed:
 		frappe.throw(_("You cannot change that ERPNext site."), frappe.PermissionError)

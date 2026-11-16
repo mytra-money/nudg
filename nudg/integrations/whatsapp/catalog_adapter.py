@@ -1,7 +1,7 @@
 """Catalog bridge for a future Meta Commerce sync.
 
 Phase 2 stores catalogs in desk DocTypes only. Meta Graph calls are not made
-here. Sync status is written onto WhatsApp Catalog so the UI never invents it.
+here. Sync status is written onto WA Catalog so the UI never invents it.
 """
 
 from __future__ import annotations
@@ -14,11 +14,11 @@ def sync_catalog(catalog_name: str) -> dict:
 
 	Replace the body of this function when Meta Commerce sync is implemented.
 	"""
-	if not frappe.db.exists("WhatsApp Catalog", catalog_name):
+	if not frappe.db.exists("WA Catalog", catalog_name):
 		frappe.throw(frappe._("Catalog {0} does not exist.").format(catalog_name), frappe.DoesNotExistError)
 
-	doc = frappe.get_doc("WhatsApp Catalog", catalog_name)
-	frappe.has_permission("WhatsApp Catalog", "write", doc=doc, throw=True)
+	doc = frappe.get_doc("WA Catalog", catalog_name)
+	frappe.has_permission("WA Catalog", "write", doc=doc, throw=True)
 	doc.sync_status = "Pending"
 	doc.sync_error = None
 	doc.save()

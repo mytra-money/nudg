@@ -397,3 +397,8 @@ main .flex > * {
     width: 100%;
   }
 }
+
+/* The mark stands in for the product name in the sidebar. */
+.nudg-shell [data-slot='sidebar-header'] .text-base-medium {
+  display: none;
+}

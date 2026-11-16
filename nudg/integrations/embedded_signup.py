@@ -15,7 +15,7 @@ import frappe
 from frappe import _
 
 GRAPH_DEFAULT = "v23.0"
-SETTINGS_DOCTYPE = "WhatsApp Signup Settings"
+SETTINGS_DOCTYPE = "WA Signup Settings"
 _TOKEN_RE = re.compile(r"EAA[A-Za-z0-9]+")
 _CODE_RE = re.compile(r"(code=)[^&\s]+", re.IGNORECASE)
 

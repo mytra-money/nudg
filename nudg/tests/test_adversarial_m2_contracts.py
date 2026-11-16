@@ -217,7 +217,7 @@ class TestAdversarialM2Contracts(unittest.TestCase):
 		self.mock_db.set_value.assert_called()
 		recipient_updates = {}
 		for call_item in self.mock_db.set_value.call_args_list:
-			if call_item[0][0] == "WhatsApp Campaign Recipient":
+			if call_item[0][0] == "WA Campaign Recipient":
 				recipient_updates = call_item[0][2]
 				break
 
@@ -354,7 +354,7 @@ class TestAdversarialM2Contracts(unittest.TestCase):
 
 	def test_notes_isolated_from_messages_array_in_get_thread(self):
 		"""Internal notes stay out of the customer-facing messages array."""
-		self.mock_db.exists.side_effect = lambda dt, name=None: dt in ("DocType", "WA Message", "Nudg Conversation")
+		self.mock_db.exists.side_effect = lambda dt, name=None: dt in ("DocType", "WA Message", "WA Conversation")
 		self.mock_db.get_value.return_value = "CONV-001"
 
 		sample_message = frappe._dict({
