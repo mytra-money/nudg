@@ -66,9 +66,7 @@ async function saveNote() {
       note_text: text,
     })
     noteText.value = ''
-    if (desk.thread.value) {
-      desk.thread.value = { ...desk.thread.value, notes: result.notes || [] }
-    }
+    desk.setThreadNotes(result.notes || [])
   } catch (caught) {
     toast.error(errorText(caught))
   } finally {

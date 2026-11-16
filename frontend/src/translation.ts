@@ -13,8 +13,14 @@ function format(message: string, replace: unknown[]) {
   })
 }
 
+function readTranslatedMessages(): Record<string, string> {
+  const value = (getConfig as (key: string) => unknown)('translatedMessages')
+  if (!value || typeof value !== 'object') return {}
+  return value as Record<string, string>
+}
+
 function translate(message: string, replace?: unknown[], context: string | null = null) {
-  const translatedMessages = (getConfig('translatedMessages') || {}) as Record<string, string>
+  const translatedMessages = readTranslatedMessages()
   let translatedMessage = ''
 
   if (context) {

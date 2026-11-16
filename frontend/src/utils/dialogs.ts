@@ -1,32 +1,59 @@
-import { Dialog } from 'frappe-ui'
+import { Dialog, type DialogAction, type DialogSize } from 'frappe-ui'
 import { h, reactive, ref } from 'vue'
+
+const DIALOG_SIZES = new Set<DialogSize>([
+  'xs',
+  'sm',
+  'md',
+  'lg',
+  'xl',
+  '2xl',
+  '3xl',
+  '4xl',
+  '5xl',
+  '6xl',
+  '7xl',
+])
 
 type DialogOptions = {
   title?: string
   message?: string
   size?: string
-  actions?: unknown[]
+  actions?: DialogAction[]
   show?: boolean
-  [key: string]: unknown
 }
 
 const dialogs = ref<DialogOptions[]>([])
 
+function dialogSize(size: string | undefined): DialogSize | undefined {
+  if (size && DIALOG_SIZES.has(size as DialogSize)) return size as DialogSize
+  return undefined
+}
+
 export const Dialogs = {
   name: 'Dialogs',
   render() {
-    return dialogs.value.map((dialog) =>
-      h(Dialog, {
-        title: dialog.title,
-        message: dialog.message,
-        size: dialog.size,
-        actions: dialog.actions,
-        open: dialog.show,
+    return dialogs.value.map((dialog) => {
+      const props: {
+        title?: string
+        message?: string
+        size?: DialogSize
+        actions?: DialogAction[]
+        open: boolean
+        'onUpdate:open': (val: boolean) => void
+      } = {
+        open: Boolean(dialog.show),
         'onUpdate:open': (val: boolean) => {
           dialog.show = val
         },
-      }),
-    )
+      }
+      if (dialog.title) props.title = dialog.title
+      if (dialog.message) props.message = dialog.message
+      const size = dialogSize(dialog.size)
+      if (size) props.size = size
+      if (dialog.actions) props.actions = dialog.actions
+      return h(Dialog, props)
+    })
   },
 }
 

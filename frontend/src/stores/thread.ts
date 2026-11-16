@@ -11,7 +11,7 @@ import {
 import { isLiveSession } from '@/stores/session'
 import { useInboxStore } from '@/stores/inbox'
 import { playSound } from '@/stores/sounds'
-import type { ChatMessage, Template, Thread } from '@/types'
+import type { ChatMessage, ConversationNote, Template, Thread } from '@/types'
 
 export const useThreadStore = defineStore('nudg-thread', () => {
   const profile = ref<string | null>(null)
@@ -19,7 +19,7 @@ export const useThreadStore = defineStore('nudg-thread', () => {
   let typingTimer: ReturnType<typeof setTimeout> | undefined
   let typingSentFor: string | null = null
 
-  const threadResource = createResource<Thread>({
+  const threadResource = createResource<Thread | null>({
     url: 'nudg.api.get_thread',
     cache: 'nudg:thread',
     initialData: null,
@@ -59,6 +59,12 @@ export const useThreadStore = defineStore('nudg-thread', () => {
       typingSentFor = null
       announcePresence(conversationId, 'stopped_typing')
     }, 2000)
+  }
+
+  function setThreadNotes(notes: ConversationNote[]) {
+    const current = threadResource.data
+    if (!current) return
+    threadResource.setData({ ...current, notes })
   }
 
   function recomputeSample(name: string) {
@@ -293,6 +299,7 @@ export const useThreadStore = defineStore('nudg-thread', () => {
     windowState,
     threadResource,
     openProfile,
+    setThreadNotes,
     sendText,
     sendMedia,
     sendTemplate,

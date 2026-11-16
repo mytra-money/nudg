@@ -18,7 +18,7 @@ export const useInboxStore = defineStore('nudg-inbox', () => {
   const started = ref(false)
   let realtimeBound = false
 
-  const inboxResource = createResource<Inbox>({
+  const inboxResource = createResource<Inbox | null>({
     url: 'nudg.api.get_inbox',
     cache: 'nudg:inbox',
     initialData: null,

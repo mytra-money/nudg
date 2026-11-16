@@ -55,6 +55,7 @@ export function useDesk() {
     setAccount,
     refresh,
     openProfile: threadStore.openProfile,
+    setThreadNotes: threadStore.setThreadNotes,
     sendText: threadStore.sendText,
     sendMedia: threadStore.sendMedia,
     sendTemplate: threadStore.sendTemplate,
