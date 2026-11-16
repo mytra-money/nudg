@@ -11,7 +11,7 @@
    "url": "/nudg"
   }
  ],
- "mount_on": "frappe",
+ "mount_on": "",
  "name": "nudg",
  "standard": 1,
  "user": ""
