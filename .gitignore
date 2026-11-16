@@ -11,6 +11,9 @@ dist/
 .vite/
 .docs/
 
+# Built SPA assets (generate with yarn build / bench build)
+nudg/public/frontend/
+
 # Local beta seed data
 /seed_saas_data.py
 /nudg/seed_saas_data.py

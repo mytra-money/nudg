@@ -2,6 +2,7 @@ from urllib.parse import quote
 
 import frappe
 from frappe import _
+from frappe.utils import cint
 
 from nudg.integrations.whatsapp import adapter
 
@@ -21,17 +22,36 @@ def get_context(context):
 			frappe.PermissionError,
 		)
 
+	context.boot = get_boot()
+
+
+def get_boot():
 	user_roles = frappe.get_roles(frappe.session.user)
-	is_manager = "WhatsApp Manager" in user_roles or "System Manager" in user_roles or frappe.session.user == "Administrator"
+	is_manager = (
+		"WhatsApp Manager" in user_roles
+		or "System Manager" in user_roles
+		or frappe.session.user == "Administrator"
+	)
+	installed = bool(frappe.db.exists("DocType", "WA Message"))
 
 	# ``whatsapp_installed`` stays "the WA Message DocType exists", which the
 	# desk shell already reads. ``integration`` is the Phase 1 status contract.
-	context.boot = {
+	return {
 		"csrf_token": frappe.sessions.get_csrf_token(),
 		"user": frappe.session.user,
 		"roles": user_roles,
 		"is_manager": is_manager,
 		"sitename": frappe.local.site,
+		"site_name": frappe.local.site,
+		"socketio_port": cint(frappe.conf.socketio_port),
 		"whatsapp_installed": installed,
 		"integration": adapter.get_integration_status(),
 	}
+
+
+@frappe.whitelist(methods=["POST"], allow_guest=True)
+def get_context_for_dev():
+	"""Boot payload for Vite dev server (CRM/LMS pattern)."""
+	if not frappe.conf.developer_mode:
+		frappe.throw(_("This method is only meant for developer mode"))
+	return get_boot()

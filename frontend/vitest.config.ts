@@ -10,6 +10,7 @@ export default defineConfig(async (env) => {
     test: {
       environment: 'happy-dom',
       include: ['src/**/*.test.ts'],
+      setupFiles: ['src/tests/setup.ts'],
       testTimeout: 15000,
       server: {
         deps: {

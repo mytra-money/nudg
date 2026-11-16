@@ -8,9 +8,12 @@ interface Window {
   csrf_token?: string
   user?: string
   sitename?: string
+  site_name?: string
+  socketio_port?: number
   is_manager?: boolean
   roles?: string[]
   whatsapp_installed?: boolean
+  __?: (message: string, replace?: unknown[], context?: string | null) => string
   integration?: {
     whatsapp_installed: boolean
     doctypes_ready: boolean
