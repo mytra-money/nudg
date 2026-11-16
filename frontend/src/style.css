@@ -6,7 +6,6 @@
 *,
 *::before,
 *::after {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   box-sizing: border-box;
 }
 
@@ -237,7 +236,164 @@ li[data-sonner-toast] {
 }
 
 /* Send-template studio uses most of the screen so the preview is readable. */
-.dialog-overlay[data-dialog='Send WhatsApp Template'] + .dialog-scroll-container [data-slot='content'] {
-  width: 80vw !important;
-  max-width: 80vw !important;
+@media (min-width: 768px) {
+  .dialog-overlay[data-dialog='Send WhatsApp Template'] + .dialog-scroll-container [data-slot='content'] {
+    width: min(80vw, 72rem) !important;
+    max-width: min(80vw, 72rem) !important;
+  }
+}
+
+/* ==========================================================================
+   Dialogs stay inside the viewport. Header and actions stay put; the body
+   scrolls. This matches a Frappe modal: no page behind the dialog scrolls,
+   and nothing draws past the screen edge.
+   ========================================================================== */
+.dialog-scroll-container {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden !important;
+  padding: 0.75rem;
+  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+}
+
+.dialog-scroll-container > div {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 0 !important;
+  max-height: 100%;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.dialog-content,
+[data-reka-dialog-content] {
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  max-width: min(32rem, calc(100vw - 1.5rem)) !important;
+  max-height: calc(100dvh - 1.5rem - env(safe-area-inset-bottom)) !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  text-align: start !important;
+}
+
+.dialog-content.max-w-xl,
+[data-reka-dialog-content].max-w-xl { max-width: min(36rem, calc(100vw - 1.5rem)) !important; }
+.dialog-content.max-w-2xl,
+[data-reka-dialog-content].max-w-2xl { max-width: min(42rem, calc(100vw - 1.5rem)) !important; }
+.dialog-content.max-w-3xl,
+[data-reka-dialog-content].max-w-3xl { max-width: min(48rem, calc(100vw - 1.5rem)) !important; }
+.dialog-content.max-w-4xl,
+[data-reka-dialog-content].max-w-4xl { max-width: min(56rem, calc(100vw - 1.5rem)) !important; }
+.dialog-content.max-w-5xl,
+[data-reka-dialog-content].max-w-5xl { max-width: min(64rem, calc(100vw - 1.5rem)) !important; }
+.dialog-content.max-w-6xl,
+[data-reka-dialog-content].max-w-6xl { max-width: min(72rem, calc(100vw - 1.5rem)) !important; }
+.dialog-content.max-w-7xl,
+[data-reka-dialog-content].max-w-7xl { max-width: min(80rem, calc(100vw - 1.5rem)) !important; }
+
+.dialog-content > div:first-child {
+  min-height: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.dialog-content > div:first-child .mb-6 {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface-elevation-1, #fff);
+}
+
+.dialog-content [data-slot='actions'] {
+  flex: none;
+  border-top: 1px solid var(--outline-gray-2, #e5e7eb);
+  background: var(--surface-elevation-1, #fff);
+}
+
+.dialog-content [data-slot='actions'] .flex {
+  flex-wrap: wrap;
+  row-gap: 0.5rem;
+}
+
+.dialog-content h3 {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 639px) {
+  .dialog-content h3 {
+    font-size: 1.125rem !important;
+    line-height: 1.35 !important;
+  }
+
+  .dialog-content .grid-cols-2,
+  .dialog-content .grid-cols-3,
+  .dialog-content .grid-cols-4 {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .dialog-content [data-slot='actions'] button {
+    flex: 1 1 auto;
+  }
+}
+
+/* ==========================================================================
+   Frappe card surface. Every bordered panel uses the desk card radius,
+   hairline, and shadow, and cannot force its grid cell wider than the screen.
+   ========================================================================== */
+main .rounded-lg.border,
+main .rounded-xl.border,
+.nudg-card {
+  border-radius: 12px;
+  border-color: var(--outline-gray-2, #e2e2e2);
+  box-shadow: var(--shadow-sm);
+  min-width: 0;
+  max-width: 100%;
+}
+
+main .grid > *,
+main .flex > * {
+  min-width: 0;
+}
+
+/* Master-detail panes stack and stay reachable on a phone. */
+@media (max-width: 767px) {
+  .nudg-split {
+    display: flex !important;
+    flex-direction: column;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+  }
+
+  .nudg-split > aside,
+  .nudg-split > section,
+  .nudg-split > div {
+    flex: none;
+    width: 100%;
+    min-height: 16rem;
+    max-height: 70dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  main header h1 {
+    font-size: 1.125rem;
+    line-height: 1.3;
+  }
+
+  main header .flex.gap-2,
+  main .rounded-lg.bg-surface-gray-2 {
+    flex-wrap: wrap;
+  }
+
+  main .w-32,
+  main .w-36 {
+    width: 100%;
+  }
 }

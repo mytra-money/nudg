@@ -280,7 +280,7 @@ function clearFilters() {
           WhatsApp Message Templates
         </h1>
       </div>
-      <div v-if="isManager" class="flex gap-2">
+      <div v-if="isManager" class="flex flex-wrap gap-2">
         <Button
           variant="subtle"
           size="sm"
@@ -362,7 +362,7 @@ function clearFilters() {
 
         <div class="flex flex-wrap items-center gap-2">
           <!-- Category Tabs -->
-          <div class="flex items-center gap-1 rounded-lg bg-surface-gray-2 p-0.5 text-xs">
+          <div class="flex flex-wrap items-center gap-1 rounded-lg bg-surface-gray-2 p-0.5 text-xs">
             <button
               type="button"
               class="rounded-md px-2.5 py-1 font-medium transition-colors"
@@ -409,7 +409,7 @@ function clearFilters() {
     </section>
 
     <!-- Master-Detail Studio Grid -->
-    <div class="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[minmax(0,1fr)_480px] overflow-hidden">
+    <div class="nudg-split grid min-h-0 flex-1 grid-cols-1 overflow-hidden md:grid-cols-[minmax(0,1fr)_minmax(0,480px)]">
       <!-- Left Column: Template Library List -->
       <aside class="flex flex-col border-r border-outline-gray-2 bg-white min-h-0 overflow-y-auto divide-y divide-outline-gray-1">
         <div v-if="visible.length === 0" class="p-8 text-center text-xs text-ink-gray-5">

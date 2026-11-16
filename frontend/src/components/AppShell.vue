@@ -21,6 +21,7 @@ import ManualConnectDialog from '@/components/ManualConnectDialog.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import { isManager, useDesk } from '@/stores/desk'
 import { shellNav } from '@/router'
+import logoUrl from '@/assets/logo.png'
 
 const desk = useDesk()
 const route = useRoute()
@@ -108,6 +109,28 @@ function isActive(path: string) {
 
 const showAccountModal = ref(false)
 const showCredentialsModal = ref(false)
+const moreOpen = ref(false)
+
+const mobilePrimaryTo = ['/', '/conversations', '/template-studio', '/analytics']
+const mobileShort: Record<string, string> = {
+  '/': 'Home',
+  '/conversations': 'Inbox',
+  '/template-studio': 'Templates',
+  '/analytics': 'Insights',
+}
+const mobilePrimary = computed(() =>
+  mobilePrimaryTo
+    .map((to) => visibleNav.value.find((link) => link.to === to))
+    .filter((link): link is (typeof visibleNav.value)[number] => Boolean(link)),
+)
+const mobileMore = computed(() => visibleNav.value.filter((link) => !mobilePrimaryTo.includes(link.to)))
+
+watch(
+  () => route.path,
+  () => {
+    moreOpen.value = false
+  },
+)
 
 async function onEmbeddedConnected() {
   await loadAccounts()
@@ -133,25 +156,6 @@ onUnmounted(() => window.clearInterval(timer))
 
 <template>
   <div class="flex h-dvh w-screen flex-col overflow-hidden bg-surface-gray-1 text-ink-gray-9 md:flex-row">
-    <nav
-      class="flex shrink-0 gap-1 overflow-x-auto border-b border-outline-gray-2 bg-white px-2 py-2 md:hidden"
-      aria-label="Nudg"
-    >
-      <RouterLink
-        v-for="link in visibleNav"
-        :key="link.to"
-        :to="link.to"
-        class="shrink-0 rounded-full px-3 py-1.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#128C7E]"
-        :class="isActive(link.to) ? 'bg-[#075E54] text-white' : 'text-ink-gray-7 hover:bg-surface-gray-2'"
-        :aria-current="isActive(link.to) ? 'page' : undefined"
-      >
-        {{ link.label }}
-      </RouterLink>
-    </nav>
-    <div class="border-b border-outline-gray-2 bg-white px-3 py-2 md:hidden">
-      <AccountSelect />
-    </div>
-
     <div class="relative z-20 hidden h-full shrink-0 md:flex">
       <Sidebar
         v-model:collapsed="sidebarCollapsed"
@@ -161,7 +165,7 @@ onUnmounted(() => window.clearInterval(timer))
       >
         <SidebarHeader title="Nudg" :subtitle="subtitle">
           <template #prefix>
-            <span class="grid size-full place-items-center rounded bg-[#075E54] text-[10px] font-bold tracking-wide text-white shadow-sm">Nudg</span>
+            <img :src="logoUrl" alt="" class="size-full rounded object-cover" />
           </template>
         </SidebarHeader>
         <AccountSelect />
@@ -226,7 +230,10 @@ onUnmounted(() => window.clearInterval(timer))
           </nav>
           <h1 class="truncate text-base font-semibold text-ink-gray-9">{{ title }}</h1>
         </div>
-        <div class="ml-auto flex shrink-0 items-center gap-2">
+        <div class="ml-auto flex min-w-0 items-center gap-2">
+          <div class="w-28 min-w-0 overflow-hidden sm:w-40 md:hidden">
+            <AccountSelect inline />
+          </div>
           <div
             v-if="activeAccount"
             class="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-800"
@@ -253,7 +260,7 @@ onUnmounted(() => window.clearInterval(timer))
               class="inline-flex h-7 max-w-[11rem] items-center gap-2 rounded-md px-2 text-sm font-medium text-ink-gray-8 hover:bg-surface-gray-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#128C7E] sm:max-w-xs"
             >
               <span class="lucide-user size-4 shrink-0" aria-hidden="true" />
-              <span class="truncate">{{ userLabel }}</span>
+              <span class="hidden truncate sm:inline">{{ userLabel }}</span>
             </button>
           </Dropdown>
         </div>
@@ -261,13 +268,13 @@ onUnmounted(() => window.clearInterval(timer))
 
       <div
         v-if="route.meta.desk && desk.mode.value === 'sample'"
-        class="flex items-center justify-between border-b border-amber-200 bg-amber-50/80 px-4 py-1.5 text-xs text-amber-800"
+        class="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 bg-amber-50/80 px-4 py-1.5 text-xs text-amber-800"
       >
         <span><strong>Preview Mode</strong> · Sample data shown. Connect WhatsApp in Settings to go live.</span>
       </div>
       <div
         v-else-if="sessionLive && desk.inbox.value && (!desk.inbox.value.accounts || desk.inbox.value.accounts.length === 0)"
-        class="border-b border-amber-300 bg-amber-50 px-4 py-2 flex items-center justify-between text-xs text-amber-900"
+        class="flex flex-wrap items-center justify-between gap-2 border-b border-amber-300 bg-amber-50 px-4 py-2 text-xs text-amber-900"
       >
         <div class="flex items-center gap-2">
           <span class="lucide-alert-circle size-4 text-amber-600 shrink-0" />
@@ -291,6 +298,58 @@ onUnmounted(() => window.clearInterval(timer))
           <component :is="Component" v-else />
         </RouterView>
       </main>
+
+      <div class="relative z-30 shrink-0 md:hidden">
+        <button
+          v-if="moreOpen"
+          type="button"
+          class="fixed inset-0 z-20 bg-black/30"
+          aria-label="Close menu"
+          @click="moreOpen = false"
+        />
+        <div
+          v-if="moreOpen"
+          class="absolute bottom-full left-0 right-0 z-30 max-h-[50dvh] overflow-y-auto border-t border-outline-gray-2 bg-white shadow-lg"
+        >
+          <RouterLink
+            v-for="link in mobileMore"
+            :key="link.to"
+            :to="link.to"
+            class="flex min-h-11 items-center gap-3 border-b border-outline-gray-1 px-4 py-3 text-sm font-medium text-ink-gray-8"
+            :class="isActive(link.to) ? 'bg-surface-gray-2 text-ink-gray-9' : ''"
+            :aria-current="isActive(link.to) ? 'page' : undefined"
+          >
+            <span :class="[link.icon, 'size-4 shrink-0 text-ink-gray-6']" aria-hidden="true" />
+            <span class="truncate">{{ link.label }}</span>
+          </RouterLink>
+        </div>
+        <nav
+          class="grid grid-cols-5 border-t border-outline-gray-2 bg-white pb-[env(safe-area-inset-bottom)]"
+          aria-label="Nudg"
+        >
+          <RouterLink
+            v-for="link in mobilePrimary"
+            :key="link.to"
+            :to="link.to"
+            class="flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-[10px] font-medium leading-none"
+            :class="isActive(link.to) ? 'text-[#075E54]' : 'text-ink-gray-6'"
+            :aria-current="isActive(link.to) ? 'page' : undefined"
+          >
+            <span :class="[link.icon, 'size-5 shrink-0']" aria-hidden="true" />
+            <span class="w-full truncate text-center">{{ mobileShort[link.to] || link.label }}</span>
+          </RouterLink>
+          <button
+            type="button"
+            class="flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-[10px] font-medium leading-none"
+            :class="moreOpen || mobileMore.some((link) => isActive(link.to)) ? 'text-[#075E54]' : 'text-ink-gray-6'"
+            :aria-expanded="moreOpen"
+            @click="moreOpen = !moreOpen"
+          >
+            <span class="lucide-ellipsis size-5 shrink-0" aria-hidden="true" />
+            <span class="w-full truncate text-center">More</span>
+          </button>
+        </nav>
+      </div>
     </div>
 
     <!-- Global Account Onboarding Dialog (No Desk Routing Required) -->

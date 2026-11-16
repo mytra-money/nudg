@@ -1,193 +1,146 @@
 <div align="center" markdown="1">
 
-<img src="docs/images/logo.svg" alt="Nudg logo" width="84" />
+<img src="docs/images/logo.svg" alt="Nudg logo" width="80" />
 
 # Nudg
 
-**Nudg – Every conversation moves business forward.**
+**One WhatsApp inbox for the team — reply, broadcast, and share a product.**
 
-[![Frappe v16+ Compatible](https://img.shields.io/badge/Frappe-v16%2B-075E54?style=flat-square&logo=frappe)](https://frappeframework.com/)
-[![Tests Passing](https://img.shields.io/badge/Tests-198%20backend%20%7C%2042%20frontend%20passed-25D366?style=flat-square&logo=githubactions)](nudg/tests/)
-[![Vue 3](https://img.shields.io/badge/Frontend-Vue%203%20%2B%20Tailwind%20%2B%20Frappe%20UI-42B883?style=flat-square&logo=vuedotjs)](frontend/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](license.txt)
 
-[Try it](https://nudg.mytra.money) · [Getting started](#getting-started) · [The daily flow](#the-daily-flow) · [Install](#install-for-admins)
+[Try it](https://nudg.mytra.money) · [Documentation](docs/README.md) · [Getting started](#getting-started)
 
 </div>
 
-![Nudg Banner](docs/images/banner.svg)
 
-Nudg helps sales, support, and marketing teams manage customer conversations over WhatsApp in one shared workspace — with live agent presence, canned replies, standard UTM campaign broadcasts, and catalog commerce.
+Nudg helps sales and support teams handle customer WhatsApp chats in one shared inbox — with quick replies, approved templates, and campaigns.
 
-It is built for companies that want an enterprise customer engagement desk with **zero third-party SaaS markups**, running either as a **standalone SaaS platform (`nudg.mytra.money`)** or **directly inside your own Frappe Framework instance**.
+It is built for companies that already talk to customers on WhatsApp and want the whole team on the same thread, instead of a phone only one person can open.
 
 ---
 
 ## Getting started
 
-1. **Open Nudg**: Navigate to [nudg.mytra.money](https://nudg.mytra.money) (or `http://your-site.localhost:8000/nudg`).
-2. **Connect your WhatsApp Account**: Go to **Integrations** to connect your Meta WhatsApp number in 1 click using **Embedded Signup**, or manually enter your Meta Phone Number ID, WhatsApp Business Account ID (WABA ID), and Permanent Access Token.
-3. **Invite your team**: Assign team members the **WhatsApp User** role for support/sales agents, or **WhatsApp Manager** for team leads. Standard User Permissions isolate accounts automatically.
-4. **Configure Quick Replies**: Add canned responses with `/` shortcut triggers (e.g. `/greet`, `/pricing`, `/refund`) to answer routine queries in seconds.
-5. **Start messaging**: Inbound messages arrive in real time with audio chimes, unread tab badges, and round-robin agent routing.
+1. Open [nudg.mytra.money](https://nudg.mytra.money) and sign in. You can install Nudg on your own bench as well.
+2. Go to **Integrations** and connect the WhatsApp number. Use **Login with Facebook**, or enter the phone number ID, WhatsApp Business Account ID, and access token.
+3. Assign **WhatsApp User** to agents and **WhatsApp Manager** to the person who connects the number and runs campaigns.
+4. Add **quick replies** (for example `/greet`) so common answers are one shortcut away.
+5. New messages show up in **Conversations**. Reply in the open window, or send an approved template after it closes.
 
 ---
 
 ## The daily flow
 
 ```
-Inbound Message  →  Round-Robin Routing  →  Shared Team Inbox  →  Dynamic Document Context  →  Resolution
+Inbound message  →  Shared inbox  →  Reply or template  →  Campaign or catalog
 ```
 
-### Shared Team Inbox (`/conversations`)
+### Conversations
 
-Your daily mission control for customer conversations:
+The shared inbox. Filter by needs reply, the open 24-hour window, template only, and closed.
 
-- **Lifecycle Filter Tabs**: Filter instantly across `Needs Reply`, `Active (24h Window)`, `Template Only`, and `Closed / Resolved`.
-- **Live Collision & Typing Presence**: Visual indicators warn agents when a teammate is actively viewing or typing on a conversation, preventing duplicate replies.
-- **Audio Chime & Tab Badges**: Audible notification chime (`new-message.mp3`) and dynamic unread counter in the browser tab title alert agents to new inbound messages.
-- **Private Internal Notes**: Add internal collaboration notes on customer threads that are visible only to teammates, never to the customer.
-- **Quick Replies (`/`)**: Press `/` in the message composer to search and insert pre-approved canned responses instantly.
-- **Dynamic Frappe Document Linking**: Connect any conversation to any Frappe record (User, Issue, Customer, Lead, Quotation) with deep links into Frappe Desk.
+You can:
 
-### Broadcast Campaigns (`/marketing`)
+- Reply while the customer’s 24-hour window is open
+- Send an approved template once that window has closed
+- Leave an internal note the customer does not see
+- Press `/` to insert a quick reply
+- Link the thread to a Frappe document, such as a Customer, Lead, or Issue
 
-Reach your audience at scale using standard Frappe models:
+### Template Studio
 
-- **Direct `UTM Campaign` Standard Integration**: Native Frappe marketing workflow without duplicate custom campaign doctypes.
-- **Meta Approved Templates**: Seamlessly pick approved templates from `WA Template` with dynamic parameter mapping (`{{1}}`, `{{2}}`).
-- **Real-Time Funnel Telemetry**: Track Sent, Delivered, Read, and Failed counts in real time.
-- **Automated Opt-Out Suppression**: Automatically skips recipients who sent `STOP` or revoked marketing consent.
-- **Scheduled Background Dispatch**: Background workers process scheduled campaign dispatch queues via Frappe cron.
+Templates are created and approved in the official WhatsApp app. Template Studio is where you pick one, fill its parameters, and send it.
 
-### Commerce & Catalogs (`/integrations/catalogs`)
+### Marketing
 
-Turn conversations into sales with native WhatsApp Commerce:
+Send an approved template to a list through **UTM Campaign**. Sent, delivered, read, and failed update as Meta reports them. Recipients who sent `STOP` are skipped.
 
-- **Single-Product Messages (SPM)**: Share featured products with image, title, price, and a direct purchase button inside WhatsApp.
-- **Multi-Product Messages (MPM)**: Send categorized product catalogs allowing customers to browse inventory without leaving the chat.
-- **Inbound Cart Webhook**: Listens for Meta's `order` webhook payload and renders structured order summaries in the chat thread.
-- **Optional ERPNext Sync**: 1-click import from ERPNext `Item` when available; 100% standalone catalog management in pure SaaS mode.
+### Catalogs
 
-### Automations & Smart Routing (`/automation`)
+Send one product, or a list of products, inside the chat. Add items in Nudg, or import them from ERPNext when that app is installed.
 
-Put routine operations on autopilot:
+### Automation
 
-- **Keyword Triggers**: Automatically reply or re-route when incoming messages match keywords (`Exact`, `Contains`, `Starts With`, or `Regex`).
-- **ReDoS Protection**: Advanced regex execution guard prevents catastrophic backtracking.
-- **Workload Round-Robin**: Intelligently distributes inbound customer inquiries across active agents with workload balancing.
-- **Consent Compliance**: Automated handling of opt-out (`STOP`, `UNSUBSCRIBE`, `CANCEL`) and opt-in (`START`, `YES`).
+A keyword can send a reply or move the conversation. New conversations can be assigned round-robin across the agents who are on.
 
 ---
 
-## ⚔️ Nudg vs Other Commercial Solutions
+## Settings
 
-| Feature | Other Commercial Solutions | Nudg (Ours) |
-| :--- | :---: | :---: |
-| **Shared Team Inbox** | Limited / Per-Agent Add-on | ✅ **Agent collision detection, live presence, audio alerts, and round-robin routing** |
-| **Broadcast Campaigns** | Per-Message Surcharge | ✅ **Direct integration with standard `UTM Campaign` with dynamic parameters (`{{1}}`, `{{2}}`)** |
-| **Dynamic Document Linking**| ❌ No Frappe Integration | ✅ **Link any Frappe DocType dynamically (Customer, Lead, Issue, User)** |
-| **WhatsApp Catalog Commerce**| Partial | ✅ **Single-Product (SPM) & Multi-Product (MPM) messages + Inbound cart webhook** |
-| **ERPNext Catalog Sync** | ❌ No ERPNext Support | ✅ **Optional 1-click import from ERPNext `Item` (with full manual fallback)** |
-| **Keyword Automations** | Basic | ✅ **Exact, Contains, Starts With, and ReDoS-protected Regex triggers** |
-| **Opt-Out Compliance** | Partial | ✅ **Automated `STOP` / `START` consent management & broadcast suppression** |
-| **Audio & Tab Alerts** | ❌ No / Basic Chime | ✅ **Audible incoming chime (`new-message.mp3`) + dynamic unread tab badge** |
-| **Role-Based UI Isolation** | Limited | ✅ **Strict separation: `WhatsApp Manager` (Admin) vs `WhatsApp User` (Agent)** |
-| **Open Source & Extensible** | ❌ Proprietary (SaaS Lock-in) | ✅ **100% Open-Source (MIT) on standard Frappe Framework** |
+Open **Settings** from the menu.
+
+| Section | What you set |
+|---------|----------------|
+| **Quick Replies** | Canned replies and the `/` shortcut for each |
+| **Routing & Assignment** | How new conversations are handed to agents |
+| **Team & Agents** | Who has WhatsApp User or WhatsApp Manager |
+| **WABA Profile** | The WhatsApp business profile for the connected number |
+| **Integrations** | The number, catalogs, ERPNext, and logs |
+
+Day-to-day replies happen in **Conversations**. Marketing, Automation, and Integrations are for WhatsApp Manager.
+
+---
+
+## ERPNext integration
+
+ERPNext is **optional**. The inbox, templates, and campaigns work without it.
+
+When ERPNext is on the same site, Nudg can import **Item** records into a catalog and link a conversation to documents such as Lead, Quotation, and Issue. Nudg does not require ERPNext to run.
 
 ---
 
 ## Roles (who can do what)
 
 | Role | Typical use |
-| :--- | :--- |
-| **WhatsApp User** | Day-to-day: shared inbox, message replies, quick replies (`/`), contact tagging, internal notes, audio chimes |
-| **WhatsApp Manager** | Team setup, round-robin rules, UTM broadcasts, automations, WABA credentials |
-| **System Manager** | Full access including Desk and site maintenance (for administrators) |
+|------|-------------|
+| **WhatsApp User** | Day-to-day: conversations, replies, quick replies, internal notes |
+| **WhatsApp Manager** | Connect a number, campaigns, automations, catalogs |
+| **System Manager** | Full access, including Desk and the WhatsApp account token |
 
-Day-to-day agent work happens in the Nudg app (`/nudg`), with administrative views (`/marketing`, `/automation`, `/integrations`) automatically hidden from regular agents.
-
----
-
-## ERPNext integration (optional)
-
-ERPNext is **completely optional**. Nudg has **zero hard dependencies on ERPNext or Frappe CRM**:
-
-- **Pure SaaS Mode (`nudg.mytra.money`)**: Runs on vanilla Frappe Framework v16+. Catalog items, quick replies, and UTM campaigns are managed completely independently.
-- **Self-Hosted Mode (with ERPNext)**: If ERPNext is detected on your bench, Nudg automatically enables:
-  - 1-click **"Import from ERPNext Items"** on WhatsApp Catalog.
-  - Quick document linking to Leads, Quotations, Sales Orders, and Issues.
+Day-to-day work happens in the Nudg app (`/nudg`), not in Desk.
 
 ---
 
 ## Install (for admins)
 
-### Prerequisites
-- **Frappe Framework**: >= v16.0 (Strictly Frappe v16+, no v15 support)
-- **Node.js**: >= 20 (recommended: v24)
-- **Python**: >= 3.10
-- **Upstream App**: `whatsapp` ([frappe/whatsapp](https://github.com/frappe/whatsapp))
-
-### Bench Installation
+On a Frappe bench (Frappe 16 or newer; ERPNext optional):
 
 ```bash
 cd frappe-bench
-
-# 1. Fetch upstream whatsapp and nudg
 bench get-app https://github.com/frappe/whatsapp
-bench get-app https://github.com/nagaraj-62/nudg
-
-# 2. Install apps on your site
+bench get-app https://github.com/mytra-money/nudg
 bench --site <site> install-app whatsapp
 bench --site <site> install-app nudg
-
-# 3. Run database migrations
 bench --site <site> migrate
 ```
 
-### Build Frontend Assets
+The official `whatsapp` app is what receives and sends messages. Nudg still installs without it. The page opens, and the inbox stays empty until a number is connected.
+
+Build the app UI after install (or after frontend changes):
 
 ```bash
-cd apps/nudg/frontend
-yarn install
-yarn build:frappe
+cd apps/nudg/frontend && npm install && npm run build:frappe
 bench --site <site> clear-cache
 ```
 
-### Seed SaaS Demo Data (Optional)
+`bench build --app nudg` from the bench root does the same build.
 
-```bash
-bench --site <site> execute nudg.seed_saas_data.seed_all
-```
+Then open `http://<site>:8000/nudg`.
 
----
-
-## Testing & Verification
-
-Nudg includes a hermetic mock testing harness simulating Meta Graph API v18.0+:
-
-```bash
-# Run backend unit and contract tests (198 passing)
-cd /path/to/frappe-bench
-PYTHONPATH=apps/nudg ./env/bin/python -m unittest discover -s apps/nudg/nudg/tests -p "test_*.py"
-
-# Run frontend Vitest specs (42 passing)
-cd apps/nudg/frontend
-yarn test
-```
+See [Prerequisites](docs/getting-started/PREREQUISITES.md), [Installation](docs/getting-started/INSTALLATION.md), and [Configuration](docs/getting-started/CONFIGURATION.md).
 
 ---
 
 ## About Mytra
 
-Nudg is developed as an open-source customer communication platform:
-- Cloud Platform: [nudg.mytra.money](https://nudg.mytra.money)
-- Powered by: [Mytra](https://mytra.money)
+Nudg is built by [Mytra](https://mytra.money) for customer conversations on WhatsApp.
+
+- Cloud: [nudg.mytra.money](https://nudg.mytra.money)
 
 ---
 
 <div align="center">
 
-**Turn WhatsApp into your team's most effective customer engagement channel.**
+Keep the team’s WhatsApp conversations in one place.
 
 </div>

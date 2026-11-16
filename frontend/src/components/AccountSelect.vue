@@ -3,6 +3,7 @@ import { computed, inject } from 'vue'
 import { Select, sidebarCollapsedKey } from 'frappe-ui'
 import { useDesk } from '@/stores/desk'
 
+const props = defineProps<{ inline?: boolean }>()
 const desk = useDesk()
 const collapsed = inject(sidebarCollapsedKey, computed(() => false))
 
@@ -21,7 +22,7 @@ function onUpdate(value: string | number | null | undefined) {
 </script>
 
 <template>
-  <div v-show="!collapsed" class="px-2 pb-2">
+  <div v-show="props.inline || !collapsed" :class="props.inline ? 'min-w-0' : 'px-2 pb-2'">
     <Select :model-value="desk.account.value" :options="options" @update:model-value="onUpdate" />
   </div>
 </template>

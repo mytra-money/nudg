@@ -497,7 +497,7 @@ onMounted(() => {
     </EmptyState>
 
     <!-- Master-Detail Workspace Grid -->
-    <div v-else class="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[minmax(0,380px)_1fr] overflow-hidden">
+    <div v-else class="nudg-split grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[minmax(0,380px)_1fr] overflow-hidden">
       <!-- Left Column: Campaign List -->
       <aside class="flex flex-col border-r border-outline-gray-2 bg-white min-h-0 overflow-hidden">
         <!-- Search & Filter Tabs -->
@@ -518,7 +518,7 @@ onMounted(() => {
             </button>
           </div>
 
-          <div class="flex items-center gap-1 overflow-x-auto text-xs pb-0.5">
+          <div class="flex flex-wrap items-center gap-1 text-xs pb-0.5">
             <button
               type="button"
               class="rounded-full px-2.5 py-0.5 font-medium transition-colors"

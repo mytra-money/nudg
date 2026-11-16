@@ -734,7 +734,7 @@ onMounted(() => {
       />
 
       <!-- Master-Detail Layout -->
-      <div v-else class="mt-8 grid min-h-[580px] flex-1 gap-6 lg:grid-cols-[340px_minmax(0,1fr)]">
+      <div v-else class="nudg-split mt-8 grid min-h-0 flex-1 gap-6 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
         <!-- Master Column: Catalog Collections List -->
         <div class="flex flex-col rounded-xl border border-outline-gray-2 bg-white shadow-2xs">
           <div class="border-b border-outline-gray-2 p-4">

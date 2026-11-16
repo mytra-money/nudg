@@ -481,7 +481,7 @@ onMounted(() => {
 
         <div class="flex flex-wrap items-center gap-2">
           <!-- Segment Tabs -->
-          <div class="flex items-center gap-1 rounded-lg bg-surface-gray-2 p-0.5 text-xs">
+          <div class="flex flex-wrap items-center gap-1 rounded-lg bg-surface-gray-2 p-0.5 text-xs">
             <button
               type="button"
               class="rounded-md px-2.5 py-1 font-medium transition-colors"
@@ -532,7 +532,7 @@ onMounted(() => {
     <ErrorState v-else-if="error" :message="error" allow-retry @retry="load" />
 
     <!-- Two-Column Master-Detail Automation Canvas -->
-    <div v-else class="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-outline-gray-2 overflow-hidden">
+    <div v-else class="nudg-split grid min-h-0 flex-1 grid-cols-1 divide-y divide-outline-gray-2 overflow-hidden md:grid-cols-2 md:divide-x md:divide-y-0">
       <!-- Left Column: Automation Rules -->
       <section class="flex flex-col min-h-0 bg-white overflow-hidden" aria-labelledby="rules-heading">
         <div class="flex items-center justify-between border-b border-outline-gray-1 px-4 py-3 bg-surface-gray-1/40">

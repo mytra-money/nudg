@@ -355,7 +355,7 @@ async function clearAssignment() {
   <div class="flex h-full min-w-0 overflow-hidden bg-surface-gray-1">
     <!-- Left Conversation Sidebar -->
     <aside
-      class="flex w-64 shrink-0 min-h-0 min-w-0 flex-col border-r border-outline-gray-2 bg-white"
+      class="flex w-full shrink-0 min-h-0 min-w-0 flex-col border-r border-outline-gray-2 bg-white md:w-64"
       :class="desk.profile.value ? 'hidden md:flex' : 'flex'"
     >
       <!-- Search & Filters Container -->
@@ -640,8 +640,8 @@ async function clearAssignment() {
       <!-- Active Thread View -->
       <template v-else-if="current">
         <!-- Thread Header -->
-        <header class="flex items-center justify-between gap-3 border-b border-outline-gray-2 bg-white px-4 py-2.5 shadow-xs z-10 shrink-0">
-          <div class="flex items-center gap-3 min-w-0">
+        <header class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-outline-gray-2 bg-white px-3 py-2 shadow-xs z-10 shrink-0 sm:px-4">
+          <div class="flex min-w-0 flex-1 items-center gap-2">
             <!-- Mobile back button -->
             <button
               type="button"
@@ -669,7 +669,7 @@ async function clearAssignment() {
           </div>
 
           <!-- Header Status & Actions -->
-          <div class="flex items-center gap-2 shrink-0">
+          <div class="flex flex-wrap items-center gap-2">
             <!-- 24-Hour Service Window Pill -->
             <div
               v-if="windowState?.status === 'open'"
@@ -916,7 +916,7 @@ async function clearAssignment() {
         </div>
 
         <!-- Two Column Picker & Live Preview -->
-        <div class="grid h-[min(68vh,40rem)] min-h-[24rem] grid-cols-1 gap-4 md:grid-cols-2">
+        <div class="grid max-h-[50vh] min-h-0 grid-cols-1 gap-4 md:h-[min(68vh,40rem)] md:max-h-none md:min-h-[24rem] md:grid-cols-2">
           <!-- Template Selection List -->
           <div class="min-h-0 space-y-2 overflow-y-auto pr-1">
             <p v-if="filteredTemplates.length === 0" class="py-8 text-center text-xs text-ink-gray-5">
@@ -969,7 +969,7 @@ async function clearAssignment() {
       </div>
 
       <template #actions>
-        <div class="flex items-center justify-between w-full">
+        <div class="flex w-full flex-wrap items-center justify-between gap-2">
           <span v-if="picked" class="text-xs text-ink-gray-6 truncate max-w-xs">
             Selected: <strong>{{ picked.template_label || picked.name }}</strong>
           </span>
