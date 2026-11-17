@@ -10,6 +10,7 @@ that lives here. Chat and campaigns never wait for the ERPNext site.
 from __future__ import annotations
 
 import json
+import secrets
 
 import frappe
 from frappe import _
@@ -46,7 +47,7 @@ def connect_site(
 	if not whatsapp_account or not frappe.db.exists("WA Account", whatsapp_account):
 		frappe.throw(_("Choose a WhatsApp account that is already connected in Nudge."))
 	try:
-		canonical = validate_site_url(site_url, allow_http=_allow_http())
+		canonical = validate_site_url(site_url, allow_http=_allow_http(), allow_loopback=_allow_http())
 	except SiteURLError as exc:
 		frappe.throw(str(exc))
 	client = _client(canonical, api_key, api_secret)
@@ -55,27 +56,33 @@ def connect_site(
 	except (ERPNextClientError, SiteURLError) as exc:
 		frappe.throw(_("Could not sign in to that ERPNext site: {0}").format(exc))
 
-	if frappe.db.exists("Connected Site", site_name):
-		doc = frappe.get_doc("Connected Site", site_name)
-	else:
-		doc = frappe.new_doc("Connected Site")
-		doc.site_name = site_name
-	doc.site_url = canonical
-	doc.api_key = api_key.strip()
-	doc.api_secret = api_secret
-	doc.whatsapp_account = whatsapp_account
-	doc.status = "Connected"
-	doc.remote_user = remote_user
-	doc.last_error = ""
+	doc = frappe.get_doc("WA Account", whatsapp_account)
+	other = frappe.db.get_value(
+		"WA Account",
+		{"erp_site_name": site_name, "name": ["!=", whatsapp_account]},
+		"name",
+	)
+	if other:
+		frappe.throw(_("Site name {0} is already connected on {1}.").format(site_name, other))
+	if not doc.get("erp_inbound_secret"):
+		doc.erp_inbound_secret = secrets.token_urlsafe(32)
+	doc.erp_site_name = site_name
+	doc.erp_site_url = canonical
+	doc.erp_api_key = api_key.strip()
+	doc.erp_api_secret = api_secret
+	doc.erp_status = "Connected"
+	doc.erp_remote_user = remote_user
+	doc.erp_last_error = ""
 	doc.save(ignore_permissions=True)
-	return _public_site(doc)
+	return _public_site(_site_view(doc))
 
 
 def set_site_enabled(site: str, enabled: bool) -> dict:
-	doc = _require_site(site)
-	doc.status = "Connected" if enabled else "Disabled"
+	view = _require_site(site)
+	doc = frappe.get_doc("WA Account", view.account)
+	doc.erp_status = "Connected" if enabled else "Disabled"
 	doc.save(ignore_permissions=True)
-	return _public_site(doc)
+	return _public_site(_site_view(doc))
 
 
 def accept_event(raw: bytes, site_header: str | None, signature: str | None, bearer: str | None) -> dict:
@@ -86,8 +93,13 @@ def accept_event(raw: bytes, site_header: str | None, signature: str | None, bea
 		frappe.throw(_("The ERPNext payload is too large."), frappe.ValidationError)
 
 	site_name = (site_header or "").strip()
-	site = frappe.get_doc("Connected Site", site_name) if site_name and frappe.db.exists("Connected Site", site_name) else None
-	secret = site.get_password("inbound_secret") if site else _UNKNOWN_SECRET
+	site = _load_site(site_name) if site_name else None
+	secret = _UNKNOWN_SECRET
+	if site:
+		try:
+			secret = site.get_password("inbound_secret") or _UNKNOWN_SECRET
+		except Exception:
+			secret = _UNKNOWN_SECRET
 	authorized = signatures_match(secret, raw, signature) if signature else token_matches(secret, bearer)
 	if site is None or not authorized:
 		frappe.throw(_("The ERPNext event could not be authenticated."), frappe.AuthenticationError)
@@ -153,8 +165,11 @@ def accept_event(raw: bytes, site_header: str | None, signature: str | None, bea
 
 def _writeback_once(site, remote_doctype: str, remote_name: str, template: str, phone: str, message_id: str) -> None:
 	"""One attempt. A down ERPNext site does not hold the WhatsApp message back."""
+	client = _client_for_site(site)
+	if client is None:
+		return
 	try:
-		_client_for_site(site).create_communication(
+		client.create_communication(
 			reference_doctype=remote_doctype,
 			reference_name=remote_name,
 			subject=f"WhatsApp sent for {remote_name}"[:140],
@@ -197,25 +212,99 @@ def _opted_out(recipient: str, account: str) -> bool:
 
 
 def _note(site, message: str) -> None:
-	frappe.db.set_value("Connected Site", site.name, "last_error", message[:300], update_modified=False)
+	frappe.db.set_value("WA Account", site.account, "erp_last_error", message[:300], update_modified=False)
 
 
 def _note_sent(site) -> None:
-	frappe.db.set_value("Connected Site", site.name, "last_error", "", update_modified=False)
+	frappe.db.set_value("WA Account", site.account, "erp_last_error", "", update_modified=False)
 
 
-def _client_for_site(site) -> ERPNextClient:
-	return _client(site.site_url, site.get_password("api_key"), site.get_password("api_secret"))
+def _client_for_site(site) -> ERPNextClient | None:
+	try:
+		return _client(site.site_url, site.get_password("api_key"), site.get_password("api_secret"))
+	except Exception:
+		return None
 
 
 def _client(site_url: str, api_key: str, api_secret: str) -> ERPNextClient:
-	return ERPNextClient(site_url, api_key, api_secret, allow_http=_allow_http())
+	return ERPNextClient(site_url, api_key, api_secret, allow_http=_allow_http(), allow_loopback=_allow_http())
 
 
 def _require_site(name: str):
-	if not name or not frappe.db.exists("Connected Site", name):
+	site = _load_site(name)
+	if site is None:
 		frappe.throw(_("Connect the ERPNext site first."))
-	return frappe.get_doc("Connected Site", name)
+	return site
+
+
+def _load_site(name: str):
+	"""Find the connection stored on a WA Account by account name or site name."""
+	name = (name or "").strip()
+	if not name or not frappe.db.exists("DocType", "WA Account"):
+		return None
+	if not frappe.db.has_column("WA Account", "erp_site_name"):
+		return None
+	account_name = None
+	if frappe.db.exists("WA Account", name):
+		site_name = frappe.db.get_value("WA Account", name, "erp_site_name")
+		if site_name:
+			account_name = name
+	if not account_name:
+		account_name = frappe.db.get_value("WA Account", {"erp_site_name": name}, "name")
+	if not account_name:
+		return None
+	return _site_view(frappe.get_doc("WA Account", account_name))
+
+
+def validate_account_site(doc, method=None):
+	"""Check the Connected Site tab when a WhatsApp account is saved."""
+	url = (doc.get("erp_site_url") or "").strip()
+	site_name = (doc.get("erp_site_name") or "").strip()
+	if not url and not site_name:
+		return
+	if url:
+		try:
+			doc.erp_site_url = validate_site_url(url, allow_http=_allow_http(), allow_loopback=_allow_http())
+		except SiteURLError as exc:
+			frappe.throw(_(str(exc)))
+	if site_name and doc.name:
+		other = frappe.db.get_value(
+			"WA Account",
+			{"erp_site_name": site_name, "name": ["!=", doc.name]},
+			"name",
+		)
+		if other:
+			frappe.throw(_("Site name {0} is already connected on {1}.").format(site_name, other))
+	if not doc.get("erp_inbound_secret"):
+		doc.erp_inbound_secret = secrets.token_urlsafe(32)
+	if not doc.get("erp_status"):
+		doc.erp_status = "Pending"
+
+
+class _SiteView:
+	"""Read a connected site from the fields stored on its WA Account."""
+
+	def __init__(self, account):
+		self.account = account.name
+		self.name = account.get("erp_site_name") or account.name
+		self.site_url = account.get("erp_site_url")
+		self.status = account.get("erp_status") or "Pending"
+		self.whatsapp_account = account.name
+		self.remote_user = account.get("erp_remote_user")
+		self.last_error = account.get("erp_last_error")
+		self._account = account
+
+	def get_password(self, field: str) -> str:
+		mapped = {
+			"api_key": "erp_api_key",
+			"api_secret": "erp_api_secret",
+			"inbound_secret": "erp_inbound_secret",
+		}
+		return self._account.get_password(mapped[field])
+
+
+def _site_view(account) -> _SiteView:
+	return _SiteView(account)
 
 
 def _allow_http() -> bool:
@@ -224,7 +313,8 @@ def _allow_http() -> bool:
 
 def _public_site(doc) -> dict:
 	return {
-		"name": doc.name,
+		"name": doc.account,
+		"site_name": doc.name,
 		"site_url": doc.site_url,
 		"status": doc.status,
 		"whatsapp_account": doc.whatsapp_account,

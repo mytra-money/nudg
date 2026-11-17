@@ -18,8 +18,9 @@ RENAMES = (
 	("WhatsApp Catalog Item", "WA Catalog Item"),
 	("WhatsApp Quick Reply", "WA Quick Reply"),
 	("WhatsApp Catalog", "WA Catalog"),
+	# Renamed here, then copied onto WA Profile by fold_conversation_and_site.
 	("Nudg Conversation", "WA Conversation"),
-	# A connected Frappe site, not a WhatsApp document, so it does not take the WA prefix.
+	# Renamed here, then copied onto the WA Account Connected Site tab.
 	("WA ERPNext Site", "Connected Site"),
 	("ERPNext Site", "Connected Site"),
 )

@@ -49,8 +49,9 @@ const sampleCatalogs: any[] = [
     whatsapp_account: 'Sundarban Sales',
     status: 'Active',
     meta_catalog_id: 'meta_cat_8829104812',
-    sync_status: 'Synced',
-    sync_error: '',
+    sync_status: 'Error',
+    sync_error:
+      'Meta Commerce Catalog sync is not enabled in this build. Catalog data is stored on this site only.',
     description: 'Single-origin spices, hand-harvested green cardamom, Tellicherry pepper, and saffron from organic reserves.',
     modified: new Date(Date.now() - 3600_000 * 2).toISOString(),
   },
@@ -60,8 +61,9 @@ const sampleCatalogs: any[] = [
     whatsapp_account: 'Sundarban Dispatch',
     status: 'Active',
     meta_catalog_id: 'meta_cat_9931849102',
-    sync_status: 'Synced',
-    sync_error: '',
+    sync_status: 'Error',
+    sync_error:
+      'Meta Commerce Catalog sync is not enabled in this build. Catalog data is stored on this site only.',
     description: 'Curated wooden gift boxes, handcrafted brass spice boxes, and festive corporate allocations.',
     modified: new Date(Date.now() - 3600_000 * 24).toISOString(),
   },
@@ -444,17 +446,22 @@ async function sync(name: string) {
   const isLive = Boolean(window.csrf_token)
   try {
     if (!isLive) {
-      await new Promise((resolve) => setTimeout(resolve, 600))
       const target = catalogs.value.find((c) => c.name === name)
+      const message =
+        'Meta Commerce Catalog sync is not enabled in this build. Catalog data is stored on this site only.'
       if (target) {
-        target.sync_status = 'Synced'
-        target.modified = new Date().toISOString()
+        target.sync_status = 'Error'
+        target.sync_error = message
       }
-      showToast('Meta Commerce catalog sync requested and verified!')
+      showToast(message, true)
       return
     }
     const result = await syncCatalog(name)
-    showToast(result.sync_error || result.sync_status || 'Sync requested successfully.')
+    if (result.sync_error || result.sync_status === 'Error') {
+      showToast(result.sync_error || 'Catalog sync is not available.', true)
+    } else {
+      showToast(result.sync_status || 'Sync requested successfully.')
+    }
     await load()
     if (selectedCatalogName.value === name) await open(name)
   } catch (caught) {
@@ -503,6 +510,12 @@ async function handleSendProduct() {
 
 const selectedCatalog = computed(() => {
   return catalogs.value.find((c) => c.name === selectedCatalogName.value) || null
+})
+
+const syncStatusLabel = computed(() => selectedCatalog.value?.sync_status || 'Not synced')
+const syncStatusDetail = computed(() => {
+  if (selectedCatalog.value?.sync_error) return selectedCatalog.value.sync_error
+  return 'Catalog data is stored on this site. Meta catalog import is not available.'
 })
 
 const filteredCatalogs = computed(() => {
@@ -585,9 +598,8 @@ onMounted(() => {
       </div>
 
       <div class="hidden items-center gap-3 sm:flex">
-        <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
-          <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-          Meta Commerce Manager Active
+        <span class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-600/20">
+          Stored on this site
         </span>
       </div>
     </header>
@@ -606,7 +618,7 @@ onMounted(() => {
             <div>
               <h1 class="text-2xl font-bold tracking-tight text-ink-gray-9">WhatsApp Product Catalogs</h1>
               <p class="text-xs sm:text-sm text-ink-gray-6">
-                Manage WhatsApp Commerce catalogs, synchronise product SKUs with Meta, and dispatch interactive product cards.
+                Add products here and send them in a chat. Meta catalog import is not available in this build.
               </p>
             </div>
           </div>
@@ -694,18 +706,24 @@ onMounted(() => {
 
         <div class="rounded-xl border border-outline-gray-2 bg-white p-4 shadow-2xs">
           <div class="flex items-center justify-between">
-            <span class="text-xs font-medium text-ink-gray-6 uppercase tracking-wider">Meta Sync Status</span>
-            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+            <span class="text-xs font-medium text-ink-gray-6 uppercase tracking-wider">Catalog sync</span>
+            <div
+              class="flex h-8 w-8 items-center justify-center rounded-lg"
+              :class="syncStatusLabel === 'Error' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-700'"
+            >
               <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86l-8.02 14A1 1 0 003.14 19h17.72a1 1 0 00.87-1.5l-8.02-14a1 1 0 00-1.74 0z" />
               </svg>
             </div>
           </div>
           <div class="mt-2 flex items-center gap-1.5">
-            <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span class="text-base font-bold text-ink-gray-9">Synced</span>
+            <span
+              class="h-2 w-2 rounded-full"
+              :class="syncStatusLabel === 'Error' ? 'bg-red-500' : syncStatusLabel === 'Synced' ? 'bg-emerald-500' : 'bg-amber-500'"
+            ></span>
+            <span class="text-base font-bold text-ink-gray-9">{{ syncStatusLabel }}</span>
           </div>
-          <p class="mt-1 text-xs text-ink-gray-6">Commerce Graph API v18.0</p>
+          <p class="mt-1 text-xs text-ink-gray-6">{{ syncStatusDetail }}</p>
         </div>
 
         <div class="rounded-xl border border-outline-gray-2 bg-white p-4 shadow-2xs">
@@ -730,7 +748,7 @@ onMounted(() => {
       <EmptyState
         v-else-if="!catalogs.length"
         title="No Catalogs Configured"
-        description="Create a WhatsApp Catalog here to connect products with Meta Commerce Manager."
+        description="Create a catalog on this site. You can send its products in a conversation. Meta catalog import is not available yet."
       />
 
       <!-- Master-Detail Layout -->
@@ -816,10 +834,13 @@ onMounted(() => {
                 </span>
               </div>
               <p class="mt-1 text-xs text-ink-gray-6">{{ selectedCatalog.description }}</p>
+              <p v-if="selectedCatalog.sync_error" class="mt-2 max-w-xl text-sm text-red-700" role="alert">
+                {{ selectedCatalog.sync_error }}
+              </p>
 
               <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
                 <span class="rounded bg-surface-gray-2 px-2 py-0.5 font-mono text-ink-gray-7">
-                  Meta Catalog ID: {{ selectedCatalog.meta_catalog_id || 'meta_cat_default' }}
+                  Meta Catalog ID: {{ selectedCatalog.meta_catalog_id || 'Not set' }}
                 </span>
                 <span class="rounded bg-surface-gray-2 px-2 py-0.5 text-ink-gray-7">
                   WABA: {{ selectedCatalog.whatsapp_account || 'Primary Channel' }}
@@ -844,7 +865,7 @@ onMounted(() => {
                 >
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.03 0 01-15.357-2m15.357 2H15" />
                 </svg>
-                <span>{{ busy ? 'Syncing...' : 'Request Meta Sync' }}</span>
+                <span>{{ busy ? 'Syncing...' : 'Sync catalog' }}</span>
               </button>
 
               <button
@@ -978,7 +999,7 @@ onMounted(() => {
               </svg>
             </div>
             <h3 class="mt-2 text-sm font-semibold text-ink-gray-9">No Product Items in Collection</h3>
-            <p class="mt-1 text-xs text-ink-gray-5">Add WhatsApp Catalog Item records to display products in this catalog.</p>
+            <p class="mt-1 text-xs text-ink-gray-5">Add WA Catalog Item records to display products in this catalog.</p>
             <button
               type="button"
               @click="startItem()"

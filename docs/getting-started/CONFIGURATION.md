@@ -22,7 +22,7 @@ The token is stored on the WhatsApp account. It is not shown again in Nudg.
 
 Inbound messages are delivered to the official WhatsApp app, not to a Nudg URL. In Meta, set the callback to that app's webhook method and subscribe to `messages`.
 
-The verify token and webhook secret stay in WhatsApp Settings. Only a System Manager should open that form.
+The verify token and webhook secret stay in WA Settings. Only a System Manager should open that form.
 
 ## Default account
 

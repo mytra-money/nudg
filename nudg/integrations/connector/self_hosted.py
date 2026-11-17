@@ -120,6 +120,8 @@ class SelfHostedFrappeConnector(BaseWhatsAppConnector):
 		wa_message_name = adapter.send_template(
 			template=template_name,
 			to=to,
+			components=components,
+			language_code=language_code,
 		)
 		msg_doc = frappe.get_doc("WA Message", wa_message_name)
 		return {

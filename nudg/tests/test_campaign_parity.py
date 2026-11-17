@@ -166,6 +166,66 @@ class TestCampaignParity(unittest.TestCase):
 			mock_adapter_send.assert_called_once()
 			self.assertEqual(mock_adapter_send.call_args[1]["components"], [{"type": "body", "parameters": [{"type": "text", "text": "20%"}]}])
 
+	@patch("nudg.services.campaigns.check_recipient_consent", return_value=True)
+	@patch("nudg.services.campaigns.get_connector")
+	def test_run_campaign_variables_survive_self_hosted_send(self, mock_get_connector, _mock_consent):
+		"""A recipient variables_json reaches the official send, including language."""
+		from nudg.integrations.connector.self_hosted import SelfHostedFrappeConnector
+
+		connector = SelfHostedFrappeConnector()
+		mock_get_connector.return_value = connector
+		message = MagicMock()
+		message.message_id = "wamid.1"
+		message.name = "MSG-001"
+		message.status = "Sent"
+		doc = frappe._dict({
+			"name": "CAMP-VARS",
+			"whatsapp_status": "Draft",
+			"status": "Draft",
+			"whatsapp_template": "promo_deal",
+			"template": "promo_deal",
+			"whatsapp_account": "WA-ACC-1",
+			"whatsapp_sent_count": 0,
+			"whatsapp_failed_count": 0,
+			"whatsapp_delivered_count": 0,
+			"whatsapp_read_count": 0,
+			"whatsapp_last_error": None,
+			"whatsapp_recipients": [
+				frappe._dict({
+					"name": "r1",
+					"profile": "active_user",
+					"phone_number": "+1987654321",
+					"status": "Pending",
+					"variables_json": '["20%"]',
+					"message": None,
+					"error_message": None,
+				}),
+			],
+			"save": MagicMock(),
+		})
+
+		def fake_get_doc(*args, **kwargs):
+			if args and args[0] == "WA Message":
+				return message
+			return doc
+
+		with patch("nudg.integrations.whatsapp.adapter.is_installed", return_value=True), \
+		     patch("nudg.integrations.whatsapp.adapter.send_template", return_value="MSG-001") as mock_send, \
+		     patch("frappe.get_doc", side_effect=fake_get_doc), \
+		     patch("frappe.has_permission", return_value=True), \
+		     patch("nudg.services.campaigns.recalculate_campaign_funnel_counts"):
+			campaigns.run_campaign("CAMP-VARS")
+
+		self.assertEqual(doc.whatsapp_recipients[0].status, "Sent")
+		mock_send.assert_called_once()
+		self.assertEqual(mock_send.call_args.kwargs["template"], "promo_deal")
+		self.assertEqual(mock_send.call_args.kwargs["to"], "+1987654321")
+		self.assertEqual(mock_send.call_args.kwargs["language_code"], "en")
+		self.assertEqual(
+			mock_send.call_args.kwargs["components"],
+			[{"type": "body", "parameters": [{"type": "text", "text": "20%"}]}],
+		)
+
 
 if __name__ == "__main__":
 	unittest.main()

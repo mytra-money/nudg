@@ -5,8 +5,10 @@
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Any, Callable
+from urllib.parse import quote
 
 import requests
 
@@ -43,11 +45,13 @@ class ERPNextClient:
 		api_secret: str,
 		*,
 		allow_http: bool = False,
+		allow_loopback: bool = False,
 		timeout: tuple[float, float] = (5.0, 20.0),
 		transport: Transport | None = None,
 	):
-		self.site_url = validate_site_url(site_url, allow_http=allow_http)
+		self.site_url = validate_site_url(site_url, allow_http=allow_http, allow_loopback=allow_loopback)
 		self.allow_http = allow_http
+		self.allow_loopback = allow_loopback
 		self.api_key = (api_key or "").strip()
 		self.api_secret = api_secret or ""
 		self._secrets = [self.api_key, self.api_secret]
@@ -62,6 +66,61 @@ class ERPNextClient:
 		if not message:
 			raise ERPNextClientError("ERPNext did not confirm the API user.")
 		return str(message)
+
+	def get_resources(
+		self,
+		doctype: str,
+		*,
+		fields: list[str],
+		filters: list | dict | None = None,
+		limit: int = 100,
+	) -> list:
+		result = self._data(
+			self.request(
+				"GET",
+				f"/api/resource/{quote(doctype, safe='')}",
+				params={
+					"fields": json.dumps(fields),
+					"filters": json.dumps(filters or []),
+					"limit_page_length": limit,
+					"order_by": "modified desc",
+				},
+			)
+		)
+		return result if isinstance(result, list) else []
+
+	def get_resource(self, doctype: str, name: str) -> dict | None:
+		result = self._data(self.request("GET", self._resource_path(doctype, name), allow_404=True))
+		return result if isinstance(result, dict) else None
+
+	def insert_resource(self, doctype: str, doc: dict) -> dict:
+		result = self._data(self.request("POST", f"/api/resource/{quote(doctype, safe='')}", json=doc))
+		if not isinstance(result, dict):
+			raise ERPNextClientError("ERPNext did not return the saved document.")
+		return result
+
+	def update_resource(self, doctype: str, name: str, doc: dict) -> dict:
+		result = self._data(self.request("PUT", self._resource_path(doctype, name), json=doc))
+		if not isinstance(result, dict):
+			raise ERPNextClientError("ERPNext did not return the saved document.")
+		return result
+
+	def delete_resource(self, doctype: str, name: str) -> None:
+		self.request("DELETE", self._resource_path(doctype, name))
+
+	def call_method(self, method: str, payload: dict | None = None) -> Any:
+		return self.request("POST", f"/api/method/{method}", json=payload or {})
+
+	@staticmethod
+	def _data(result: Any) -> Any:
+		"""Frappe resource calls return the document under ``data``."""
+		if isinstance(result, dict) and isinstance(result.get("data"), (dict, list)):
+			return result["data"]
+		return result
+
+	@staticmethod
+	def _resource_path(doctype: str, name: str) -> str:
+		return f"/api/resource/{quote(doctype, safe='')}/{quote(name, safe='')}/"
 
 	def create_communication(self, *, reference_doctype: str, reference_name: str, subject: str, content: str, phone: str) -> None:
 		self.request(
@@ -90,7 +149,11 @@ class ERPNextClient:
 		allow_404: bool = False,
 	) -> Any:
 		# Resolve again so a DNS change to a private address is not reused.
-		self.site_url = validate_site_url(self.site_url, allow_http=self.allow_http)
+		self.site_url = validate_site_url(
+			self.site_url,
+			allow_http=self.allow_http,
+			allow_loopback=self.allow_loopback,
+		)
 		url = self.site_url + path
 		headers = {
 			"Authorization": f"token {self.api_key}:{self.api_secret}",

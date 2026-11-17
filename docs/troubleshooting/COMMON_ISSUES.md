@@ -38,7 +38,7 @@ The signed-in user needs the **WhatsApp User** role to read messages, or **Whats
 
 ## Webhook traffic does not arrive
 
-Point Meta at the official WhatsApp app's webhook, not at `/nudg`. Subscribe to `messages`. The verify token and secret are in WhatsApp Settings.
+Point Meta at the official WhatsApp app's webhook, not at `/nudg`. Subscribe to `messages`. The verify token and secret are in WA Settings.
 
 ## The page is blank after a frontend change
 

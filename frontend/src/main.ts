@@ -28,6 +28,7 @@ async function mountApp() {
     try {
       const values = await frappeRequest({
         url: '/api/method/nudg.www.nudg.get_context_for_dev',
+        method: 'GET',
       })
       if (values && typeof values === 'object') {
         for (const key of Object.keys(values as Record<string, unknown>)) {

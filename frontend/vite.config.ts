@@ -124,9 +124,17 @@ export default defineConfig(({ command, mode }) => {
       dedupe: ['vue', 'frappe-ui', 'reka-ui', 'dompurify'],
     },
     server: {
-      host: '0.0.0.0',
+      host: '127.0.0.1',
       port: 4178,
       strictPort: true,
+      // The page is opened at 127.0.0.1. Leaving this unset makes Vite dial
+      // localhost, and that socket reset also drops the API calls.
+      hmr: {
+        protocol: 'ws',
+        host: '127.0.0.1',
+        port: 4178,
+        clientPort: 4178,
+      },
     },
   }
 })

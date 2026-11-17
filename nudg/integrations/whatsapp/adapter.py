@@ -103,15 +103,43 @@ def send_message(
 	)
 
 
+def _keep_supplied_template_parameters(doc) -> None:
+	"""Let a campaign's body values pass the official template check.
+
+	WA Message otherwise requires a reference document whenever the template
+	lists variables, then fills those variables from that document. A campaign
+	recipient already has the values, and has no reference document.
+	"""
+	raw = doc.template_body_parameters
+	if not raw or raw in ("{}", "null"):
+		return
+
+	def _validate_template_reference() -> None:
+		if doc.template_body_parameters and doc.template_body_parameters not in ("{}", "null"):
+			return
+		type(doc)._validate_template_reference(doc)
+
+	doc._validate_template_reference = _validate_template_reference
+
+
 def send_template(
 	template: str,
 	to: str,
 	reference_doctype: str | None = None,
 	reference_docname: str | None = None,
 	components: list[dict[str, Any]] | None = None,
+	language_code: str | None = None,
 ) -> str:
-	"""Send an approved template via the official WhatsApp API."""
+	"""Send an approved template via the official WhatsApp API.
+
+	``language_code`` is accepted from connectors. Meta receives the language
+	stored on the WA Template, which is the language that was approved.
+	"""
 	from whatsapp.whatsapp.api.messages import send_template as official_send_template
+
+	# The template document owns the language. A caller default such as "en"
+	# must not replace en_US on the approved template.
+	_ = language_code
 
 	if components:
 		from whatsapp.whatsapp.api.messages import (
@@ -143,6 +171,7 @@ def send_template(
 			"to": profile_name,
 			"template_body_parameters": frappe.as_json(body_params),
 		})
+		_keep_supplied_template_parameters(doc)
 		doc.insert(ignore_permissions=True)
 		_submit(doc, f"Failed to send template {template} to {profile_name}")
 		return doc.name

@@ -16,6 +16,7 @@ from frappe import _
 
 GRAPH_DEFAULT = "v23.0"
 SETTINGS_DOCTYPE = "WA Signup Settings"
+LEGACY_SETTINGS_DOCTYPE = "WhatsApp Signup Settings"
 _TOKEN_RE = re.compile(r"EAA[A-Za-z0-9]+")
 _CODE_RE = re.compile(r"(code=)[^&\s]+", re.IGNORECASE)
 _ACCESS_RE = re.compile(r"(access_token=)[^&\s]+", re.IGNORECASE)
@@ -67,20 +68,30 @@ def public_config() -> dict[str, Any]:
 			"config_id": "",
 			"graph_api_version": GRAPH_DEFAULT,
 			"has_secret": False,
+			"missing": ["enabled", "app_id", "config_id", "app_secret"],
 		}
 	doc = frappe.get_single(SETTINGS_DOCTYPE)
 	app_id = (doc.app_id or "").strip()
 	config_id = (doc.config_id or "").strip()
 	version = (doc.graph_api_version or GRAPH_DEFAULT).strip() or GRAPH_DEFAULT
 	has_secret = bool(_read_secret(doc))
-	ready = bool(doc.enabled and app_id and config_id and has_secret)
+	missing = []
+	if not doc.enabled:
+		missing.append("enabled")
+	if not app_id:
+		missing.append("app_id")
+	if not config_id:
+		missing.append("config_id")
+	if not has_secret:
+		missing.append("app_secret")
 	return {
 		"enabled": bool(doc.enabled),
-		"ready": ready,
+		"ready": not missing,
 		"app_id": app_id or "752752485429112",
 		"config_id": config_id,
 		"graph_api_version": version,
 		"has_secret": has_secret,
+		"missing": missing,
 	}
 
 
@@ -247,12 +258,54 @@ def _require_settings() -> dict[str, str]:
 
 
 def _read_secret(doc) -> str:
+	secret = _password_on_doc(doc)
+	if secret:
+		return secret
+	if getattr(doc, "doctype", SETTINGS_DOCTYPE) != SETTINGS_DOCTYPE:
+		return ""
+	return adopt_legacy_app_secret()
+
+
+def adopt_legacy_app_secret() -> str:
+	"""Move the app secret saved before the DocType rename onto WA Signup Settings.
+
+	Renaming the Single updated ``tabSingles`` and left ``__Auth`` keyed to
+	``WhatsApp Signup Settings``. The form still shows a row of dots, and
+	``get_password`` on the new Single finds nothing.
+	"""
+	current = _decrypt_named(SETTINGS_DOCTYPE, SETTINGS_DOCTYPE, "app_secret")
+	if current:
+		return current
+	secret = _decrypt_named(LEGACY_SETTINGS_DOCTYPE, LEGACY_SETTINGS_DOCTYPE, "app_secret")
+	if not secret or not frappe.db.exists("DocType", SETTINGS_DOCTYPE):
+		return secret
+	try:
+		from frappe.utils.password import remove_encrypted_password, set_encrypted_password
+
+		set_encrypted_password(SETTINGS_DOCTYPE, SETTINGS_DOCTYPE, secret, "app_secret")
+		remove_encrypted_password(LEGACY_SETTINGS_DOCTYPE, LEGACY_SETTINGS_DOCTYPE, "app_secret")
+	except Exception:
+		return secret
+	return secret
+
+
+def _password_on_doc(doc) -> str:
 	if hasattr(doc, "get_password"):
 		try:
 			return (doc.get_password("app_secret", raise_exception=False) or "").strip()
 		except Exception:
 			return ""
 	return (getattr(doc, "app_secret", None) or "").strip()
+
+
+def _decrypt_named(doctype: str, name: str, fieldname: str) -> str:
+	from frappe.utils.password import get_decrypted_password
+
+	try:
+		value = get_decrypted_password(doctype, name, fieldname, raise_exception=False)
+	except Exception:
+		return ""
+	return (value or "").strip()
 
 
 def _graph(method: str, url: str, params: dict | None = None, payload: dict | None = None, token: str | None = None) -> dict:

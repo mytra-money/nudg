@@ -55,6 +55,20 @@ MESSAGE_FIELDS = [
 ]
 
 PROFILE_FIELDS = ["name", "profile_name", "phone_number", "whatsapp_account", "status", "wa_id"]
+
+
+def _profile_column(fieldname: str) -> bool:
+	try:
+		return bool(frappe.db.has_column("WA Profile", fieldname))
+	except Exception:
+		return False
+
+
+def _profile_fields() -> list[str]:
+	fields = list(PROFILE_FIELDS)
+	if _profile_column("tags"):
+		fields.append("tags")
+	return fields
 ACCOUNT_FIELDS = ["name", "account_name", "status", "phone_id", "business_id", "app_id", "auto_read_receipts"]
 TEMPLATE_FIELDS = [
 	"name",
@@ -122,7 +136,7 @@ def get_inbox(account: str | None = None, tag: str | None = None, tags: str | No
 		return _empty_inbox()
 	profiles = frappe.get_list(
 		"WA Profile",
-		fields=PROFILE_FIELDS,
+		fields=_profile_fields(),
 		filters={"whatsapp_account": account} if account else {},
 		order_by="modified desc",
 		limit_page_length=200,
@@ -148,11 +162,7 @@ def get_inbox(account: str | None = None, tag: str | None = None, tags: str | No
 			last_incoming[row.to] = row.creation
 
 	default_account = _default_account()
-	assignment_map = {}
-	if frappe.db.exists("DocType", "WA Conversation"):
-		for profile in profiles:
-			assignments.ensure_conversation(profile.name, profile.whatsapp_account)
-		assignment_map = assignments.get_conversation_map(profile_names)
+	assignment_map = assignments.get_conversation_map(profile_names) if profile_names else {}
 
 	filter_tag = (tag or tags or "").strip().lower()
 	queue_filter = (queue or "all").strip().lower()
@@ -166,7 +176,8 @@ def get_inbox(account: str | None = None, tag: str | None = None, tags: str | No
 		assignment = assignment_map.get(profile.name) or {}
 
 		if assignment.get("name") and assignment.get("conversation_status") != status:
-			frappe.db.set_value("WA Conversation", assignment["name"], "conversation_status", status, update_modified=False)
+			if _profile_column("conversation_status"):
+				frappe.db.set_value("WA Profile", profile.name, "conversation_status", status, update_modified=False)
 			assignment["conversation_status"] = status
 
 		raw_tags = assignment.get("tags") or ""
@@ -267,7 +278,7 @@ def publish_presence(conversation_id: str, action: str) -> dict:
 	conversation_id = str(conversation_id).strip()
 	action = str(action).strip()
 
-	if not frappe.db.exists("WA Conversation", conversation_id) and not frappe.db.exists("WA Profile", conversation_id):
+	if not frappe.db.exists("WA Profile", conversation_id):
 		raise frappe.DoesNotExistError(_(f"Conversation {conversation_id} not found"))
 
 	if not has_app_permission():
@@ -276,7 +287,7 @@ def publish_presence(conversation_id: str, action: str) -> dict:
 	roles = frappe.get_roles() if hasattr(frappe, "get_roles") else []
 	if not ("WhatsApp User" in roles or "System Manager" in roles or frappe.session.user == "Administrator"):
 		try:
-			if not frappe.has_permission("WA Conversation", "read"):
+			if not frappe.has_permission("WA Profile", "read"):
 				raise frappe.PermissionError(_("Not permitted"))
 		except frappe.PermissionError:
 			raise
@@ -330,7 +341,7 @@ def get_thread(profile: str) -> dict:
 	visible = frappe.get_list(
 		"WA Profile",
 		filters={"name": profile},
-		fields=PROFILE_FIELDS,
+		fields=_profile_fields(),
 		limit_page_length=1,
 	)
 	if not visible:
@@ -358,15 +369,15 @@ def get_thread(profile: str) -> dict:
 	_attach_templates(folded)
 
 	notes = _get_conversation_notes(profile)
-	tags_list = []
-	if frappe.db.exists("DocType", "WA Conversation"):
-		raw_tags = frappe.db.get_value("WA Conversation", {"profile": profile}, "tags") or ""
-		tags_list = [t.strip() for t in str(raw_tags).split(",") if t.strip()]
+	prof = visible[0]
+	raw_tags = prof.get("tags") or ""
+	if not raw_tags and _profile_column("tags"):
+		raw_tags = frappe.db.get_value("WA Profile", profile, "tags") or ""
+	tags_list = [t.strip() for t in str(raw_tags).split(",") if t.strip()]
 
 	# Auto Read Receipts (Meta Cloud API + DB status sync)
 	_send_auto_read_receipts(profile)
 
-	prof = visible[0]
 	bot_info = chatbot.get_bot_status(prof.get("phone_number"), prof.get("whatsapp_account"))
 
 	return {
@@ -518,14 +529,14 @@ def get_unread_count() -> dict[str, int]:
 		assigned_to_me = 0
 		unassigned = 0
 
-		if frappe.db.exists("DocType", "WA Conversation"):
+		if _profile_column("assignment_status"):
 			needs_reply = frappe.db.count(
-				"WA Conversation",
+				"WA Profile",
 				filters={"conversation_status": ["in", ["needs_reply", "window_open"]]},
 			)
 
 			assigned_to_me = frappe.db.count(
-				"WA Conversation",
+				"WA Profile",
 				filters={
 					"assignee": user,
 					"assignment_status": "Assigned",
@@ -534,7 +545,7 @@ def get_unread_count() -> dict[str, int]:
 			)
 
 			unassigned = frappe.db.count(
-				"WA Conversation",
+				"WA Profile",
 				filters={"assignment_status": "Unassigned"},
 			)
 

@@ -5,4 +5,6 @@ from frappe.model.document import Document
 
 
 class WASignupSettings(Document):
-	pass
+	def before_validate(self):
+		if not self.enabled:
+			self.flags.ignore_mandatory = True

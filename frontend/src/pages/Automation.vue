@@ -44,10 +44,8 @@ const form = ref({
 const triggerOptions = [
   { label: 'Incoming Message', value: 'Incoming Message' },
   { label: 'Status Failed', value: 'Status Failed' },
-  { label: 'Window Closed', value: 'Window Closed' },
   { label: 'Keyword Match', value: 'Keyword Match' },
   { label: 'Keyword Rule', value: 'Keyword Rule' },
-  { label: 'Out of Office', value: 'Out of Office' },
 ]
 const actionOptions = [
   { label: 'Send Template', value: 'Send Template' },
@@ -205,9 +203,10 @@ function startCreate() {
 function startEdit(rule: any) {
   editorMode.value = 'edit'
   editingName.value = rule.name
+  const allowed = new Set(triggerOptions.map((option) => option.value))
   form.value = {
     rule_name: rule.rule_name || rule.name || '',
-    trigger: rule.trigger || 'Incoming Message',
+    trigger: allowed.has(rule.trigger) ? rule.trigger : 'Incoming Message',
     action: rule.action || 'Send Text',
     action_reference: rule.action_reference || '',
     whatsapp_account: rule.whatsapp_account || '',

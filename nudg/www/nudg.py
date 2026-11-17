@@ -49,7 +49,7 @@ def get_boot():
 	}
 
 
-@frappe.whitelist(methods=["POST"], allow_guest=True)
+@frappe.whitelist(methods=["GET", "POST"], allow_guest=True)
 def get_context_for_dev():
 	"""Boot payload for Vite dev server (CRM/LMS pattern)."""
 	if not frappe.conf.developer_mode:

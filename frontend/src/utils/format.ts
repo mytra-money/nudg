@@ -87,18 +87,33 @@ export function deskRoute(doctype: string, name: string) {
 
 /** In-app screen for a DocType, when Nudg already has one. */
 export function whatsappScreen(doctype: string): { path: string; manager?: boolean } | null {
-  const key = doctype.trim().toLowerCase()
+  const renamed: Record<string, string> = {
+    'whatsapp catalog': 'wa catalog',
+    'whatsapp catalog item': 'wa catalog item',
+    'whatsapp quick reply': 'wa quick reply',
+    'whatsapp automation rule': 'wa automation rule',
+    'whatsapp automation run': 'wa automation run',
+    'whatsapp campaign recipient': 'wa campaign recipient',
+    'whatsapp signup settings': 'wa signup settings',
+    'nudg conversation': 'wa profile',
+    'wa conversation': 'wa profile',
+    'wa erpnext site': 'wa account',
+    'erpnext site': 'wa account',
+    'connected site': 'wa account',
+  }
+  const key = renamed[doctype.trim().toLowerCase()] || doctype.trim().toLowerCase()
   const screens: Record<string, { path: string; manager?: boolean }> = {
     'wa template': { path: '/template-studio' },
     'wa account': { path: '/integrations', manager: true },
-    'whatsapp catalog': { path: '/integrations/catalogs', manager: true },
-    'whatsapp catalog item': { path: '/integrations/catalogs', manager: true },
+    'wa catalog': { path: '/integrations/catalogs', manager: true },
+    'wa catalog item': { path: '/integrations/catalogs', manager: true },
     'utm campaign': { path: '/marketing', manager: true },
-    'whatsapp quick reply': { path: '/settings' },
-    'whatsapp automation rule': { path: '/automation', manager: true },
-    'whatsapp automation run': { path: '/automation', manager: true },
+    'wa quick reply': { path: '/settings' },
+    'wa automation rule': { path: '/automation', manager: true },
+    'wa automation run': { path: '/automation', manager: true },
+    'wa campaign recipient': { path: '/marketing', manager: true },
+    'wa signup settings': { path: '/integrations', manager: true },
     'wa log': { path: '/integrations/logs', manager: true },
-    'nudg conversation': { path: '/conversations' },
     'wa profile': { path: '/conversations' },
     'wa message': { path: '/conversations' },
   }

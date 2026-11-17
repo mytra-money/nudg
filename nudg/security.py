@@ -188,7 +188,8 @@ def _account_query_for(doctype: str, fieldname: str = "whatsapp_account", user: 
 
 
 def get_tenant_conversation_query(user: str | None = None) -> str:
-	return _account_query_for("WA Conversation", "whatsapp_account", user)
+	"""Limit inbox profiles to the WhatsApp accounts this user may see."""
+	return _account_query_for("WA Profile", "whatsapp_account", user)
 
 
 def get_tenant_campaign_query(user: str | None = None) -> str:

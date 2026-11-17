@@ -1,7 +1,7 @@
 # Copyright (c) 2026, Nudg and contributors
 # For license information, please see license.txt
 
-"""Manual and rule-driven assignment, tags, notes, and auto-routing for WA Conversation."""
+"""Manual and rule-driven assignment, tags, notes, and auto-routing on WA Profile."""
 
 from __future__ import annotations
 
@@ -36,30 +36,31 @@ def _safe_parse_datetime(dt_val: Any) -> datetime.datetime:
 
 
 def ensure_conversation(profile: str, whatsapp_account: str | None = None, organization: str | None = None) -> str:
-	"""Return the desk conversation name for a WA Profile, creating one if needed."""
-	existing = frappe.db.get_value("WA Conversation", {"profile": profile}, "name")
-	if existing:
-		if whatsapp_account:
-			current = frappe.db.get_value("WA Conversation", existing, "whatsapp_account")
-			if not current and whatsapp_account:
-				frappe.db.set_value("WA Conversation", existing, "whatsapp_account", whatsapp_account)
-		return existing
+	"""Return the WA Profile for this chat. Assignment is stored on the profile."""
+	if not profile or not frappe.db.exists("WA Profile", profile):
+		frappe.throw(_("Profile {0} does not exist.").format(profile), frappe.DoesNotExistError)
 
-	account = whatsapp_account
-	if not account and frappe.db.exists("DocType", "WA Profile"):
-		account = frappe.db.get_value("WA Profile", profile, "whatsapp_account")
+	updates: dict[str, str] = {}
+	if whatsapp_account and not frappe.db.get_value("WA Profile", profile, "whatsapp_account"):
+		updates["whatsapp_account"] = whatsapp_account
+	if _has_column("assignment_status") and not frappe.db.get_value("WA Profile", profile, "assignment_status"):
+		updates["assignment_status"] = "Unassigned"
+	if _has_column("priority") and not frappe.db.get_value("WA Profile", profile, "priority"):
+		updates["priority"] = "Medium"
+	if updates:
+		frappe.db.set_value("WA Profile", profile, updates, update_modified=False)
+	return profile
 
-	doc = frappe.get_doc(
-		{
-			"doctype": "WA Conversation",
-			"profile": profile,
-			"whatsapp_account": account,
-			"assignment_status": "Unassigned",
-			"priority": "Medium",
-		}
-	)
-	doc.insert(ignore_permissions=True)
-	return doc.name
+
+def _has_column(fieldname: str) -> bool:
+	try:
+		return bool(frappe.db.has_column("WA Profile", fieldname))
+	except Exception:
+		return False
+
+
+def _profile_name(doc) -> str | None:
+	return getattr(doc, "profile", None) or getattr(doc, "name", None)
 
 
 def get_assignable_account_users(user: str | None = None) -> list[str]:
@@ -123,8 +124,8 @@ def assign_conversation(profile: str, user: str, source: str = "Manual") -> dict
 		)
 
 	name = ensure_conversation(profile)
-	doc = frappe.get_doc("WA Conversation", name)
-	frappe.has_permission("WA Conversation", "write", doc=doc, throw=True)
+	doc = frappe.get_doc("WA Profile", name)
+	frappe.has_permission("WA Profile", "write", doc=doc, throw=True)
 
 	doc.assignee = canonical
 	doc.assignment_status = "Assigned"
@@ -138,8 +139,8 @@ def assign_conversation(profile: str, user: str, source: str = "Manual") -> dict
 
 def unassign_conversation(profile: str) -> dict:
 	name = ensure_conversation(profile)
-	doc = frappe.get_doc("WA Conversation", name)
-	frappe.has_permission("WA Conversation", "write", doc=doc, throw=True)
+	doc = frappe.get_doc("WA Profile", name)
+	frappe.has_permission("WA Profile", "write", doc=doc, throw=True)
 	doc.assignee = None
 	doc.assignment_status = "Unassigned"
 	doc.assignment_source = "Manual"
@@ -150,8 +151,8 @@ def unassign_conversation(profile: str) -> dict:
 
 def close_conversation(profile: str) -> dict:
 	name = ensure_conversation(profile)
-	doc = frappe.get_doc("WA Conversation", name)
-	frappe.has_permission("WA Conversation", "write", doc=doc, throw=True)
+	doc = frappe.get_doc("WA Profile", name)
+	frappe.has_permission("WA Profile", "write", doc=doc, throw=True)
 	doc.assignment_status = "Closed"
 	doc.save()
 	_close_todos(doc.name)
@@ -191,8 +192,8 @@ def set_conversation_tags(profile: str, tags: Any) -> dict:
 
 	tags_str, tags_list = _normalize_tags(tags)
 	name = ensure_conversation(profile)
-	doc = frappe.get_doc("WA Conversation", name)
-	frappe.has_permission("WA Conversation", "write", doc=doc, throw=True)
+	doc = frappe.get_doc("WA Profile", name)
+	frappe.has_permission("WA Profile", "write", doc=doc, throw=True)
 
 	doc.tags = tags_str
 	doc.save(ignore_permissions=True)
@@ -201,8 +202,8 @@ def set_conversation_tags(profile: str, tags: Any) -> dict:
 	frappe.publish_realtime(
 		"nudg_conversation_tags_updated",
 		{
-			"profile": profile,
-			"conversation": doc.name,
+			"profile": _profile_name(doc),
+			"conversation": _profile_name(doc),
 			"tags": tags_list,
 			"tags_str": tags_str,
 			"user": getattr(getattr(frappe, "session", None), "user", None),
@@ -252,12 +253,12 @@ def auto_assign_round_robin(conversation_doc: str | Any) -> dict:
 	"""Distribute an unassigned conversation fairly across active desk agents using round-robin."""
 	if isinstance(conversation_doc, str):
 		name = ensure_conversation(conversation_doc)
-		doc = frappe.get_doc("WA Conversation", name)
+		doc = frappe.get_doc("WA Profile", name)
 	else:
 		doc = conversation_doc
 
 	try:
-		if not frappe.has_permission("WA Conversation", "write", doc=doc):
+		if not frappe.has_permission("WA Profile", "write", doc=doc):
 			raise frappe.PermissionError(_("Not permitted to reassign conversation"))
 	except frappe.PermissionError:
 		raise
@@ -275,7 +276,7 @@ def auto_assign_round_robin(conversation_doc: str | Any) -> dict:
 	# 1. Inspect recent assignments for active agents
 	latest_assignments: dict[str, Any] = {a: None for a in agents}
 	recent_rows = frappe.get_all(
-		"WA Conversation",
+		"WA Profile",
 		filters={"assignee": ["in", agents], "assignment_status": "Assigned"},
 		fields=["assignee", "last_assigned_on"],
 		order_by="last_assigned_on desc",
@@ -317,8 +318,8 @@ def auto_assign_round_robin(conversation_doc: str | Any) -> dict:
 	frappe.publish_realtime(
 		"nudg_conversation_assigned",
 		{
-			"profile": getattr(doc, "profile", None),
-			"conversation": getattr(doc, "name", None),
+			"profile": _profile_name(doc),
+			"conversation": _profile_name(doc),
 			"assignee": selected_agent,
 			"assignment_source": "Round Robin",
 		},
@@ -333,14 +334,13 @@ def auto_assign_round_robin(conversation_doc: str | Any) -> dict:
 # -----------------------------------------------------------------------------
 
 def get_conversation_map(profiles: list[str]) -> dict[str, dict]:
-	if not profiles:
+	if not profiles or not _has_column("assignment_status"):
 		return {}
 	rows = frappe.get_all(
-		"WA Conversation",
-		filters={"profile": ["in", profiles]},
+		"WA Profile",
+		filters={"name": ["in", profiles]},
 		fields=[
 			"name",
-			"profile",
 			"assignee",
 			"assignment_status",
 			"conversation_status",
@@ -351,21 +351,26 @@ def get_conversation_map(profiles: list[str]) -> dict[str, dict]:
 			"tags",
 		],
 	)
-	return {row.profile: row for row in rows}
+	mapped: dict[str, dict] = {}
+	for row in rows or []:
+		name = row.get("name") if isinstance(row, dict) else getattr(row, "name", None)
+		if not name:
+			continue
+		data = dict(row)
+		data["profile"] = name
+		mapped[name] = data
+	return mapped
 
 
 def list_conversation_notes(profile: str) -> list[dict]:
 	"""Internal notes live on Frappe Comment and are never sent as WhatsApp messages."""
-	if not profile or not frappe.db.exists("DocType", "WA Conversation"):
-		return []
-	name = frappe.db.get_value("WA Conversation", {"profile": profile}, "name")
-	if not isinstance(name, str) or not name:
+	if not profile or not frappe.db.exists("DocType", "WA Profile"):
 		return []
 	rows = frappe.get_all(
 		"Comment",
 		filters={
-			"reference_doctype": "WA Conversation",
-			"reference_name": name,
+			"reference_doctype": "WA Profile",
+			"reference_name": profile,
 			"comment_type": "Comment",
 		},
 		fields=["name", "content", "comment_email", "comment_by", "creation"],
@@ -397,8 +402,8 @@ def add_conversation_note(profile: str, note_text: str) -> dict:
 	if not text:
 		frappe.throw(_("Write a note before saving."))
 	name = ensure_conversation(profile)
-	doc = frappe.get_doc("WA Conversation", name)
-	if not frappe.has_permission("WA Conversation", "write", doc=doc):
+	doc = frappe.get_doc("WA Profile", name)
+	if not frappe.has_permission("WA Profile", "write", doc=doc):
 		frappe.throw(_("Not permitted to note this conversation."), frappe.PermissionError)
 	author = frappe.session.user
 	try:
@@ -409,7 +414,7 @@ def add_conversation_note(profile: str, note_text: str) -> dict:
 		{
 			"doctype": "Comment",
 			"comment_type": "Comment",
-			"reference_doctype": "WA Conversation",
+			"reference_doctype": "WA Profile",
 			"reference_name": name,
 			"content": text,
 			"comment_email": frappe.session.user,
@@ -422,6 +427,8 @@ def add_conversation_note(profile: str, note_text: str) -> dict:
 
 def on_conversation_update(doc, method=None):
 	"""After Assignment Rule or form save, normalize stored assignment fields."""
+	if not _has_column("assignment_status"):
+		return
 	if doc.assignee and doc.assignment_status == "Unassigned":
 		doc.db_set("assignment_status", "Assigned", update_modified=False)
 	if not doc.assignee and doc.assignment_status == "Assigned":
@@ -442,9 +449,9 @@ def _sync_todo(doc):
 		assign_to.add(
 			{
 				"assign_to": [doc.assignee],
-				"doctype": getattr(doc, "doctype", "WA Conversation"),
+				"doctype": "WA Profile",
 				"name": doc.name,
-				"description": _("WhatsApp conversation {0}").format(getattr(doc, "profile", "")),
+				"description": _("WhatsApp conversation {0}").format(_profile_name(doc) or ""),
 				"notify": 0,
 			}
 		)
@@ -457,7 +464,7 @@ def _close_todos(name: str):
 		return
 	todos = frappe.get_all(
 		"ToDo",
-		filters={"reference_type": "WA Conversation", "reference_name": name, "status": "Open"},
+		filters={"reference_type": "WA Profile", "reference_name": name, "status": "Open"},
 		pluck="name",
 	)
 	for todo in todos:
@@ -478,7 +485,7 @@ def _serialize(doc) -> dict:
 	last_assigned = getattr(doc, "last_assigned_on", None)
 	return {
 		"name": getattr(doc, "name", None),
-		"profile": getattr(doc, "profile", None),
+		"profile": _profile_name(doc),
 		"assignee": getattr(doc, "assignee", None),
 		"assignment_status": getattr(doc, "assignment_status", None),
 		"conversation_status": getattr(doc, "conversation_status", None),

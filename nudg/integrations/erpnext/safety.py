@@ -36,6 +36,7 @@ def validate_site_url(
 	url: str | None,
 	*,
 	allow_http: bool = False,
+	allow_loopback: bool = False,
 	resolve: Resolver = default_resolve,
 ) -> str:
 	"""Return a canonical site origin, or raise SiteURLError.
@@ -58,7 +59,10 @@ def validate_site_url(
 	elif parsed.scheme != "https":
 		raise SiteURLError("The ERPNext site URL must start with https://.")
 	host = (parsed.hostname or "").strip().lower().rstrip(".")
-	if not host or host in BLOCKED_HOSTS or host.endswith(".local") or host.endswith(".internal"):
+	loopback = allow_loopback and _is_loopback_name(host)
+	if not host or host.endswith(".local") or host.endswith(".internal"):
+		raise SiteURLError("That host is not a public ERPNext site.")
+	if host in BLOCKED_HOSTS and not loopback:
 		raise SiteURLError("That host is not a public ERPNext site.")
 	try:
 		port = parsed.port
@@ -66,7 +70,9 @@ def validate_site_url(
 		raise SiteURLError("The site URL has an invalid port.") from exc
 	if port == 0:
 		raise SiteURLError("The site URL has an invalid port.")
-	if host.replace(".", "").isdigit() or ":" in host:
+	if loopback:
+		pass
+	elif host.replace(".", "").isdigit() or ":" in host:
 		_reject_ip(host)
 	else:
 		_reject_resolved(host, port or (443 if parsed.scheme == "https" else 80), resolve)
@@ -90,6 +96,15 @@ def _reject_resolved(host: str, port: int, resolve: Resolver) -> None:
 		ip = sockaddr[0]
 		# IPv6 results may include a scope id after a percent sign.
 		_reject_ip(ip.split("%", 1)[0])
+
+
+def _is_loopback_name(host: str) -> bool:
+	if host in {"localhost", "localhost.localdomain"}:
+		return True
+	try:
+		return ipaddress.ip_address(host).is_loopback
+	except ValueError:
+		return False
 
 
 def _reject_ip(value: str) -> None:

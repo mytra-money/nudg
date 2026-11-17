@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { Button, call, toast } from 'frappe-ui'
 import { userFacingError } from '@/utils/errors'
 
@@ -12,6 +12,7 @@ type SignupConfig = {
   config_id: string
   graph_api_version: string
   has_secret: boolean
+  missing?: string[]
 }
 
 type SessionInfo = {
@@ -46,6 +47,19 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('message', onFacebookMessage)
+})
+
+const unavailableReason = computed(() => {
+  const current = config.value
+  if (!current || current.ready) return ''
+  const missing = current.missing || []
+  if (missing.length === 1 && missing[0] === 'app_secret') {
+    return 'Type the Meta app secret again in WA Signup Settings and save.'
+  }
+  if (missing.includes('enabled')) {
+    return 'Turn on WA Signup Settings, then open this dialog again.'
+  }
+  return 'Save the Meta App ID, configuration ID, and app secret in WA Signup Settings.'
 })
 
 async function loadConfig() {
@@ -203,7 +217,7 @@ function loadFacebookSdk(app: string, version: string) {
         @click="emit('manual')"
       />
     </div>
-    <p v-if="config && !config.ready" class="mt-3 text-center text-xs text-ink-gray-7">Facebook login is not available yet.</p>
+    <p v-if="unavailableReason" class="mt-3 text-center text-xs text-ink-gray-7">{{ unavailableReason }}</p>
     <p v-if="status" class="mt-3 text-center text-sm text-emerald-800">{{ status }}</p>
     <p v-if="pin" class="mt-1 text-center text-sm font-medium text-ink-gray-8">Two-step PIN: {{ pin }}. Save it. It is not shown again.</p>
     <div v-if="error" class="mx-auto mt-4 max-w-md rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-center" role="alert">

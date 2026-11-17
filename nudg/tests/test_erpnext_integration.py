@@ -19,6 +19,7 @@ from nudg.integrations.erpnext.payload import (
 	DUPLICATE,
 	REQUEUE,
 	PayloadError,
+	alert_from_webhook,
 	classify_transport_failure,
 	condition_matches,
 	decide_replay,
@@ -30,7 +31,12 @@ from nudg.integrations.erpnext.payload import (
 	sign_body,
 	signatures_match,
 	token_matches,
+	webhook_document,
+	webhook_document_name,
 	webhook_json_template,
+	webhook_static_value,
+	webhook_update,
+	webhook_variable_map,
 )
 from nudg.integrations.erpnext.safety import SiteURLError, validate_site_url
 
@@ -63,6 +69,17 @@ class TestSiteURL(unittest.TestCase):
 	def test_http_is_allowed_only_when_asked(self):
 		url = validate_site_url("http://erp.example.com", allow_http=True, resolve=_public_dns)
 		self.assertEqual(url, "http://erp.example.com")
+
+	def test_loopback_is_allowed_only_for_a_local_developer_site(self):
+		with self.assertRaises(SiteURLError):
+			validate_site_url("http://127.0.0.1:8013", allow_http=True, resolve=_public_dns)
+		url = validate_site_url(
+			"http://127.0.0.1:8013",
+			allow_http=True,
+			allow_loopback=True,
+			resolve=_public_dns,
+		)
+		self.assertEqual(url, "http://127.0.0.1:8013")
 
 
 class TestPayload(unittest.TestCase):
@@ -101,6 +118,109 @@ class TestPayload(unittest.TestCase):
 		self.assertIn("{{ doc.customer | tojson }}", template)
 		self.assertIn('"site": "Acme"', template)
 		self.assertNotIn("{{ doc.owner }}", template)
+
+	def test_alert_webhook_renders_and_round_trips(self):
+		from jinja2 import Environment
+
+		raw = webhook_json_template(
+			"Acme",
+			"on_submit",
+			"contact_mobile",
+			template="invoice_ready",
+			variables={"customer": "customer_name"},
+		)
+		self.assertEqual(webhook_static_value(raw, "template"), "invoice_ready")
+		self.assertEqual(webhook_static_value(raw, "phone_field"), "contact_mobile")
+		self.assertEqual(webhook_static_value(raw, "site"), "Acme")
+
+		class Doc:
+			doctype = "Sales Invoice"
+			name = 'SINV-"1"'
+			contact_mobile = "919876543210"
+			customer_name = "Acme"
+
+		body = json.loads(Environment().from_string(raw).render(doc=Doc()))
+		self.assertEqual(body["template"], "invoice_ready")
+		self.assertEqual(body["name"], 'SINV-"1"')
+		self.assertEqual(body["phone"], "919876543210")
+		self.assertEqual(body["variables"]["customer"], "Acme")
+
+		document = webhook_document(
+			name=webhook_document_name("Acme", "Sales Invoice on_submit"),
+			site_name="Acme",
+			doctype="Sales Invoice",
+			event="on_submit",
+			phone_field="contact_mobile",
+			template="invoice_ready",
+			variables={"customer": "customer_name"},
+			request_url="https://nudg.example.com/api/method/nudg.integrations.erpnext.ingest.receive",
+			secret="inbound-secret",
+		)
+		self.assertEqual(document["name"], "Nudge Acme Sales Invoice on_submit")
+		self.assertEqual(document["webhook_headers"][0]["value"], "Acme")
+		self.assertNotIn("webhook_doctype", webhook_update(document))
+		alert = alert_from_webhook(document, "Acme")
+		self.assertEqual(alert["doctype"], "Sales Invoice")
+		self.assertEqual(alert["template"], "invoice_ready")
+		self.assertEqual(alert["variables"], {"customer": "customer_name"})
+		self.assertTrue(alert["enabled"])
+		self.assertIsNone(alert_from_webhook(document, "Other"))
+
+	def test_alert_stays_on_the_same_webhook_when_modified(self):
+		original = webhook_document(
+			name=webhook_document_name("Acme", "Sales Invoice on_submit"),
+			site_name="Acme",
+			doctype="Sales Invoice",
+			event="on_submit",
+			phone_field="contact_mobile",
+			template="invoice_ready",
+			variables={"customer": "customer_name"},
+			request_url="https://nudg.example.com/api/method/nudg.integrations.erpnext.ingest.receive",
+			secret="inbound-secret",
+		)
+		original["enabled"] = 0
+		disabled = alert_from_webhook(original, "Acme")
+		self.assertFalse(disabled["enabled"])
+		self.assertEqual(disabled["doctype"], "Sales Invoice")
+
+		changed = webhook_document(
+			name=original["name"],
+			site_name="Acme",
+			doctype="Sales Invoice",
+			event="on_submit",
+			phone_field="mobile_no",
+			template="invoice_cancelled",
+			variables={"customer": "customer"},
+			request_url=original["request_url"],
+			secret="inbound-secret",
+			enabled=False,
+		)
+		updated = webhook_update(changed)
+		self.assertEqual(updated["enabled"], 0)
+		self.assertNotIn("webhook_doctype", updated)
+		self.assertNotIn("webhook_docevent", updated)
+		merged = {**original, **updated}
+		alert = alert_from_webhook(merged, "Acme")
+		self.assertEqual(alert["name"], original["name"])
+		self.assertEqual(alert["doctype"], "Sales Invoice")
+		self.assertEqual(alert["event"], "on_submit")
+		self.assertEqual(alert["phone_field"], "mobile_no")
+		self.assertEqual(alert["template"], "invoice_cancelled")
+		self.assertEqual(alert["variables"], {"customer": "customer"})
+		self.assertFalse(alert["enabled"])
+		self.assertEqual(webhook_variable_map(changed["webhook_json"]), {"customer": "customer"})
+		with self.assertRaises(PayloadError):
+			webhook_document(
+				name="Nudg alert",
+				site_name="Acme",
+				doctype="Sales Invoice",
+				event="on_trash",
+				phone_field="contact_mobile",
+				template="invoice_ready",
+				variables={},
+				request_url="https://nudg.example.com/api/method/nudg.integrations.erpnext.ingest.receive",
+				secret="inbound-secret",
+			)
 
 	def test_replay_keeps_the_first_send(self):
 		sent = {"status": "Sent", "payload_sha": "a", "message_id": "wamid.1", "skip_reason": ""}
@@ -177,3 +297,41 @@ class TestClient(unittest.TestCase):
 		self.assertTrue(raised.exception.retryable)
 		self.assertNotIn("abcdefghijklmnop", str(raised.exception))
 		self.assertIn("[REDACTED]", str(raised.exception))
+
+	def test_resource_paths_are_quoted_and_named_routes_keep_the_slash(self):
+		seen = {}
+
+		def transport(method, url, **kwargs):
+			seen["method"] = method
+			seen["url"] = url
+			seen["json"] = kwargs.get("json")
+			seen["params"] = kwargs.get("params")
+			return _Response(200, json.dumps({"name": "Nudg Acme Sales Invoice on_submit"}))
+
+		with patch("nudg.integrations.erpnext.client.validate_site_url", side_effect=lambda url, **kwargs: "https://erp.example.com"):
+			client = ERPNextClient("https://erp.example.com", "key", "secret", transport=transport)
+			client.insert_resource("Webhook", {"name": "Nudg Acme Sales Invoice on_submit"})
+			self.assertEqual(seen["method"], "POST")
+			self.assertEqual(seen["url"], "https://erp.example.com/api/resource/Webhook")
+			client.update_resource("Webhook", "Nudg Acme Sales Invoice on_submit", {"enabled": 0})
+			self.assertEqual(seen["method"], "PUT")
+			self.assertEqual(
+				seen["url"],
+				"https://erp.example.com/api/resource/Webhook/Nudg%20Acme%20Sales%20Invoice%20on_submit/",
+			)
+			client.get_resources("Webhook", fields=["name"], filters=[["request_url", "like", "%receive%"]], limit=20)
+			self.assertEqual(seen["method"], "GET")
+			self.assertEqual(json.loads(seen["params"]["fields"]), ["name"])
+			self.assertEqual(seen["params"]["limit_page_length"], 20)
+
+	def test_resource_responses_unwrap_the_data_envelope(self):
+		def transport(method, url, **kwargs):
+			if method == "GET" and url.endswith("/Sales%20Invoice/"):
+				return _Response(200, json.dumps({"data": {"name": "Sales Invoice", "is_submittable": 1, "fields": []}}))
+			return _Response(200, json.dumps({"data": [{"name": "Webhook"}]}))
+
+		with patch("nudg.integrations.erpnext.client.validate_site_url", side_effect=lambda url, **kwargs: "https://erp.example.com"):
+			client = ERPNextClient("https://erp.example.com", "key", "secret", transport=transport)
+			doc = client.get_resource("DocType", "Sales Invoice")
+			self.assertEqual(doc["is_submittable"], 1)
+			self.assertEqual(client.get_resources("Webhook", fields=["name"], limit=10), [{"name": "Webhook"}])

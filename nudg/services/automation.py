@@ -312,7 +312,7 @@ def _run_action(rule: Any, profile: str | None) -> str:
 	frappe.throw(_("Unknown automation action {0}.").format(action))
 
 
-_TRIGGERS = ("Incoming Message", "Status Failed", "Window Closed", "Keyword Match", "Keyword Rule", "Out of Office")
+_TRIGGERS = ("Incoming Message", "Status Failed", "Keyword Match", "Keyword Rule")
 _ACTIONS = ("Send Template", "Assign", "Quick Reply", "Send Text")
 _OPERATORS = ("Exact", "Contains", "Starts With", "Regex")
 

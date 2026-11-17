@@ -34,7 +34,9 @@ describe('CatalogsView', () => {
     expect(wrapper.text()).toContain('Festive Hampers & Spice Trunks')
     expect(wrapper.text()).toContain('Royal Green Cardamom')
     expect(wrapper.text()).toContain('Tellicherry Black Pepper')
-    expect(wrapper.text()).toContain('Meta Commerce Manager Active')
+    expect(wrapper.text()).toContain('Stored on this site')
+    expect(wrapper.text()).toContain('Meta Commerce Catalog sync is not enabled in this build.')
+    expect(wrapper.text()).not.toContain('Meta Commerce Manager Active')
   })
 
   it('filters product items by search query', async () => {

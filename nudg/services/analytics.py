@@ -1,4 +1,4 @@
-"""Live inbox analytics computed from WA Message and WA Conversation."""
+"""Live inbox analytics computed from WA Message and WA Profile."""
 
 from __future__ import annotations
 
@@ -54,15 +54,15 @@ def _compute(account: str | None) -> dict:
 		failed_messages = frappe.db.count("WA Message", {**msg_filters, "status": "Failed"})
 
 	open_conversations = unassigned = 0
-	if frappe.db.exists("DocType", "WA Conversation"):
+	if frappe.db.exists("DocType", "WA Profile") and frappe.db.has_column("WA Profile", "assignment_status"):
 		conv_filters = {}
 		if account:
 			conv_filters["whatsapp_account"] = account
 		open_conversations = frappe.db.count(
-			"WA Conversation", {**conv_filters, "assignment_status": ["in", ["Unassigned", "Assigned"]]}
+			"WA Profile", {**conv_filters, "assignment_status": ["in", ["Unassigned", "Assigned"]]}
 		)
 		unassigned = frappe.db.count(
-			"WA Conversation", {**conv_filters, "assignment_status": "Unassigned"}
+			"WA Profile", {**conv_filters, "assignment_status": "Unassigned"}
 		)
 
 	campaigns_sent = 0

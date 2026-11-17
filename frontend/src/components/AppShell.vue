@@ -21,7 +21,7 @@ import ManualConnectDialog from '@/components/ManualConnectDialog.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import { isManager, useDesk } from '@/stores/desk'
 import { shellNav } from '@/router'
-import logoUrl from '@/assets/logo.png'
+import logoUrl from '@/assets/logo.svg'
 
 const desk = useDesk()
 const route = useRoute()

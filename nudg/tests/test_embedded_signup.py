@@ -84,3 +84,34 @@ class TestEmbeddedSignup(unittest.TestCase):
 	def test_complete_signup_rejects_a_missing_code(self, _throw):
 		with self.assertRaises(frappe.ValidationError):
 			embedded_signup.complete_signup("")
+
+	def test_current_app_secret_is_used(self):
+		doc = MagicMock()
+		doc.doctype = "WA Signup Settings"
+		doc.get_password.return_value = "current-secret"
+		with patch("frappe.utils.password.get_decrypted_password") as decrypt:
+			self.assertEqual(embedded_signup._read_secret(doc), "current-secret")
+		decrypt.assert_not_called()
+
+	def test_secret_saved_before_rename_is_copied(self):
+		doc = MagicMock()
+		doc.doctype = "WA Signup Settings"
+		doc.get_password.return_value = None
+
+		def decrypt(doctype, name, fieldname="password", raise_exception=True):
+			if doctype == "WhatsApp Signup Settings":
+				return "legacy-secret"
+			return None
+
+		mock_db = MagicMock()
+		mock_db.exists.return_value = True
+		with (
+			patch("frappe.utils.password.get_decrypted_password", side_effect=decrypt),
+			patch("frappe.utils.password.set_encrypted_password") as store,
+			patch("frappe.utils.password.remove_encrypted_password") as remove,
+			patch.object(embedded_signup.frappe, "db", mock_db),
+		):
+			secret = embedded_signup._read_secret(doc)
+		self.assertEqual(secret, "legacy-secret")
+		store.assert_called_once_with("WA Signup Settings", "WA Signup Settings", "legacy-secret", "app_secret")
+		remove.assert_called_once_with("WhatsApp Signup Settings", "WhatsApp Signup Settings", "app_secret")

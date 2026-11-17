@@ -33,8 +33,7 @@ after_install = "nudg.install.after_install"
 after_migrate = ["nudg.install.after_migrate"]
 
 permission_query_conditions = {
-	"WA Conversation": "nudg.security.get_tenant_conversation_query",
-	"NUDG Conversation": "nudg.security.get_tenant_conversation_query",
+	"WA Profile": "nudg.security.get_tenant_conversation_query",
 	"UTM Campaign": "nudg.security.get_tenant_campaign_query",
 	"WA Automation Rule": "nudg.security.get_tenant_rule_query",
 	"WA Quick Reply": "nudg.security.get_tenant_quick_reply_query",
@@ -42,8 +41,7 @@ permission_query_conditions = {
 }
 
 has_permission = {
-	"WA Conversation": "nudg.security.has_tenant_permission",
-	"NUDG Conversation": "nudg.security.has_tenant_permission",
+	"WA Profile": "nudg.security.has_tenant_permission",
 	"UTM Campaign": "nudg.security.has_tenant_permission",
 	"WA Automation Rule": "nudg.security.has_tenant_permission",
 	"WA Quick Reply": "nudg.security.has_tenant_permission",
@@ -60,6 +58,12 @@ doc_events = {
 			"nudg.security.on_user_created",
 			"nudg.desk_access.assign_module_profile",
 		],
+	},
+	"WA Account": {
+		"validate": "nudg.integrations.erpnext.service.validate_account_site",
+	},
+	"WA Profile": {
+		"on_update": "nudg.services.assignments.on_conversation_update",
 	},
 	"WA Message": {
 		"after_insert": "nudg.services.automation.on_wa_message",

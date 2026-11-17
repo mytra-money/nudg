@@ -307,8 +307,8 @@ def close_conversation(profile: str) -> dict:
 def ensure_conversation(profile: str) -> dict:
 	_require_login()
 	name = assignments.ensure_conversation(profile)
-	doc = frappe.get_doc("WA Conversation", name)
-	frappe.has_permission("WA Conversation", "read", doc=doc, throw=True)
+	doc = frappe.get_doc("WA Profile", name)
+	frappe.has_permission("WA Profile", "read", doc=doc, throw=True)
 	return assignments._serialize(doc)
 
 

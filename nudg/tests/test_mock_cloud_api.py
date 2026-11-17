@@ -782,13 +782,13 @@ class TestCampaignEndToEndMocked(unittest.TestCase):
 						if isinstance(field_dict, dict):
 							for k, v in field_dict.items():
 								setattr(r, k, v)
-			elif dt in ("WhatsApp Campaign", "UTM Campaign"):
+			elif dt == "UTM Campaign":
 				if isinstance(field_dict, dict):
 					for k, v in field_dict.items():
 						setattr(campaign_doc, k, v)
 
 		self.mock_db.set_value.side_effect = mock_set_value
-		self.mock_db.exists.side_effect = lambda dt, name=None: True if dt in ("DocType", "WA Campaign Recipient", "UTM Campaign", "WhatsApp Campaign") else False
+		self.mock_db.exists.side_effect = lambda dt, name=None: True if dt in ("DocType", "WA Campaign Recipient", "UTM Campaign") else False
 		self.mock_db.has_column.return_value = True
 
 		# Step 1: Execute Campaign Run within MockWhatsAppCloudApi

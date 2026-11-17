@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="256" y1="0" x2="256" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1FE0B3"/>
+      <stop offset="0.46" stop-color="#0C9A84"/>
+      <stop offset="1" stop-color="#026050"/>
+    </linearGradient>
+    <radialGradient id="sheen" cx="0.5" cy="0" r="0.62">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.16"/>
+      <stop offset="0.55" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <!-- App Icon Squircle Background -->
+  <rect width="512" height="512" rx="115" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="115" fill="url(#sheen)"/>
+  
+  <!-- Back Speech Bubble (with smooth lower-left tail and matching cutout) -->
+  <path fill="#ffffff" d="M297.3,152.8 A104,104 0 1 0 131.5,277 C135,288 123,316 123,327 Q124,334.5 129,333.5 L178,314.5 A104,104 0 0 0 186,317.7 A118.5,118.5 0 0 1 297.3,152.8 Z"/>
+  
+  <!-- Front Speech Bubble (with matching lower-left tail) -->
+  <path fill="#ffffff" d="M258,372 A104,104 0 1 0 209,330 C204,345 193,368 193,383 Q194,389.5 200,387.5 L258,372 Z"/>
+  
+  <!-- WhatsApp Mint Diagonal Arrow -->
+  <g fill="none" stroke="#25D366" stroke-width="22.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M273.5,232.8 H335.3 V293.1"/>
+    <path d="M249.3,318.3 L335.3,232.8"/>
+  </g>
+</svg>

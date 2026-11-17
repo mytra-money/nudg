@@ -4,9 +4,7 @@
 from __future__ import annotations
 
 import datetime
-import json
 import unittest
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import frappe
@@ -58,19 +56,19 @@ class TestInboxAndPresenceParity(unittest.TestCase):
 	# -------------------------------------------------------------------------
 
 	def test_note_doctype_schema_structure(self):
-		"""Assert WA Conversation schema contains required fields."""
-		app_path = Path(frappe.get_app_path("nudg"))
-		schema_file = app_path / "nudg" / "doctype" / "wa_conversation" / "wa_conversation.json"
-		self.assertTrue(schema_file.exists(), f"Schema missing: {schema_file}")
+		"""Assignment and tags are fields on WA Profile, not a conversation DocType."""
+		from nudg.install import account_site_fields, profile_inbox_fields
 
-		data = json.loads(schema_file.read_text())
-		self.assertEqual(data.get("doctype"), "DocType")
-		self.assertEqual(data.get("name"), "WA Conversation")
+		profile_fields = {field["fieldname"]: field for field in profile_inbox_fields()}
+		self.assertIn("assignment_status", profile_fields)
+		self.assertIn("assignee", profile_fields)
+		self.assertIn("tags", profile_fields)
+		self.assertEqual(profile_fields["assignee"]["options"], "User")
 
-		fields = {f["fieldname"]: f for f in data.get("fields", [])}
-		self.assertIn("profile", fields)
-		self.assertIn("assignment_status", fields)
-		self.assertIn("whatsapp_account", fields)
+		site_fields = {field["fieldname"]: field for field in account_site_fields()}
+		self.assertEqual(site_fields["connected_site_tab"]["fieldtype"], "Tab Break")
+		self.assertIn("erp_site_url", site_fields)
+		self.assertIn("erp_inbound_secret", site_fields)
 
 	# -------------------------------------------------------------------------
 	# 2. Conversation Tags Tests

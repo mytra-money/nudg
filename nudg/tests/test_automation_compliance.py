@@ -54,6 +54,17 @@ class TestAutomationCompliance(unittest.TestCase):
 	# 1. Keyword Matching Unit Tests
 	# -------------------------------------------------------------------------
 
+	def test_window_closed_and_out_of_office_cannot_be_saved(self):
+		from nudg.services.automation import _TRIGGERS, create_rule
+
+		self.assertNotIn("Window Closed", _TRIGGERS)
+		self.assertNotIn("Out of Office", _TRIGGERS)
+		with patch("frappe.has_permission", return_value=True):
+			with self.assertRaises(frappe.ValidationError):
+				create_rule("Night reply", "Out of Office", "Send Text", action_reference="We are closed")
+			with self.assertRaises(frappe.ValidationError):
+				create_rule("Closed window", "Window Closed", "Send Template", action_reference="hello")
+
 	def test_keyword_match_exact(self):
 		from nudg.services.automation import evaluate_keyword_match
 

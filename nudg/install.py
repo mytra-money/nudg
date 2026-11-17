@@ -20,7 +20,6 @@ DESK_GRANTS = {
 	"WA Catalog": ("read", "report", "print"),
 	"WA Catalog Item": ("read", "report", "print"),
 	"WA Quick Reply": ("read", "write", "create", "report", "print"),
-	"WA Conversation": ("read", "write", "create", "report", "print"),
 	"UTM Campaign": ("read", "report", "print"),
 	"WA Automation Rule": ("read", "report", "print"),
 	"WA Automation Run": ("read", "report", "print"),
@@ -36,7 +35,6 @@ AGENT_LOCKED = (
 
 MANAGER_GRANTS = {
 	"WA Account": ("read", "write", "create", "report", "print"),
-	"WA Conversation": ("read", "write", "create", "delete", "report", "print"),
 	"UTM Campaign": ("read", "write", "create", "delete", "report", "print"),
 	"WA Automation Rule": ("read", "write", "create", "delete", "report", "print"),
 	"WA Automation Run": ("read", "write", "report", "print"),
@@ -78,6 +76,160 @@ def _ensure_desk_modules():
 	from nudg.desk_access import ensure_module_access
 
 	ensure_module_access()
+
+
+def account_site_fields() -> list[dict]:
+	"""Connected ERPNext site, stored on the WhatsApp account."""
+	return [
+		{
+			"fieldname": "connected_site_tab",
+			"label": "Connected Site",
+			"fieldtype": "Tab Break",
+			"insert_after": "append_actions",
+		},
+		{
+			"fieldname": "erp_site_name",
+			"label": "Site Name",
+			"fieldtype": "Data",
+			"insert_after": "connected_site_tab",
+			"in_list_view": 1,
+		},
+		{
+			"fieldname": "erp_status",
+			"label": "Site Status",
+			"fieldtype": "Select",
+			"options": "Pending\nConnected\nDisabled\nError",
+			"default": "Pending",
+			"insert_after": "erp_site_name",
+			"in_list_view": 1,
+		},
+		{
+			"fieldname": "erp_site_url",
+			"label": "Site URL",
+			"fieldtype": "Data",
+			"length": 300,
+			"insert_after": "erp_status",
+		},
+		{
+			"fieldname": "erp_remote_user",
+			"label": "Remote User",
+			"fieldtype": "Data",
+			"read_only": 1,
+			"insert_after": "erp_site_url",
+		},
+		{
+			"fieldname": "erp_credentials_col",
+			"fieldtype": "Column Break",
+			"insert_after": "erp_remote_user",
+		},
+		{
+			"fieldname": "erp_api_key",
+			"label": "API Key",
+			"fieldtype": "Password",
+			"length": 500,
+			"insert_after": "erp_credentials_col",
+		},
+		{
+			"fieldname": "erp_api_secret",
+			"label": "API Secret",
+			"fieldtype": "Password",
+			"length": 500,
+			"insert_after": "erp_api_key",
+		},
+		{
+			"fieldname": "erp_inbound_secret",
+			"label": "Inbound Secret",
+			"fieldtype": "Password",
+			"read_only": 1,
+			"insert_after": "erp_api_secret",
+			"description": "Nudge generates this and installs it as the ERPNext webhook secret.",
+		},
+		{
+			"fieldname": "erp_last_error",
+			"label": "Last Error",
+			"fieldtype": "Small Text",
+			"read_only": 1,
+			"insert_after": "erp_inbound_secret",
+		},
+	]
+
+
+def profile_inbox_fields() -> list[dict]:
+	"""Assignment, tags, and cached inbox status live on the WhatsApp profile."""
+	return [
+		{
+			"fieldname": "inbox_section",
+			"label": "Assignment",
+			"fieldtype": "Section Break",
+			"insert_after": "wa_id",
+		},
+		{
+			"fieldname": "assignee",
+			"label": "Assignee",
+			"fieldtype": "Link",
+			"options": "User",
+			"insert_after": "inbox_section",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+		},
+		{
+			"fieldname": "assignment_status",
+			"label": "Assignment Status",
+			"fieldtype": "Select",
+			"options": "Unassigned\nAssigned\nClosed",
+			"default": "Unassigned",
+			"insert_after": "assignee",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+		},
+		{
+			"fieldname": "priority",
+			"label": "Priority",
+			"fieldtype": "Select",
+			"options": "Low\nMedium\nHigh",
+			"default": "Medium",
+			"insert_after": "assignment_status",
+		},
+		{
+			"fieldname": "tags",
+			"label": "Tags",
+			"fieldtype": "Data",
+			"insert_after": "priority",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+		},
+		{
+			"fieldname": "inbox_col",
+			"fieldtype": "Column Break",
+			"insert_after": "tags",
+		},
+		{
+			"fieldname": "last_assigned_on",
+			"label": "Last Assigned On",
+			"fieldtype": "Datetime",
+			"read_only": 1,
+			"insert_after": "inbox_col",
+		},
+		{
+			"fieldname": "assignment_source",
+			"label": "Assignment Source",
+			"fieldtype": "Select",
+			"options": "\nManual\nAssignment Rule\nRound Robin",
+			"read_only": 1,
+			"insert_after": "last_assigned_on",
+		},
+		{
+			"fieldname": "conversation_status",
+			"label": "Inbox Status",
+			"fieldtype": "Select",
+			"options": "template_only\nneeds_reply\nwindow_open\nfailed\nblocked\nclosed",
+			"insert_after": "assignment_source",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"read_only": 1,
+			"description": "Cached from the latest WA Message and the 24-hour window. The inbox recomputes it.",
+		},
+	]
 
 
 def setup_standard_custom_fields():
@@ -204,25 +356,12 @@ def setup_standard_custom_fields():
 				"hidden": 1,
 				"description": "Cloud API registration PIN from Embedded Signup. Not shown in the desk.",
 			},
+			*account_site_fields(),
 		]
 
 	if frappe.db.exists("DocType", "WA Profile"):
-		custom_fields["WA Profile"] = [
-			{
-				"fieldname": "consent_status",
-				"label": "Consent Status",
-				"fieldtype": "Select",
-				"options": "\nOpted-In\nOpted-Out\nPending",
-				"insert_after": "status",
-				"description": "STOP opts the customer out of broadcasts. A blank value still allows sending.",
-			},
-			{
-				"fieldname": "consent_reason",
-				"label": "Consent Reason",
-				"fieldtype": "Small Text",
-				"insert_after": "consent_status",
-			},
-		]
+		_drop_custom_fields("WA Profile", ("consent_status", "consent_reason"))
+		custom_fields["WA Profile"] = profile_inbox_fields()
 
 	# Optional ERPNext Item integration for self-hosted instances
 	if frappe.db.exists("DocType", "WA Catalog Item") and frappe.db.exists("DocType", "Item"):
@@ -245,6 +384,19 @@ def setup_standard_custom_fields():
 				frappe.clear_cache(doctype=dt)
 		except Exception:
 			frappe.log_error(title="Nudg setup_standard_custom_fields error")
+
+
+def _drop_custom_fields(doctype: str, fieldnames: tuple[str, ...]) -> None:
+	"""Remove custom fields that should no longer appear on the form."""
+	removed = False
+	for fieldname in fieldnames:
+		name = frappe.db.get_value("Custom Field", {"dt": doctype, "fieldname": fieldname})
+		if not name:
+			continue
+		frappe.delete_doc("Custom Field", name, force=True, ignore_permissions=True)
+		removed = True
+	if removed:
+		frappe.clear_cache(doctype=doctype)
 
 
 def ensure_role():
