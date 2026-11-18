@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { Avatar, Button, Dialog, Dropdown, Select, TextInput, call, toast } from 'frappe-ui'
 import { MessageInput, MessageList } from '@whatsapp/ui/components/Messages'
@@ -9,10 +9,11 @@ import ProfileDetails from '@/components/ProfileDetails.vue'
 import {
   CONVERSATION_STATUS_FILTERS,
   CONVERSATION_STATUS_LABEL,
+  conversationStatusAt,
   conversationStatusOf,
 } from '@/utils/conversationStatus'
 import { useDeskComposer } from '@/composables/useComposer'
-import { formatDay, formatRemaining, formatTime, initials, previewText } from '@/utils/format'
+import { formatDay, formatRemaining, formatTime, initials, previewText, serviceWindow } from '@/utils/format'
 import { userFacingError } from '@/utils/errors'
 import { useDesk } from '@/stores/desk'
 import {
@@ -102,6 +103,18 @@ const assignUser = ref('')
 const picked = ref<Template | null>(null)
 const scroller = ref<HTMLElement | null>(null)
 const sessionUser = window.user || ''
+const now = ref(Date.now())
+let clock = 0
+onMounted(() => {
+  clock = window.setInterval(() => {
+    now.value = Date.now()
+  }, 30000)
+})
+onUnmounted(() => window.clearInterval(clock))
+
+function rowStatus(row: Conversation) {
+  return conversationStatusAt(row, now.value)
+}
 
 const filterOptions = CONVERSATION_STATUS_FILTERS.map((row) => ({
   label: row.label,
@@ -147,10 +160,10 @@ const allRows = computed(() => {
 })
 const countAll = computed(() => allRows.value.length)
 const countNeedsReply = computed(
-  () => allRows.value.filter((r) => r.needs_reply || conversationStatusOf(r) === 'needs_reply').length,
+  () => allRows.value.filter((r) => rowStatus(r) === 'needs_reply').length,
 )
 const countWindowOpen = computed(
-  () => allRows.value.filter((r) => r.window?.status === 'open').length,
+  () => allRows.value.filter((r) => rowStatus(r) === 'window_open').length,
 )
 const countUnassigned = computed(
   () => allRows.value.filter((r) => !r.assignment?.assignee || r.assignment?.assignment_status === 'Unassigned').length,
@@ -164,8 +177,8 @@ const conversations = computed(() => {
     if (assignFilter.value === 'mine' && row.assignment?.assignee !== sessionUser) return false
     if (assignFilter.value === 'unassigned' && row.assignment?.assignee && row.assignment?.assignment_status !== 'Unassigned') return false
     if (filter.value === 'all') return true
-    if (filter.value === 'window_open') return row.window?.status === 'open'
-    return conversationStatusOf(row) === filter.value
+    if (filter.value === 'window_open') return rowStatus(row) === 'window_open'
+    return rowStatus(row) === filter.value
   })
 })
 
@@ -180,7 +193,11 @@ const current = computed(() => {
   if (!threadAccountAllowed(thread?.profile?.whatsapp_account, desk.inbox.value?.accounts)) return null
   return thread
 })
-const windowState = computed(() => desk.windowState.value)
+const windowState = computed(() => {
+  const messages = current.value?.messages
+  if (!messages) return null
+  return serviceWindow(messages, now.value)
+})
 
 watch(
   () => [desk.profile.value, current.value?.messages.length] as const,
@@ -585,7 +602,7 @@ async function retryMessage(message: WhatsAppMessage) {
             <Avatar :label="row.profile.profile_name || row.profile.phone_number" size="xl">
               <template #indicator>
                 <span
-                  v-if="conversationStatusOf(row) === 'window_open'"
+                  v-if="rowStatus(row) === 'window_open'"
                   class="size-2.5 rounded-full bg-[#25D366] ring-2 ring-white"
                   title="24h Service Window Open"
                 />
@@ -627,16 +644,16 @@ async function retryMessage(message: WhatsAppMessage) {
 
                 <!-- Window Open Remaining Time -->
                 <span
-                  v-else-if="conversationStatusOf(row) === 'window_open'"
+                  v-else-if="rowStatus(row) === 'window_open'"
                   class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700 ring-1 ring-emerald-600/20"
                 >
                   <span class="size-1.5 rounded-full bg-emerald-500" />
-                  {{ formatRemaining(row.window.expires_at) }}
+                  {{ formatRemaining(row.window.expires_at, now) }}
                 </span>
 
                 <!-- Failed Pill -->
                 <span
-                  v-else-if="conversationStatusOf(row) === 'failed'"
+                  v-else-if="rowStatus(row) === 'failed'"
                   class="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 font-medium text-red-700"
                 >
                   Failed
@@ -644,7 +661,7 @@ async function retryMessage(message: WhatsAppMessage) {
 
                 <!-- Blocked Pill -->
                 <span
-                  v-else-if="conversationStatusOf(row) === 'blocked'"
+                  v-else-if="rowStatus(row) === 'blocked'"
                   class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 font-medium text-gray-700"
                 >
                   Blocked
@@ -652,7 +669,7 @@ async function retryMessage(message: WhatsAppMessage) {
 
                 <!-- Template Only -->
                 <span
-                  v-else-if="conversationStatusOf(row) === 'template_only'"
+                  v-else-if="rowStatus(row) === 'template_only'"
                   class="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-700"
                 >
                   Template only
@@ -721,7 +738,7 @@ async function retryMessage(message: WhatsAppMessage) {
       </div>
 
       <!-- Loading State -->
-      <div v-else-if="desk.threadLoading.value" class="grid flex-1 place-items-center text-sm text-ink-gray-6">
+      <div v-else-if="!current && desk.threadLoading.value" class="grid flex-1 place-items-center text-sm text-ink-gray-6">
         <div class="flex items-center gap-2">
           <span class="lucide-loader-2 size-4 animate-spin text-[#075E54]" />
           <span>Opening conversation thread…</span>
@@ -773,7 +790,7 @@ async function retryMessage(message: WhatsAppMessage) {
               title="24-hour customer care window is open"
             >
               <span class="size-1.5 rounded-full bg-emerald-500" />
-              <span>{{ formatRemaining(windowState.expires_at) }}</span>
+              <span>{{ formatRemaining(windowState.expires_at, now) }}</span>
             </div>
             <div
               v-else

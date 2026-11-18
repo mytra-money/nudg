@@ -4,10 +4,17 @@ import { createResource, toast } from 'frappe-ui'
 import { conversationStatusOf } from '@/utils/conversationStatus'
 import { errorText } from '@/utils/format'
 import { sampleInbox, sampleLogs } from '@/mocks/sample'
+import { applyConversation, isNewIncoming, type InboxLiveEvent } from '@/stores/inboxLive'
 import { isLiveSession } from '@/stores/session'
 import { playSound } from '@/stores/sounds'
+import { getSocket } from '@/socket'
 import { deskCacheKey } from '@/utils/deskCache'
 import type { Inbox, LogRow } from '@/types'
+
+export interface InboxLiveHandlers {
+  onEvent?: (event: InboxLiveEvent) => void
+  onReconnect?: () => void
+}
 
 export type PresenceRow = { user: string; name: string; typing: boolean; viewing: boolean }
 
@@ -18,6 +25,8 @@ export const useInboxStore = defineStore('nudg-inbox', () => {
   const loading = ref(true)
   const started = ref(false)
   let realtimeBound = false
+  let catchUp = false
+  let liveHandlers: InboxLiveHandlers = {}
 
   const inboxResource = createResource<Inbox | null>({
     url: 'nudg.api.get_inbox',
@@ -78,27 +87,50 @@ export const useInboxStore = defineStore('nudg-inbox', () => {
     presence.value = { ...presence.value, [id]: others }
   }
 
-  function bindRealtime(onMessage: () => void) {
-    if (realtimeBound || typeof window === 'undefined') return
-    const realtime = (window as Window & { frappe?: { realtime?: { on: (event: string, cb: (data: unknown) => void) => void } } })
-      .frappe?.realtime
-    if (!realtime) return
-    realtimeBound = true
-    realtime.on('nudg_message', (data: unknown) => {
-      const payload = data as { direction?: string; contact?: string; channel?: string }
-      if (payload?.direction === 'Incoming') {
-        playSound('receive')
-        onMessage()
-      }
-    })
-    realtime.on('whatsapp_inbox_update', () => {
-      void refresh()
-    })
-    realtime.on('nudg_agent_typing', (data) => applyPresence(data as Record<string, unknown>, 'typing'))
-    realtime.on('nudg_agent_viewing', (data) => applyPresence(data as Record<string, unknown>, 'viewing'))
+  function bindLive(handlers: InboxLiveHandlers) {
+    liveHandlers = handlers
+    bindRealtime()
   }
 
-  async function load(onIncoming?: () => void) {
+  function applyLive(event: InboxLiveEvent) {
+    const current = inbox.value
+    const card = event.conversation
+    if (!current || !card?.profile?.name) return
+    const account = card.profile.whatsapp_account
+    if (account && !current.accounts.some((row) => row.name === account)) return
+    const previous = current.conversations.find((row) => row.profile.name === card.profile.name)
+    if (isNewIncoming(previous, event)) playSound('receive')
+    inboxResource.setData({
+      ...current,
+      conversations: applyConversation(current.conversations, event),
+    })
+    syncTabTitle()
+    liveHandlers.onEvent?.(event)
+  }
+
+  /**
+   * Live updates arrive as `nudg_inbox` on the desk socket. Each event is one
+   * conversation the server already computed, so the list and the open thread
+   * change in place. A refetch runs only after the socket reconnects, to heal
+   * events missed while the tab was offline, and it does not clear the screen.
+   */
+  function bindRealtime() {
+    if (realtimeBound || typeof window === 'undefined') return
+    const socket = getSocket()
+    if (!socket) return
+    realtimeBound = true
+    socket.on('nudg_inbox', (data: InboxLiveEvent) => applyLive(data))
+    socket.on('nudg_agent_typing', (data: Record<string, unknown>) => applyPresence(data, 'typing'))
+    socket.on('nudg_agent_viewing', (data: Record<string, unknown>) => applyPresence(data, 'viewing'))
+    socket.on('connect', () => {
+      if (!catchUp) return
+      void refresh({ silent: true })
+      liveHandlers.onReconnect?.()
+    })
+  }
+
+  async function load() {
+    bindRealtime()
     if (started.value && inbox.value) return
     started.value = true
     loading.value = true
@@ -113,25 +145,22 @@ export const useInboxStore = defineStore('nudg-inbox', () => {
       if (inboxResource.data?.can_read_logs) {
         await logsResource.fetch({ account: accountArg() })
       }
-      bindRealtime(() => {
-        onIncoming?.()
-        void refresh()
-      })
     } catch (caught) {
       error.value = errorText(caught)
     } finally {
       loading.value = false
+      catchUp = isLiveSession()
       syncTabTitle()
     }
   }
 
-  async function refresh() {
+  async function refresh(options?: { silent?: boolean }) {
     if (!isLiveSession()) return
     try {
       await inboxResource.fetch({ account: accountArg() })
       syncTabTitle()
     } catch (caught) {
-      toast.error(errorText(caught))
+      if (!options?.silent) toast.error(errorText(caught))
     }
   }
 
@@ -162,6 +191,7 @@ export const useInboxStore = defineStore('nudg-inbox', () => {
     logsResource,
     accountArg,
     syncTabTitle,
+    bindLive,
     load,
     refresh,
     setAccount,

@@ -8,9 +8,11 @@ import {
   sampleThread,
   templates as sampleTemplates,
 } from '@/mocks/sample'
-import { isLiveSession } from '@/stores/session'
 import { useInboxStore } from '@/stores/inbox'
+import { applyThreadMessage, type InboxLiveEvent } from '@/stores/inboxLive'
+import { isLiveSession } from '@/stores/session'
 import { playSound } from '@/stores/sounds'
+import { getSocket } from '@/socket'
 import { deskCacheKey, threadAccountAllowed } from '@/utils/deskCache'
 import type { ChatMessage, ConversationNote, Template, Thread } from '@/types'
 
@@ -91,6 +93,29 @@ export const useThreadStore = defineStore('nudg-thread', () => {
     })
   }
 
+  function applyLive(event: InboxLiveEvent) {
+    const current = threadResource.data
+    if (!current || profile.value !== event.profile) return
+    threadResource.setData(applyThreadMessage(current, event))
+  }
+
+  /** Replace the open thread from the server without clearing what is already on screen. */
+  async function syncOpen() {
+    const name = profile.value
+    if (!name || !isLiveSession()) return
+    try {
+      await threadResource.fetch({ profile: name })
+    } catch {
+      // Keep the messages already rendered.
+    }
+  }
+
+  async function confirmIfOffline() {
+    if (getSocket()?.connected) return
+    await syncOpen()
+    await useInboxStore().refresh({ silent: true })
+  }
+
   async function openProfile(name: string | null) {
     const previous = profile.value
     if (previous && previous !== name) announcePresence(previous, 'leave')
@@ -142,7 +167,6 @@ export const useThreadStore = defineStore('nudg-thread', () => {
       if (failed) toast.error('Template required')
       return row.name
     }
-    const inbox = useInboxStore()
     sending.value = true
     try {
       const reference = thread.value.references[0]
@@ -153,9 +177,8 @@ export const useThreadStore = defineStore('nudg-thread', () => {
         reference_doctype: reference?.doctype,
         reference_docname: reference?.docname,
       })
-      await openProfile(profile.value)
-      await inbox.refresh()
       playSound('send')
+      await confirmIfOffline()
       return typeof result === 'string' && result ? result : 'sent'
     } catch (caught) {
       toast.error(errorText(caught))
@@ -210,8 +233,8 @@ export const useThreadStore = defineStore('nudg-thread', () => {
         reference_doctype: reference?.doctype,
         reference_docname: reference?.docname,
       })
-      await openProfile(profile.value)
       playSound('send')
+      await confirmIfOffline()
       return typeof result === 'string' && result ? result : 'sent'
     } catch (caught) {
       toast.error(errorText(caught))
@@ -257,8 +280,8 @@ export const useThreadStore = defineStore('nudg-thread', () => {
         reference_doctype: reference?.doctype,
         reference_docname: reference?.docname,
       })
-      await openProfile(profile.value)
       playSound('send')
+      await confirmIfOffline()
       toast.success('Template sent')
     } catch (caught) {
       toast.error(errorText(caught))
@@ -281,7 +304,7 @@ export const useThreadStore = defineStore('nudg-thread', () => {
         message: messageName,
         emoji,
       })
-      await openProfile(profile.value)
+      await confirmIfOffline()
       return typeof result === 'string' && result ? result : messageName
     } catch (caught) {
       toast.error(errorText(caught))
@@ -312,6 +335,8 @@ export const useThreadStore = defineStore('nudg-thread', () => {
     windowState,
     threadResource,
     openProfile,
+    applyLive,
+    syncOpen,
     setThreadNotes,
     sendText,
     sendMedia,

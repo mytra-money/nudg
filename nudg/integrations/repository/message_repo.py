@@ -228,6 +228,13 @@ class DeskMessageRepository:
 				"errors": errors or [],
 			},
 		)
+		profile = frappe.db.get_value("WA Message", name, "to")
+		try:
+			from nudg.api import publish_inbox_change
+
+			publish_inbox_change(profile, name, bump=False)
+		except Exception:
+			pass
 		return True
 
 	@classmethod

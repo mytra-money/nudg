@@ -130,6 +130,40 @@ def _empty_inbox() -> dict:
 	}
 
 
+def _conversation_item(profile, preview, last_incoming, assignment) -> dict:
+	"""One inbox card. Shared by the list endpoint and the socket payload."""
+	window = _window(last_incoming)
+	status = conversation_status(profile, preview, window)
+	raw_tags = assignment.get("tags") or ""
+	conv_tags = [t.strip() for t in str(raw_tags).split(",") if t.strip()]
+	phone_norm = normalize_mobile_no(profile.phone_number)
+	bot_info = chatbot.get_bot_status(profile.phone_number, profile.whatsapp_account)
+	assignee = assignment.get("assignee")
+	return {
+		"profile": profile,
+		"phone_normalized": phone_norm,
+		"bot_status": bot_info,
+		"preview": preview,
+		"window": window,
+		"conversation_status": status,
+		"needs_reply": status == "needs_reply",
+		"failed": status == "failed",
+		"tags": conv_tags,
+		"tags_str": str(raw_tags),
+		"assignment": {
+			"name": assignment.get("name"),
+			"assignee": assignee,
+			"assignment_status": assignment.get("assignment_status") or "Unassigned",
+			"priority": assignment.get("priority"),
+			"assignment_source": assignment.get("assignment_source"),
+			"last_assigned_on": _iso(assignment.get("last_assigned_on"))
+			if assignment.get("last_assigned_on")
+			else None,
+			"tags": conv_tags,
+		},
+	}
+
+
 @frappe.whitelist()
 def get_inbox(account: str | None = None, tag: str | None = None, tags: str | None = None, queue: str | None = "all") -> dict:
 	if not _ready():
@@ -174,9 +208,9 @@ def get_inbox(account: str | None = None, tag: str | None = None, tags: str | No
 
 	for profile in profiles:
 		preview = latest.get(profile.name)
-		window = _window(last_incoming.get(profile.name))
-		status = conversation_status(profile, preview, window)
 		assignment = assignment_map.get(profile.name) or {}
+		conv_item = _conversation_item(profile, preview, last_incoming.get(profile.name), assignment)
+		status = conv_item["conversation_status"]
 
 		if assignment.get("name") and assignment.get("conversation_status") != status:
 			if _profile_column("conversation_status"):
@@ -184,7 +218,7 @@ def get_inbox(account: str | None = None, tag: str | None = None, tags: str | No
 			assignment["conversation_status"] = status
 
 		raw_tags = assignment.get("tags") or ""
-		conv_tags = [t.strip() for t in str(raw_tags).split(",") if t.strip()]
+		conv_tags = conv_item["tags"]
 
 		# Tag filter check
 		if filter_tag:
@@ -197,34 +231,8 @@ def get_inbox(account: str | None = None, tag: str | None = None, tags: str | No
 			if not match:
 				continue
 
-		phone_norm = normalize_mobile_no(profile.phone_number)
-		bot_info = chatbot.get_bot_status(profile.phone_number, profile.whatsapp_account)
+		bot_info = conv_item["bot_status"]
 		assignee = assignment.get("assignee")
-
-		conv_item = {
-			"profile": profile,
-			"phone_normalized": phone_norm,
-			"bot_status": bot_info,
-			"preview": preview,
-			"window": window,
-			# Single field the inbox filter uses. See conversation_status.py.
-			"conversation_status": status,
-			"needs_reply": status == "needs_reply",
-			"failed": status == "failed",
-			"tags": conv_tags,
-			"tags_str": str(raw_tags),
-			"assignment": {
-				"name": assignment.get("name"),
-				"assignee": assignee,
-				"assignment_status": assignment.get("assignment_status") or "Unassigned",
-				"priority": assignment.get("priority"),
-				"assignment_source": assignment.get("assignment_source"),
-				"last_assigned_on": _iso(assignment.get("last_assigned_on"))
-				if assignment.get("last_assigned_on")
-				else None,
-				"tags": conv_tags,
-			},
-		}
 
 		queue_counts["all"] += 1
 		if assignee == frappe.session.user:
@@ -421,6 +429,7 @@ def _send_auto_read_receipts(profile: str) -> None:
 			if msg.get("message_id"):
 				adapter.mark_as_read(msg.message_id, account_name)
 			frappe.db.set_value("WA Message", msg.name, "status", "Read", update_modified=False)
+			publish_inbox_change(profile, msg.name, bump=False)
 
 		frappe.db.commit()
 		frappe.publish_realtime(
@@ -879,6 +888,141 @@ def _stamp(row):
 	row.is_template = bool(row.is_template)
 	if row.get("error_message"):
 		row.error_message = format_error_message(row.error_message)
+	return row
+
+
+def publish_inbox_change(profile: str | None, message_name: str | None = None, bump: bool = False) -> None:
+	"""Push one conversation card the desk already computed.
+
+	The browser inserts that card and, when present, the one changed message.
+	It does not refetch the inbox. Failures are logged and never block the write
+	that triggered the event.
+	"""
+	if not profile:
+		return
+	try:
+		if not frappe.db.exists("DocType", "WA Message"):
+			return
+		card = _conversation_card(profile)
+		if not card:
+			return
+		message = _visible_message(message_name) if message_name else None
+		frappe.publish_realtime(
+			"nudg_inbox",
+			{
+				"profile": profile,
+				"bump": bool(bump and message),
+				"conversation": card,
+				"message": message,
+			},
+			after_commit=True,
+		)
+	except Exception:
+		frappe.log_error(title="Nudg inbox realtime", message=frappe.get_traceback())
+
+
+def _conversation_card(profile_name: str) -> dict | None:
+	rows = frappe.get_all(
+		"WA Profile",
+		filters={"name": profile_name},
+		fields=_profile_fields(),
+		limit_page_length=1,
+	)
+	if not rows:
+		return None
+	profile = rows[0]
+	messages = frappe.get_all(
+		"WA Message",
+		filters={"to": profile_name},
+		fields=MESSAGE_FIELDS,
+		order_by="creation desc",
+		limit_page_length=40,
+	)
+	preview = None
+	last_incoming = None
+	for row in messages:
+		stamped = _stamp(frappe._dict(row))
+		if stamped.get("reaction"):
+			continue
+		if preview is None:
+			preview = stamped
+		if stamped.get("direction") == "Incoming" and last_incoming is None:
+			last_incoming = stamped.creation
+		if preview is not None and last_incoming is not None:
+			break
+	try:
+		assignment = assignments.get_conversation_map([profile_name]).get(profile_name) or {}
+	except Exception:
+		assignment = {}
+	return _conversation_item(profile, preview, last_incoming, assignment)
+
+
+def _as_message(row):
+	if not row:
+		return None
+	return _stamp(frappe._dict(row))
+
+
+def _load_message(name: str | None):
+	if not name:
+		return None
+	return _as_message(frappe.db.get_value("WA Message", name, MESSAGE_FIELDS, as_dict=True))
+
+
+def _visible_message(name: str | None):
+	"""The bubble this change should update. A reaction updates its parent message."""
+	row = _load_message(name)
+	if not row:
+		return None
+	if row.get("reaction") is not None and (row.get("context_message_id") or row.get("reply_to_message")):
+		parent = _reaction_parent(row)
+		if not parent:
+			return None
+		row = parent
+	return _decorate_message(row)
+
+
+def _reaction_parent(row):
+	parent = _load_message(row.get("reply_to_message"))
+	if parent and not parent.get("reaction"):
+		return parent
+	context = row.get("context_message_id")
+	if not context:
+		return None
+	found = frappe.db.get_value("WA Message", {"message_id": context}, "name")
+	parent = _load_message(found)
+	if parent and not parent.get("reaction"):
+		return parent
+	return None
+
+
+def _decorate_message(row):
+	extras = [row]
+	quoted = None
+	if row.get("reply_to_message") and row.get("reply_to_message") != row.get("name"):
+		quoted = _load_message(row.get("reply_to_message"))
+	elif row.get("context_message_id"):
+		found = frappe.db.get_value("WA Message", {"message_id": row.get("context_message_id")}, "name")
+		quoted = _load_message(found)
+	if quoted and quoted.get("name") != row.get("name"):
+		extras.append(quoted)
+	message_id = row.get("message_id")
+	if message_id:
+		reactions = frappe.get_all(
+			"WA Message",
+			filters={"context_message_id": message_id},
+			fields=MESSAGE_FIELDS,
+			limit_page_length=30,
+		)
+		for reaction in reactions:
+			stamped = _as_message(reaction)
+			if stamped and stamped.get("name") != row.get("name"):
+				extras.append(stamped)
+	folded = _fold(extras)
+	_attach_templates(folded)
+	for item in folded:
+		if item.get("name") == row.get("name"):
+			return item
 	return row
 
 

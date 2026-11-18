@@ -32,7 +32,7 @@ export function conversationStatusOf(row: {
   needs_reply?: boolean
   failed?: boolean
   profile?: { status?: string }
-  window?: { status?: string }
+  window?: { status?: string; expires_at?: string | null }
 }): ConversationStatus {
   const direct = row.conversation_status
   if (
@@ -49,4 +49,16 @@ export function conversationStatusOf(row: {
   if (row.needs_reply) return 'needs_reply'
   if (row.window?.status === 'open') return 'window_open'
   return 'template_only'
+}
+
+/** Window expiry is local. The list flips to template-only when `expires_at` passes, without a refetch. */
+export function conversationStatusAt(
+  row: Parameters<typeof conversationStatusOf>[0],
+  now = Date.now(),
+): ConversationStatus {
+  const status = conversationStatusOf(row)
+  if (status !== 'window_open') return status
+  const expires = row.window?.expires_at
+  if (!expires) return status
+  return new Date(expires).getTime() <= now ? 'template_only' : status
 }

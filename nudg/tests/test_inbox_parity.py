@@ -88,10 +88,11 @@ class TestInboxAndPresenceParity(unittest.TestCase):
 		self.assertEqual(str_val3, "Tier1, Sales")
 		self.assertEqual(list_val3, ["Tier1", "Sales"])
 
+	@patch("nudg.services.assignments._notify_inbox")
 	@patch("frappe.publish_realtime")
 	@patch("nudg.services.assignments.ensure_conversation", return_value="CONV-001")
 	@patch("frappe.has_permission", return_value=True)
-	def test_set_conversation_tags(self, mock_perm, mock_ensure, mock_publish):
+	def test_set_conversation_tags(self, mock_perm, mock_ensure, mock_publish, _mock_notify):
 		"""Verify setting tags updates conversation and publishes event."""
 		mock_conv = MagicMock()
 		mock_conv.name = "CONV-001"
@@ -154,6 +155,7 @@ class TestInboxAndPresenceParity(unittest.TestCase):
 		mock_agents.return_value = ["agent_a@example.com", "agent_b@example.com", "agent_c@example.com"]
 
 		with patch("nudg.services.assignments.ensure_conversation") as mock_ensure, \
+			 patch("nudg.services.assignments._notify_inbox"), \
 			 patch("frappe.publish_realtime"), \
 			 patch("nudg.services.assignments._sync_todo"):
 

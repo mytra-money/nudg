@@ -134,6 +134,7 @@ def assign_conversation(profile: str, user: str, source: str = "Manual") -> dict
 	doc.save()
 
 	_sync_todo(doc)
+	_notify_inbox(name)
 	return _serialize(doc)
 
 
@@ -146,6 +147,7 @@ def unassign_conversation(profile: str) -> dict:
 	doc.assignment_source = "Manual"
 	doc.save()
 	_close_todos(doc.name)
+	_notify_inbox(name)
 	return _serialize(doc)
 
 
@@ -156,7 +158,20 @@ def close_conversation(profile: str) -> dict:
 	doc.assignment_status = "Closed"
 	doc.save()
 	_close_todos(doc.name)
+	_notify_inbox(name)
 	return _serialize(doc)
+
+
+def _notify_inbox(profile: str | None) -> None:
+	"""Ask the desk API to push this conversation. Never fails the assignment write."""
+	if not profile:
+		return
+	try:
+		from nudg.api import publish_inbox_change
+
+		publish_inbox_change(profile, bump=False)
+	except Exception:
+		pass
 
 
 # -----------------------------------------------------------------------------
@@ -197,6 +212,7 @@ def set_conversation_tags(profile: str, tags: Any) -> dict:
 
 	doc.tags = tags_str
 	doc.save(ignore_permissions=True)
+	_notify_inbox(_profile_name(doc))
 
 	# Broadcast realtime update
 	frappe.publish_realtime(
@@ -314,6 +330,7 @@ def auto_assign_round_robin(conversation_doc: str | Any) -> dict:
 		doc.save(ignore_permissions=True)
 
 	_sync_todo(doc)
+	_notify_inbox(_profile_name(doc))
 
 	frappe.publish_realtime(
 		"nudg_conversation_assigned",

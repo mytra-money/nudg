@@ -85,6 +85,14 @@ def on_wa_message(doc, method=None):
 	Meta webhooks run as Guest. Rule actions need desk DocType permission, so
 	work is enqueued as Administrator when the session is Guest.
 	"""
+	if method in ("after_insert", "on_update"):
+		try:
+			from nudg.api import publish_inbox_change
+
+			publish_inbox_change(doc.to, doc.name, bump=method == "after_insert" and not doc.get("reaction"))
+		except Exception:
+			pass
+
 	if doc.get("reaction"):
 		return
 

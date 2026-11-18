@@ -16,18 +16,20 @@ export function useDesk() {
   const { inbox, account, logs, loading, error, mode, presence } = storeToRefs(inboxStore)
   const { thread, profile, threadLoading, sending, windowState } = storeToRefs(threadStore)
 
+  inboxStore.bindLive({
+    onEvent: (event) => threadStore.applyLive(event),
+    onReconnect: () => {
+      if (threadStore.profile) void threadStore.syncOpen()
+    },
+  })
+
   async function load() {
-    await inboxStore.load(() => {
-      const current = threadStore.profile
-      if (current) void threadStore.openProfile(current)
-    })
+    await inboxStore.load()
   }
 
   async function refresh() {
     await inboxStore.refresh()
-    if (threadStore.profile) {
-      await threadStore.openProfile(threadStore.profile)
-    }
+    if (threadStore.profile) await threadStore.syncOpen()
   }
 
   async function setAccount(name: string) {

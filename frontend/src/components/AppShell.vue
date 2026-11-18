@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import {
   Button,
@@ -145,14 +145,9 @@ async function onManualConnected() {
   await desk.load()
 }
 
-let timer = 0
 onMounted(() => {
   void loadAccounts()
-  timer = window.setInterval(() => {
-    if (document.visibilityState === 'visible') void desk.refresh()
-  }, 15000)
 })
-onUnmounted(() => window.clearInterval(timer))
 </script>
 
 <template>
