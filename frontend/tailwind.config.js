@@ -4,7 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
-const whatsappUi = ['../../whatsapp/ui/src', '../../../whatsapp/ui/src', 'vendor/whatsapp-ui/src']
+const whatsappUi = ['vendor/whatsapp-ui/src', '../../whatsapp/ui/src', '../../../whatsapp/ui/src']
   .map((entry) => path.resolve(root, entry))
   .find((entry) => fs.existsSync(path.join(entry, 'index.ts')))
 

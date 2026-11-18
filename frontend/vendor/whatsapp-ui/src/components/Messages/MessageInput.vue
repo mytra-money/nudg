@@ -1,7 +1,8 @@
 <!-- eslint-disable vue/no-v-html -->
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Button, Dropdown, FileUploader, Tooltip } from "frappe-ui";
+import EmojiPicker from "./EmojiPicker.vue";
 import MediaPreviewDialog from "../common/MediaPreviewDialog.vue";
 import { formatWhatsAppMessage } from "../../utils/formatMessage";
 import { contentTypeFromMime } from "../../utils/media";
@@ -36,8 +37,8 @@ const emit = defineEmits<{
 
 // View state only; nothing here is part of the message being composed.
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
+const emojiRoot = ref<HTMLElement | null>(null);
 const emojiOpen = ref(false);
-const quickEmojis = ["😊", "👍", "❤️", "😂", "🙏", "😍", "✅", "🔥"];
 const uploaderRef = ref<{ inputRef?: HTMLInputElement } | null>(null);
 const acceptedFileTypes = ref<string>();
 const showMediaPreview = ref(false);
@@ -83,9 +84,21 @@ function growField() {
 
 function insertEmoji(emoji: string) {
 	props.setDraft(`${props.draft || ""}${emoji}`);
-	emojiOpen.value = false;
-	focus();
 }
+
+function onPointerDown(event: PointerEvent) {
+	if (!emojiOpen.value) return;
+	const root = emojiRoot.value;
+	if (root && event.target instanceof Node && root.contains(event.target)) return;
+	emojiOpen.value = false;
+}
+
+onMounted(() => document.addEventListener("pointerdown", onPointerDown));
+onBeforeUnmount(() => document.removeEventListener("pointerdown", onPointerDown));
+
+watch(emojiOpen, (open) => {
+	if (!open) focus();
+});
 
 /**
  * The payload is built only to be reported: reading it before the send lets the emit
@@ -239,31 +252,18 @@ defineExpose({ focus });
 			@drop.prevent="onDrop"
 			@paste="onPaste"
 		>
-			<div class="relative shrink-0">
+			<div ref="emojiRoot" class="relative shrink-0">
 				<button
 					type="button"
 					class="grid size-10 place-items-center rounded-full text-[#54656F] hover:bg-black/5"
 					aria-label="Insert emoji"
+					:aria-expanded="emojiOpen"
 					:disabled="locked"
 					@click="emojiOpen = !emojiOpen"
 				>
 					<span class="text-xl leading-none" aria-hidden="true">😊</span>
 				</button>
-				<div
-					v-if="emojiOpen"
-					class="absolute bottom-12 left-0 z-20 flex gap-0.5 rounded-full border border-[#E9EDEF] bg-white px-1.5 py-1 shadow-md"
-				>
-					<button
-						v-for="emoji in quickEmojis"
-						:key="emoji"
-						type="button"
-						class="grid size-8 place-items-center rounded-full text-lg hover:bg-[#F0F2F5]"
-						:aria-label="`Insert ${emoji}`"
-						@click="insertEmoji(emoji)"
-					>
-						{{ emoji }}
-					</button>
-				</div>
+				<EmojiPicker v-if="emojiOpen" @select="insertEmoji" />
 			</div>
 
 			<FileUploader

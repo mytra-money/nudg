@@ -8,7 +8,9 @@ import { defineConfig, type Plugin } from 'vite'
 const root = path.dirname(fileURLToPath(import.meta.url))
 
 function whatsappUiSrc() {
-  const candidates = ['../../whatsapp/ui/src', '../../../whatsapp/ui/src', 'vendor/whatsapp-ui/src'].map(
+  // Ship the copy in this repo. Frappe Cloud always has the official WhatsApp
+  // app installed, and preferring that app was compiling its old composer.
+  const candidates = ['vendor/whatsapp-ui/src', '../../whatsapp/ui/src', '../../../whatsapp/ui/src'].map(
     (entry) => path.resolve(root, entry),
   )
   return candidates.find((entry) => fs.existsSync(path.join(entry, 'index.ts')))
@@ -16,7 +18,7 @@ function whatsappUiSrc() {
 
 const whatsappUi = whatsappUiSrc()
 if (!whatsappUi) {
-  throw new Error('WhatsApp UI source is missing. Expected apps/whatsapp/ui or frontend/vendor/whatsapp-ui.')
+  throw new Error('WhatsApp UI source is missing. Expected frontend/vendor/whatsapp-ui.')
 }
 
 /** Dev-server stand-in for `/api/method/upload_file`, so sample threads can attach a file. */
