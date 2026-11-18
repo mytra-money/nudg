@@ -61,6 +61,7 @@ doc_events = {
 	},
 	"WA Account": {
 		"validate": "nudg.integrations.erpnext.service.validate_account_site",
+		"after_insert": "nudg.security.undo_autoselected_default",
 	},
 	"WA Profile": {
 		"on_update": "nudg.services.assignments.on_conversation_update",

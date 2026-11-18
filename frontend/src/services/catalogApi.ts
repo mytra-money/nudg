@@ -176,7 +176,7 @@ export async function deleteAutomationRule(name: string) {
 }
 
 export async function getAnalytics(account?: string) {
-  return call<{ latest: any; refreshing: any; history: any[] }>('nudg.desk_api.get_analytics', {
+  return call<{ latest: any; refreshing: any; history: any[]; has_accounts?: boolean }>('nudg.desk_api.get_analytics', {
     account,
   })
 }

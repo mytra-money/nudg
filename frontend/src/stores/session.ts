@@ -22,6 +22,18 @@ export function computeIsManager() {
 /** Standalone computed for router guards and templates that import `isManager` directly. */
 export const isManager = computed(() => computeIsManager())
 
+/** Administrator or System Manager. Site-wide WA Settings is not a WhatsApp Manager setting. */
+export function computeIsSiteAdmin() {
+  if (typeof window === 'undefined') return false
+  if (window.is_system_manager !== undefined) return Boolean(window.is_system_manager)
+  if (Array.isArray(window.roles)) {
+    return window.roles.includes('System Manager') || window.user === 'Administrator'
+  }
+  return window.user === 'Administrator'
+}
+
+export const isSiteAdmin = computed(() => computeIsSiteAdmin())
+
 export const useSessionStore = defineStore('nudg-session', () => {
   const isLive = computed(() => isLiveSession())
   const manager = computed(() => computeIsManager())
@@ -32,6 +44,7 @@ export const useSessionStore = defineStore('nudg-session', () => {
   return {
     isLive,
     isManager: manager,
+    isSiteAdmin: computed(() => computeIsSiteAdmin()),
     user,
     site,
     roles,

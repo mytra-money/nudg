@@ -11,6 +11,7 @@ interface Window {
   site_name?: string
   socketio_port?: number
   is_manager?: boolean
+  is_system_manager?: boolean
   roles?: string[]
   whatsapp_installed?: boolean
   __?: (message: string, replace?: unknown[], context?: string | null) => string

@@ -32,7 +32,11 @@ def get_boot():
 		or "System Manager" in user_roles
 		or frappe.session.user == "Administrator"
 	)
+	is_system_manager = "System Manager" in user_roles or frappe.session.user == "Administrator"
 	installed = bool(frappe.db.exists("DocType", "WA Message"))
+	integration = adapter.get_integration_status()
+	if not is_system_manager:
+		integration["default_account"] = None
 
 	# ``whatsapp_installed`` stays "the WA Message DocType exists", which the
 	# desk shell already reads. ``integration`` is the Phase 1 status contract.
@@ -41,11 +45,12 @@ def get_boot():
 		"user": frappe.session.user,
 		"roles": user_roles,
 		"is_manager": is_manager,
+		"is_system_manager": is_system_manager,
 		"sitename": frappe.local.site,
 		"site_name": frappe.local.site,
 		"socketio_port": cint(frappe.conf.socketio_port),
 		"whatsapp_installed": installed,
-		"integration": adapter.get_integration_status(),
+		"integration": integration,
 	}
 
 

@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { Badge, Button, call, Dialog, toast } from 'frappe-ui'
 import { errorText } from '@/utils/format'
 import { deleteQuickReply, getWhatsappSettings, listQuickReplies, saveQuickReply, saveWhatsappSettings, updateWhatsappAccount } from '@/services/catalogApi'
-import { isManager, useDesk } from '@/stores/desk'
+import { isManager, isSiteAdmin, useDesk } from '@/stores/desk'
 import { router } from '@/router'
 
 const desk = useDesk()
@@ -429,7 +429,7 @@ async function handleUpdateMember() {
 }
 
 async function loadSiteSettings() {
-  if (!isManager.value || desk.mode.value !== 'live') return
+  if (!isSiteAdmin.value || desk.mode.value !== 'live') return
   try {
     const result = await getWhatsappSettings()
     siteSettings.value = {
@@ -447,7 +447,7 @@ async function loadSiteSettings() {
 }
 
 async function saveSiteSettings() {
-  if (!isManager.value || desk.mode.value !== 'live') return
+  if (!isSiteAdmin.value || desk.mode.value !== 'live') return
   savingSite.value = true
   try {
     const saved = await saveWhatsappSettings({
@@ -827,10 +827,15 @@ onMounted(() => {
               </button>
             </div>
           </div>
-          <div v-if="isManager" class="rounded-xl border border-outline-gray-2 bg-white p-6 shadow-2xs">
+          <div v-if="isSiteAdmin" class="rounded-xl border border-outline-gray-2 bg-white p-6 shadow-2xs">
             <h2 class="text-lg font-bold text-ink-gray-9">WhatsApp settings</h2>
             <p class="mt-1 text-xs text-ink-gray-5">
-              Default account, Graph API, and the webhook Meta calls. Callback: {{ siteSettings.callback_method }}
+              Site-wide. Only an Administrator or System Manager can see this. Callback: {{ siteSettings.callback_method }}
+            </p>
+            <p class="mt-2 text-xs leading-relaxed text-ink-gray-6">
+              Optional. Leave this empty on a multi-client site. Connecting or removing a number does not fill it.
+              It is used only when a webhook or send does not name a number and that number cannot be matched by phone id.
+              People still message only from numbers they are allowed to use.
             </p>
             <div class="mt-4 grid gap-3 sm:grid-cols-2 text-xs">
               <label class="block font-semibold text-ink-gray-7">

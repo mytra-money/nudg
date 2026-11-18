@@ -36,6 +36,18 @@ def _require_manager():
 	frappe.throw(_("Only a WhatsApp Manager can do this."), frappe.PermissionError)
 
 
+def _require_system_manager():
+	"""WA Settings is one row for the whole site. Only Administrator and System Manager may read or change it."""
+	_require_login()
+	user = frappe.session.user
+	if user == "Administrator":
+		return
+	roles = frappe.get_roles(user) if hasattr(frappe, "get_roles") else []
+	if isinstance(roles, (list, tuple, set)) and "System Manager" in roles:
+		return
+	frappe.throw(_("Only a System Manager can change site WhatsApp settings."), frappe.PermissionError)
+
+
 @frappe.whitelist()
 def list_catalogs(account: str | None = None) -> list:
 	_require_manager()
@@ -563,18 +575,27 @@ def list_automation_runs(rule: str | None = None) -> list:
 
 @frappe.whitelist()
 def get_analytics(account: str | None = None) -> dict:
-	"""Optimistic analytics: latest Ready snapshot plus any Refreshing row."""
+	"""Live metrics for the WhatsApp accounts this user is allowed to see."""
 	_require_login()
+	latest = analytics.latest_snapshot(account)
+	if not latest.get("has_accounts", True):
+		return {"latest": None, "refreshing": None, "history": [], "has_accounts": False}
 	return {
-		"latest": analytics.latest_snapshot(account),
+		"latest": latest,
 		"refreshing": analytics.refreshing_snapshot(account),
 		"history": analytics.list_snapshots(account, limit=20),
+		"has_accounts": True,
 	}
 
 
 @frappe.whitelist()
 def refresh_analytics(account: str | None = None) -> dict:
 	_require_login()
+	if analytics.resolve_accounts(account) is None:
+		frappe.throw(
+			_("Connect a WhatsApp account before opening analytics."),
+			frappe.PermissionError,
+		)
 	return analytics.enqueue_refresh(account)
 
 
@@ -663,12 +684,6 @@ def create_whatsapp_account(
 			user_doc.append("roles", {"role": "WhatsApp Manager"})
 			user_doc.save(ignore_permissions=True)
 
-	# If no default account is set, set this as default
-	if frappe.db.exists("DocType", "WA Settings"):
-		current_default = frappe.db.get_single_value("WA Settings", "default_account")
-		if not current_default:
-			frappe.db.set_single_value("WA Settings", "default_account", doc.name)
-
 	frappe.db.commit()
 
 	return {
@@ -724,8 +739,8 @@ def update_whatsapp_account(
 
 @frappe.whitelist()
 def get_whatsapp_settings() -> dict:
-	"""WA Settings values a manager can edit. The webhook secret is never returned."""
-	_require_manager()
+	"""Site WA Settings. The webhook secret is never returned. System Manager only."""
+	_require_system_manager()
 	if not frappe.db.exists("DocType", "WA Settings"):
 		return {"callback_method": "whatsapp.whatsapp.webhook.handler"}
 	doc = frappe.get_single("WA Settings")
@@ -748,7 +763,7 @@ def save_whatsapp_settings(
 	webhook_secret: str | None = None,
 ) -> dict:
 	"""Save site WhatsApp settings from Nudg. An empty secret keeps the current one."""
-	_require_manager()
+	_require_system_manager()
 	if not frappe.db.exists("DocType", "WA Settings"):
 		frappe.throw(_("WhatsApp Settings is not installed."))
 	account = (default_account or "").strip()

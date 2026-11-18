@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { Badge, Button, Select, toast } from 'frappe-ui'
 import EmptyState from '@/components/EmptyState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 import LoadingState from '@/components/LoadingState.vue'
 import { errorText, formatDay, formatTime } from '@/utils/format'
 import { getAnalytics, refreshAnalytics } from '@/services/catalogApi'
-import { useDesk } from '@/stores/desk'
+import { isManager, useDesk } from '@/stores/desk'
 
 const desk = useDesk()
 const live = Boolean(window.csrf_token)
@@ -156,15 +156,27 @@ const deliveryRate = computed(() => {
   return Math.max(0, Math.round(((out - failed) / out) * 100))
 })
 
+const linkedAccounts = computed(() => desk.inbox.value?.accounts || [])
+const serverBlocked = ref(false)
+const needsAccount = computed(() => live && (linkedAccounts.value.length === 0 || serverBlocked.value))
+
 const accountOptions = computed(() => {
-  const accs = desk.inbox.value?.accounts || []
   return [
     { label: 'All Accounts', value: 'all' },
-    ...accs.map((a) => ({ label: a.account_name || a.name, value: a.name })),
+    ...linkedAccounts.value.map((a) => ({ label: a.account_name || a.name, value: a.name })),
   ]
 })
 
 async function load() {
+  if (live && linkedAccounts.value.length === 0) {
+    serverBlocked.value = false
+    latest.value = null
+    refreshing.value = null
+    history.value = []
+    error.value = null
+    loading.value = false
+    return
+  }
   loading.value = !latest.value
   error.value = null
   try {
@@ -175,6 +187,14 @@ async function load() {
     }
     const accArg = selectedAccount.value === 'all' ? undefined : selectedAccount.value
     const payload = await getAnalytics(accArg)
+    if (payload.has_accounts === false) {
+      serverBlocked.value = true
+      latest.value = null
+      refreshing.value = null
+      history.value = []
+      return
+    }
+    serverBlocked.value = false
     latest.value = payload.latest || {
       messages_in: 0,
       messages_out: 0,
@@ -199,6 +219,7 @@ async function load() {
 }
 
 async function refresh() {
+  if (live && linkedAccounts.value.length === 0) return
   busy.value = true
   try {
     if (!live) {
@@ -243,10 +264,20 @@ function exportCsv() {
   toast.success('Analytics history exported to CSV')
 }
 
+watch(
+  () => linkedAccounts.value.map((row) => row.name).join(','),
+  () => {
+    if (selectedAccount.value !== 'all' && !linkedAccounts.value.some((row) => row.name === selectedAccount.value)) {
+      selectedAccount.value = 'all'
+    }
+    void load()
+  },
+)
+
 onMounted(() => {
   void load()
   timer = window.setInterval(() => {
-    if (refreshing.value) void load()
+    if (refreshing.value && !needsAccount.value) void load()
   }, 4000)
 })
 
@@ -270,7 +301,7 @@ onUnmounted(() => window.clearInterval(timer))
         </h1>
       </div>
 
-      <div class="flex flex-wrap items-center gap-2">
+      <div v-if="!needsAccount" class="flex flex-wrap items-center gap-2">
         <Select
           class="w-36 text-xs"
           :model-value="selectedAccount"
@@ -308,8 +339,13 @@ onUnmounted(() => window.clearInterval(timer))
     </div>
 
     <!-- State Handlers -->
-    <LoadingState v-if="loading && !latest" label="Loading WhatsApp metrics…" />
+    <LoadingState v-if="loading && !latest && !needsAccount" label="Loading WhatsApp metrics…" />
     <ErrorState v-else-if="error" :message="error" allow-retry @retry="load" />
+    <EmptyState
+      v-else-if="needsAccount"
+      title="No WhatsApp account linked"
+      :description="isManager ? 'Connect a WhatsApp number before analytics can load. Numbers from other users stay hidden.' : 'No WhatsApp account is assigned to you yet. Ask a WhatsApp manager to link one before analytics can load.'"
+    />
     <EmptyState
       v-else-if="!latest"
       title="No Analytics Snapshot Found"

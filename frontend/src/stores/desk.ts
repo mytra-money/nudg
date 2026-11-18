@@ -2,7 +2,7 @@ import { storeToRefs } from 'pinia'
 import { useInboxStore } from '@/stores/inbox'
 import { useThreadStore } from '@/stores/thread'
 
-export { isManager } from '@/stores/session'
+export { isManager, isSiteAdmin } from '@/stores/session'
 export { playSound } from '@/stores/sounds'
 
 /**

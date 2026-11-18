@@ -84,6 +84,22 @@ def get_user_wa_accounts(user: str | None = None) -> list[str]:
 	return valid
 
 
+def undo_autoselected_default(doc, method=None) -> None:
+	"""Leave WA Settings.default_account empty unless an admin set it.
+
+	The official WA Account controller fills this field on insert whenever it is
+	blank, so clearing it and then connecting another number puts that number
+	back. Each client has their own number, so a new account must not claim the
+	site fallback.
+	"""
+	name = getattr(doc, "name", None)
+	if not name or not frappe.db.exists("DocType", "WA Settings"):
+		return
+	if frappe.db.get_single_value("WA Settings", "default_account") != name:
+		return
+	frappe.db.set_single_value("WA Settings", "default_account", "")
+
+
 def get_default_account(user: str | None = None) -> str | None:
 	"""Return default WA Account for the user."""
 	user_accounts = get_user_wa_accounts(user)

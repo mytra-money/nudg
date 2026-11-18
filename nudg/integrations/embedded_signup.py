@@ -438,9 +438,5 @@ def _upsert_account(account_name: str, phone_id: str, business_id: str, access_t
 	from nudg.security import ensure_account_user_permission
 
 	ensure_account_user_permission(doc.name, frappe.session.user)
-	if frappe.db.exists("DocType", "WA Settings"):
-		current_default = frappe.db.get_single_value("WA Settings", "default_account")
-		if not current_default:
-			frappe.db.set_single_value("WA Settings", "default_account", doc.name)
 	frappe.db.commit()
 	return doc.name
