@@ -75,6 +75,7 @@ scheduler_events = {
 	"cron": {
 		"* * * * *": [
 			"nudg.services.campaigns.check_and_run_scheduled_campaigns",
+			"nudg.services.delivery.fail_stuck_outgoing",
 		]
 	},
 }

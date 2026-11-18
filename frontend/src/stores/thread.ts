@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import { call, createResource, toast } from 'frappe-ui'
 import { contentKind, errorText, serviceWindow } from '@/utils/format'
@@ -11,6 +11,7 @@ import {
 import { isLiveSession } from '@/stores/session'
 import { useInboxStore } from '@/stores/inbox'
 import { playSound } from '@/stores/sounds'
+import { deskCacheKey, threadAccountAllowed } from '@/utils/deskCache'
 import type { ChatMessage, ConversationNote, Template, Thread } from '@/types'
 
 export const useThreadStore = defineStore('nudg-thread', () => {
@@ -21,7 +22,7 @@ export const useThreadStore = defineStore('nudg-thread', () => {
 
   const threadResource = createResource<Thread | null>({
     url: 'nudg.api.get_thread',
-    cache: 'nudg:thread',
+    cache: deskCacheKey('thread'),
     initialData: null,
     auto: false,
   })
@@ -35,6 +36,18 @@ export const useThreadStore = defineStore('nudg-thread', () => {
 
   const threadLoading = computed(() => threadResource.loading)
   const windowState = computed(() => (thread.value ? serviceWindow(thread.value.messages) : null))
+
+  // IndexedDB can restore the previous login's thread after this store is created.
+  // Drop it once the inbox shows that WhatsApp account is not this user's.
+  watch(
+    () => [useInboxStore().inbox?.accounts, threadResource.data?.profile?.whatsapp_account] as const,
+    ([accounts, account]) => {
+      if (!accounts || !threadResource.data) return
+      if (threadAccountAllowed(account, accounts)) return
+      profile.value = null
+      threadResource.setData(null)
+    },
+  )
 
   function announcePresence(
     conversationId: string | null,

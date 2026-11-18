@@ -80,14 +80,73 @@ def list_runs(rule: str | None = None, limit: int = 50) -> list[dict]:
 
 
 def on_wa_message(doc, method=None):
-	"""Evaluate Active rules when a WA Message is inserted or updated.
+	"""Evaluate Active rules, dispatch realtime updates, and manage consent when a WA Message is inserted or updated.
 
 	Meta webhooks run as Guest. Rule actions need desk DocType permission, so
 	work is enqueued as Administrator when the session is Guest.
 	"""
-	if not frappe.db.exists("DocType", "WA Automation Rule"):
-		return
 	if doc.get("reaction"):
+		return
+
+	if method == "after_insert":
+		# Realtime broadcast for incoming messages
+		if doc.direction == "Incoming":
+			try:
+				frappe.publish_realtime(
+					"nudg_message",
+					{
+						"record_name": doc.name,
+						"message_id": doc.message_id or doc.name,
+						"channel": doc.whatsapp_account,
+						"contact": doc.to,
+						"content": doc.message or "",
+						"direction": "Incoming",
+						"status": doc.status or "Sent",
+						"timestamp": str(doc.timestamp or doc.creation),
+					},
+					after_commit=True,
+				)
+			except Exception:
+				pass
+
+			# Check consent keywords
+			try:
+				from nudg.services import consent
+				channel_doc = frappe.get_cached_doc("WA Account", doc.whatsapp_account) if doc.whatsapp_account else None
+				consent.handle_incoming_consent(
+					contact_id=doc.to,
+					text=doc.message or "",
+					channel_doc=channel_doc,
+					phone_number=getattr(doc, "from", None),
+					send_acknowledgment=True,
+				)
+			except Exception:
+				pass
+
+	elif method == "on_update":
+		# Status update broadcast
+		try:
+			frappe.publish_realtime(
+				"nudg_message_status",
+				{
+					"message_id": doc.message_id or doc.name,
+					"record_name": doc.name,
+					"status": doc.status,
+				},
+				after_commit=True,
+			)
+		except Exception:
+			pass
+
+		# Update campaign recipient status
+		try:
+			from nudg.services.campaigns import update_campaign_recipient_status
+			raw_status = (doc.status or "").lower()
+			update_campaign_recipient_status(doc.message_id or doc.name, raw_status, None)
+		except Exception:
+			pass
+
+	if not frappe.db.exists("DocType", "WA Automation Rule"):
 		return
 
 	trigger = None
@@ -117,6 +176,11 @@ def on_wa_message(doc, method=None):
 
 def process_trigger(trigger: str, profile: str | None, account: str | None, message_name: str | None):
 	"""Fetch active rules matching the trigger event and execute qualified ones."""
+	# Meta's webhook inserts the message as Guest and enqueues this job as Guest.
+	# Sending needs WA Message create permission, which Guest does not have.
+	if getattr(getattr(frappe, "session", None), "user", None) == "Guest":
+		frappe.set_user("Administrator")
+
 	if not frappe.db.exists("DocType", "WA Automation Rule"):
 		return
 
@@ -279,7 +343,7 @@ def _execute_rule(rule: Any, profile: str | None, message_name: str | None):
 		run.detail = detail
 	except Exception as exc:
 		run.status = "Failed"
-		run.detail = str(exc)[:500]
+		run.detail = (str(exc) or type(exc).__name__)[:500]
 	run.finished_at = _safe_now()
 	run.save(ignore_permissions=True)
 

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { Avatar, Badge, Button, Dialog, Select, TextInput, call, toast } from 'frappe-ui'
+import { Avatar, Button, Dialog, Dropdown, Select, TextInput, call, toast } from 'frappe-ui'
 import { MessageInput, MessageList } from '@whatsapp/ui/components/Messages'
-import type { ReactPayload } from '@whatsapp/ui/components/Messages'
+import type { ReactPayload, WhatsAppMessage } from '@whatsapp/ui/components/Messages'
 import DeskTemplatePreview from '@/components/DeskTemplatePreview.vue'
 import ProfileDetails from '@/components/ProfileDetails.vue'
 import {
@@ -24,6 +24,7 @@ import {
   useQuickReply,
 } from '@/services/catalogApi'
 import { errorText } from '@/utils/format'
+import { threadAccountAllowed } from '@/utils/deskCache'
 import type { Conversation, ConversationNote, Template } from '@/types'
 
 const desk = useDesk()
@@ -35,6 +36,20 @@ const assignFilter = ref<'all' | 'mine' | 'unassigned'>('all')
 const quickTab = ref<'all' | 'needs_reply' | 'window_open' | 'unassigned'>('all')
 
 const details = ref(false)
+const CONTACT_KEY = 'nudg.contact_sidebar'
+const contactOpen = ref(typeof localStorage !== 'undefined' ? localStorage.getItem(CONTACT_KEY) !== '0' : true)
+watch(contactOpen, (value) => {
+  try {
+    localStorage.setItem(CONTACT_KEY, value ? '1' : '0')
+  } catch {
+    /* ignore quota / private mode */
+  }
+})
+const chatSearchOpen = ref(false)
+const chatQuery = ref('')
+const matchCursor = ref(0)
+const desktopProfile = ref<{ openAssign: () => void } | null>(null)
+const drawerProfile = ref<{ openAssign: () => void } | null>(null)
 const templateOpen = ref(false)
 const templateQuery = ref('')
 const templateTypeFilter = ref<'all' | 'Utility' | 'Marketing'>('all')
@@ -160,7 +175,11 @@ const currentAssignment = computed(() => {
   return desk.inbox.value?.conversations.find((row) => row.profile.name === name)?.assignment || null
 })
 
-const current = computed(() => desk.thread.value)
+const current = computed(() => {
+  const thread = desk.thread.value
+  if (!threadAccountAllowed(thread?.profile?.whatsapp_account, desk.inbox.value?.accounts)) return null
+  return thread
+})
 const windowState = computed(() => desk.windowState.value)
 
 watch(
@@ -348,13 +367,85 @@ async function clearAssignment() {
     toast.error(errorText(caught))
   }
 }
+
+function agentLabel(user?: string | null) {
+  if (!user) return 'Unassigned'
+  const local = user.split('@')[0] || user
+  return local.replace(/[._]/g, ' ')
+}
+
+const chatMatches = computed(() => {
+  const term = chatQuery.value.trim().toLowerCase()
+  if (!term) return []
+  return composer.messages.filter((message) =>
+    `${message.message || ''} ${message.template || ''} ${message.file_name || ''}`.toLowerCase().includes(term),
+  )
+})
+
+function showMatch(index: number) {
+  const rows = chatMatches.value
+  if (!rows.length) return
+  const next = ((index % rows.length) + rows.length) % rows.length
+  matchCursor.value = next
+  const el = document.getElementById(rows[next]!.name)
+  el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  el?.classList.add('ring-2', 'ring-[#00A884]')
+  window.setTimeout(() => el?.classList.remove('ring-2', 'ring-[#00A884]'), 1400)
+}
+
+function toggleChatSearch() {
+  chatSearchOpen.value = !chatSearchOpen.value
+  if (!chatSearchOpen.value) chatQuery.value = ''
+}
+
+function isPhone() {
+  return window.matchMedia('(max-width: 767px)').matches
+}
+
+function openContact() {
+  if (isPhone()) {
+    details.value = true
+    return
+  }
+  contactOpen.value = true
+}
+
+function openAssign() {
+  if (isPhone()) {
+    details.value = true
+    void nextTick(() => drawerProfile.value?.openAssign())
+    return
+  }
+  contactOpen.value = true
+  void nextTick(() => desktopProfile.value?.openAssign())
+}
+
+async function retryMessage(message: WhatsAppMessage) {
+  if (message.media_url) {
+    await desk.sendMedia(
+      { file_url: message.media_url, file_name: message.file_name },
+      message.mime_type || 'application/octet-stream',
+      message.message || '',
+    )
+    return
+  }
+  if (message.is_template && message.whatsapp_template) {
+    const template = (desk.inbox.value?.templates || []).find((row) => row.name === message.whatsapp_template)
+    if (template) {
+      await desk.sendTemplate(template)
+      return
+    }
+  }
+  const text = (message.message || message.template || '').trim()
+  if (text) await desk.sendText(text)
+}
 </script>
 
 <template>
-  <div class="flex h-full min-w-0 overflow-hidden bg-surface-gray-1">
+  <div class="flex h-full min-w-0 overflow-hidden bg-[#F0F2F5]">
     <!-- Left Conversation Sidebar -->
     <aside
-      class="flex w-full shrink-0 min-h-0 min-w-0 flex-col border-r border-outline-gray-2 bg-white md:w-64"
+      class="inbox-list flex min-h-0 flex-col border-r border-[#E9EDEF] bg-white"
       :class="desk.profile.value ? 'hidden md:flex' : 'flex'"
     >
       <!-- Search & Filters Container -->
@@ -512,7 +603,7 @@ async function clearAssignment() {
             <div class="min-w-0 flex-1">
               <!-- Row 1: Name -->
               <span
-                class="block truncate text-sm font-semibold"
+                class="block text-sm font-semibold leading-snug"
                 :class="desk.profile.value === row.profile.name ? 'text-[#075E54]' : 'text-ink-gray-9'"
               >
                 {{ row.profile.profile_name || row.profile.phone_number }}
@@ -589,9 +680,10 @@ async function clearAssignment() {
 
     <!-- Center Chat Pane -->
     <section
-      class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#efeae2]/25"
+      class="inbox-chat flex min-h-0 flex-row overflow-hidden bg-white"
       :class="desk.profile.value ? 'flex' : 'hidden md:flex'"
     >
+      <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#efeae2]">
       <!-- Empty Canvas (No Conversation Selected) -->
       <div
         v-if="!current && !desk.threadLoading.value"
@@ -639,104 +731,118 @@ async function clearAssignment() {
       <!-- Active Thread View -->
       <template v-else-if="current">
         <!-- Thread Header -->
-        <header class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-outline-gray-2 bg-white px-3 py-2 shadow-xs z-10 shrink-0 sm:px-4">
-          <div class="flex min-w-0 flex-1 items-center gap-2">
-            <!-- Mobile back button -->
+        <header class="inbox-chat-header z-10 flex h-14 shrink-0 items-center gap-2 overflow-x-auto border-b border-[#E9EDEF] bg-white px-3">
+          <div class="inbox-contact flex items-center gap-2.5">
             <button
               type="button"
-              class="md:hidden inline-flex items-center justify-center rounded-md p-1.5 text-ink-gray-7 hover:bg-surface-gray-2"
+              class="inline-flex size-9 items-center justify-center rounded-full text-[#54656F] hover:bg-[#F0F2F5] md:hidden"
               title="Back to conversation list"
               @click="desk.openProfile(null)"
             >
               <span class="lucide-arrow-left size-5" aria-hidden="true" />
             </button>
 
-            <!-- Customer Avatar -->
-            <Avatar :label="current.profile.profile_name || current.profile.phone_number" size="lg" />
-
-            <!-- Customer Info -->
-            <div class="min-w-0">
-              <h2 class="truncate text-sm font-bold text-ink-gray-9 leading-tight">
-                {{ current.profile.profile_name || current.profile.phone_number }}
-              </h2>
-              <p class="truncate text-xs text-ink-gray-5">
-                <span class="font-mono">{{ current.profile.phone_number }}</span>
-                <span class="mx-1">·</span>
-                <span>{{ current.profile.whatsapp_account }}</span>
-              </p>
-            </div>
+            <button
+              type="button"
+              class="flex items-center gap-2.5 rounded-lg text-left hover:bg-[#F0F2F5]"
+              title="Contact info"
+              @click="openContact"
+            >
+              <span class="relative shrink-0">
+                <Avatar :label="current.profile.profile_name || current.profile.phone_number" size="lg" />
+                <span
+                  v-if="current.profile.status === 'Active'"
+                  class="absolute bottom-0 right-0 size-2.5 rounded-full bg-[#25D366] ring-2 ring-white"
+                />
+              </span>
+              <span>
+                <span class="block whitespace-nowrap text-sm font-semibold leading-tight text-[#111B21]">
+                  {{ current.profile.profile_name || current.profile.phone_number }}
+                </span>
+                <span class="block whitespace-nowrap text-xs leading-tight text-[#667781]">
+                  {{ current.profile.phone_number }}
+                </span>
+              </span>
+            </button>
           </div>
 
-          <!-- Header Status & Actions -->
-          <div class="flex flex-wrap items-center gap-2">
-            <!-- 24-Hour Service Window Pill -->
+          <div class="flex shrink-0 items-center gap-1.5">
             <div
               v-if="windowState?.status === 'open'"
-              class="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800 shadow-xs"
-              title="24-Hour Customer Care Window is Open. Free-form messages allowed."
+              class="hidden items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 sm:inline-flex"
+              title="24-hour customer care window is open"
             >
-              <span class="size-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span class="size-1.5 rounded-full bg-emerald-500" />
               <span>{{ formatRemaining(windowState.expires_at) }}</span>
             </div>
             <div
               v-else
-              class="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 shadow-xs"
-              title="24-Hour Window Closed. Send an approved template message to resume."
+              class="hidden items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 sm:inline-flex"
+              title="24-hour window is closed. Send an approved template."
             >
-              <span class="lucide-alert-triangle size-3 text-amber-600" aria-hidden="true" />
-              <span class="hidden sm:inline">Window Closed</span>
+              Window closed
             </div>
 
-            <!-- Simulate reply button in sample mode -->
             <Button
               v-if="desk.mode.value === 'sample' && windowState?.status === 'closed'"
               size="sm"
               variant="subtle"
               label="Simulate reply"
-              title="Simulates incoming customer reply to re-open the 24h window"
               @click="desk.simulateReply()"
             />
 
-            <!-- Assignee Badge / Quick Assignment -->
-            <div class="hidden sm:flex items-center">
-              <span
-                v-if="currentAssignment?.assignee"
-                class="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700"
-              >
-                <span class="lucide-user size-3" aria-hidden="true" />
-                <span>{{ currentAssignment.assignee }}</span>
-              </span>
+            <Dropdown
+              :options="[
+                { label: 'Assign to me', onClick: assignToMe },
+                { label: 'Reassign', onClick: openAssign },
+                ...(currentAssignment?.assignee ? [{ label: 'Unassign', onClick: clearAssignment }] : []),
+              ]"
+            >
               <button
-                v-else-if="sessionUser"
                 type="button"
-                class="inline-flex items-center gap-1 rounded-md border border-dashed border-outline-gray-3 bg-white px-2 py-1 text-xs font-medium text-[#075E54] hover:bg-teal-50 focus-visible:outline-none"
-                title="Assign this conversation to yourself"
-                @click="assignToMe"
+                class="hidden h-8 items-center gap-1.5 rounded-full border border-[#E9EDEF] bg-white px-2 text-xs font-medium text-[#111B21] hover:bg-[#F0F2F5] sm:inline-flex"
               >
-                <span class="lucide-user-plus size-3" aria-hidden="true" />
-                <span>Assign to me</span>
+                <Avatar :label="currentAssignment?.assignee || 'Unassigned'" size="sm" />
+                <span class="whitespace-nowrap">{{ agentLabel(currentAssignment?.assignee) }}</span>
+                <span class="lucide-chevron-down size-3 text-[#667781]" aria-hidden="true" />
               </button>
-              <span v-else class="text-xs text-ink-gray-5">Unassigned</span>
-            </div>
+            </Dropdown>
 
-            <Button
-              variant="subtle"
-              size="sm"
-              :label="notes.length ? `Notes (${notes.length})` : 'Notes'"
+            <button
+              type="button"
+              class="inline-flex h-8 items-center gap-1 rounded-full px-2.5 text-xs font-medium text-[#54656F] hover:bg-[#F0F2F5]"
+              :class="notesOpen ? 'bg-emerald-50 text-emerald-700' : ''"
               @click="notesOpen = !notesOpen"
-            />
+            >
+              <span class="lucide-sticky-note size-4" aria-hidden="true" />
+              <span>Notes<span v-if="notes.length"> {{ notes.length }}</span></span>
+            </button>
 
-            <!-- Details Sidebar Toggle (Small screens) -->
-            <Button
-              class="lg:hidden"
-              variant="subtle"
-              size="sm"
-              icon="lucide-sidebar"
-              label="Details"
-              @click="details = true"
-            />
+            <button
+              type="button"
+              class="grid size-8 place-items-center rounded-full text-[#54656F] hover:bg-[#F0F2F5]"
+              :class="chatSearchOpen ? 'bg-[#F0F2F5] text-[#00A884]' : ''"
+              title="Search in conversation"
+              @click="toggleChatSearch"
+            >
+              <span class="lucide-search size-4" aria-hidden="true" />
+            </button>
+
           </div>
         </header>
+
+        <div v-if="chatSearchOpen" class="flex shrink-0 items-center gap-2 border-b border-[#E9EDEF] bg-white px-3 py-2">
+          <TextInput v-model="chatQuery" class="min-w-0 flex-1" placeholder="Search in this conversation" />
+          <span class="shrink-0 text-[11px] text-[#667781]">
+            {{ chatQuery.trim() ? `${chatMatches.length ? matchCursor + 1 : 0}/${chatMatches.length}` : '' }}
+          </span>
+          <button type="button" class="grid size-7 place-items-center rounded-full text-[#54656F] hover:bg-[#F0F2F5]" title="Previous match" @click="showMatch(matchCursor - 1)">
+            <span class="lucide-chevron-up size-4" aria-hidden="true" />
+          </button>
+          <button type="button" class="grid size-7 place-items-center rounded-full text-[#54656F] hover:bg-[#F0F2F5]" title="Next match" @click="showMatch(matchCursor + 1)">
+            <span class="lucide-chevron-down size-4" aria-hidden="true" />
+          </button>
+        </div>
 
         <div
           v-if="presenceLabel"
@@ -760,7 +866,7 @@ async function clearAssignment() {
         </div>
 
         <!-- Message History Canvas -->
-        <div ref="scroller" class="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 pt-4 pb-6">
+        <div ref="scroller" class="wa-chat-wallpaper min-h-0 min-w-0 flex-1 overflow-y-auto px-3 py-3 sm:px-6 md:px-10">
           <MessageList
             :key="current.profile.name"
             :messages="composer.messages"
@@ -768,6 +874,7 @@ async function clearAssignment() {
             :sender-name="current.profile.profile_name"
             @reply="composer.setReplyTo"
             @react="onReact"
+            @retry="retryMessage"
           />
         </div>
 
@@ -806,75 +913,92 @@ async function clearAssignment() {
         <!-- Message Composer Input -->
         <div
           v-if="current.profile.status !== 'Blocked'"
-          class="min-w-0 border-t border-outline-gray-2 bg-white p-3 shrink-0"
+          class="shrink-0 border-t border-[#E9EDEF] bg-[#F0F2F5] px-2 py-2 sm:px-3"
         >
           <MessageInput
             v-bind="composer"
             :sender-name="current.profile.profile_name"
-            placeholder="Write a message… (Shift+Enter for newline)"
+            placeholder="Type a message... (Shift+Enter for newline)"
+            window-closed-label=""
+            window-unopened-label=""
           >
             <template #leading-actions>
-              <div class="flex items-center gap-1 shrink-0">
-                <Button
-                  variant="subtle"
-                  size="sm"
-                  icon-left="lucide-layout-template"
-                  tooltip="Send approved WhatsApp template"
-                  class="rounded-md text-xs font-medium shrink-0"
-                  @click="templateOpen = true"
-                >
-                  <span class="hidden xl:inline">Template</span>
-                </Button>
-                <Button
-                  variant="subtle"
-                  size="sm"
-                  icon-left="lucide-message-square-quote"
-                  tooltip="Insert saved quick reply"
-                  class="rounded-md text-xs font-medium shrink-0"
-                  @click="openQuickReplies"
-                >
-                  <span class="hidden xl:inline">Quick reply</span>
-                </Button>
-                <Button
-                  variant="subtle"
-                  size="sm"
-                  icon-left="lucide-shopping-bag"
-                  tooltip="Share catalog product"
-                  class="rounded-md text-xs font-medium shrink-0"
-                  @click="openCatalog"
-                >
-                  <span class="hidden xl:inline">Catalog</span>
-                </Button>
-              </div>
+              <button
+                type="button"
+                class="grid size-10 place-items-center rounded-full text-[#54656F] hover:bg-black/5"
+                title="Quick replies"
+                @click="openQuickReplies"
+              >
+                <span class="lucide-zap size-5" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                class="hidden size-10 place-items-center rounded-full text-[#54656F] hover:bg-black/5 sm:grid"
+                title="Send template"
+                @click="templateOpen = true"
+              >
+                <span class="lucide-layout-template size-5" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                class="hidden size-10 place-items-center rounded-full text-[#54656F] hover:bg-black/5 sm:grid"
+                title="Catalog"
+                @click="openCatalog"
+              >
+                <span class="lucide-shopping-bag size-5" aria-hidden="true" />
+              </button>
             </template>
           </MessageInput>
         </div>
       </template>
+      </div>
+
+      <aside
+        v-if="current && contactOpen"
+        class="inbox-rail inbox-rail-open relative hidden h-auto min-h-0 flex-col self-stretch border-l border-[#E9EDEF] bg-white md:flex"
+      >
+        <div class="flex h-14 shrink-0 items-center gap-2 border-b border-[#E9EDEF] px-2">
+          <button
+            type="button"
+            class="grid size-8 shrink-0 place-items-center rounded-full text-[#54656F] hover:bg-[#F0F2F5]"
+            title="Collapse contact info"
+            aria-label="Collapse contact info"
+            @click="contactOpen = false"
+          >
+            <span class="lucide-panel-right-close size-4" aria-hidden="true" />
+          </button>
+          <span class="truncate text-sm font-semibold text-[#111B21]">Contact info</span>
+        </div>
+        <ProfileDetails
+          ref="desktopProfile"
+          class="min-h-0 flex-1 overflow-y-auto"
+          :thread="current"
+          :assignment="currentAssignment"
+          @assign="(user) => { assignUser = user; assignToUser(); }"
+          @unassign="clearAssignment"
+        />
+      </aside>
     </section>
 
-    <!-- Right Profile Details Sidebar (Desktop) -->
-    <aside
-      v-if="current"
-      class="hidden w-56 shrink-0 min-h-0 min-w-0 flex-col border-l border-outline-gray-2 bg-white lg:flex"
-    >
-      <ProfileDetails
-        :thread="current"
-        :assignment="currentAssignment"
-        @assign="(user) => { assignUser = user; assignToUser(); }"
-        @unassign="clearAssignment"
-      />
-    </aside>
-
-    <!-- Mobile Profile Details Modal Dialog -->
-    <Dialog v-model="details" title="Contact & Assignment">
-      <ProfileDetails
-        v-if="current"
-        :thread="current"
-        :assignment="currentAssignment"
-        @assign="(user) => { assignUser = user; assignToUser(); }"
-        @unassign="clearAssignment"
-      />
-    </Dialog>
+    <div v-if="details && current" class="fixed inset-0 z-50 md:hidden">
+      <button type="button" class="absolute inset-0 bg-black/40" aria-label="Close contact info" @click="details = false" />
+      <aside class="absolute inset-x-0 bottom-0 flex max-h-[min(70dvh,32rem)] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl">
+        <div class="flex h-11 shrink-0 items-center justify-between border-b border-[#E9EDEF] px-3">
+          <span class="text-sm font-semibold text-[#111B21]">Contact info</span>
+          <button type="button" class="grid size-8 place-items-center rounded-full text-[#54656F] hover:bg-[#F0F2F5]" aria-label="Close" @click="details = false">
+            <span class="lucide-x size-4" aria-hidden="true" />
+          </button>
+        </div>
+        <ProfileDetails
+          ref="drawerProfile"
+          class="min-h-0 overflow-y-auto"
+          :thread="current"
+          :assignment="currentAssignment"
+          @assign="(user) => { assignUser = user; assignToUser(); }"
+          @unassign="clearAssignment"
+        />
+      </aside>
+    </div>
 
     <!-- Send WhatsApp Template Modal Dialog (2-Column Studio Preview) -->
     <Dialog v-model="templateOpen" size="7xl" title="Send WhatsApp Template">

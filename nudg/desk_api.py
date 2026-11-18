@@ -334,7 +334,7 @@ def get_webhook_setup() -> dict:
 	if frappe.db.exists("DocType", "WA Settings"):
 		token = frappe.db.get_single_value("WA Settings", "webhook_verify_token") or ""
 	return {
-		"callback_method": "nudg.integrations.webhook.handler",
+		"callback_method": "whatsapp.whatsapp.webhook.handler",
 		"verify_token": token,
 	}
 
@@ -727,7 +727,7 @@ def get_whatsapp_settings() -> dict:
 	"""WA Settings values a manager can edit. The webhook secret is never returned."""
 	_require_manager()
 	if not frappe.db.exists("DocType", "WA Settings"):
-		return {"callback_method": "nudg.integrations.webhook.handler"}
+		return {"callback_method": "whatsapp.whatsapp.webhook.handler"}
 	doc = frappe.get_single("WA Settings")
 	return {
 		"default_account": doc.default_account or "",
@@ -735,7 +735,7 @@ def get_whatsapp_settings() -> dict:
 		"whatsapp_api_version": doc.whatsapp_api_version or "",
 		"webhook_verify_token": doc.webhook_verify_token or "",
 		"has_webhook_secret": bool(doc.webhook_secret),
-		"callback_method": "nudg.integrations.webhook.handler",
+		"callback_method": "whatsapp.whatsapp.webhook.handler",
 	}
 
 

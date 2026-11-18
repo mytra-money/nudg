@@ -19,6 +19,7 @@ const props = withDefaults(defineProps<MessageBubbleProps>(), {
 const emit = defineEmits<{
 	reply: [message: WhatsAppMessage];
 	"jump-to": [name: string];
+	retry: [message: WhatsAppMessage];
 }>();
 
 /** No stored column: a message is a reply iff it points at another message's id. */
@@ -43,7 +44,7 @@ function nameFor(direction?: WhatsAppDirection) {
 		variant only reaches descendants.
 	-->
 	<div
-		class="group/bubble flex min-w-0 max-w-[80%] flex-col gap-1 data-[direction=Outgoing]:items-end"
+		class="group/bubble flex min-w-0 max-w-[min(78%,36rem)] flex-col gap-0.5 data-[direction=Outgoing]:items-end"
 		:data-direction="message.direction"
 	>
 		<div
@@ -53,7 +54,7 @@ function nameFor(direction?: WhatsAppDirection) {
 			     and `break-words` already contains a long unbroken URL -->
 			<div
 				:id="message.name"
-				class="relative w-fit min-w-0 max-w-full break-words rounded-6 bg-surface-gray-1 px-2.5 py-1.5 text-p-base text-ink-gray-9 shadow-[inset_0_0_0.25px_0.25px_rgba(0,0,0,0.03)] has-[[data-slot=reactions]]:mb-3 group-data-[direction=Outgoing]/bubble:bg-surface-gray-2"
+				class="relative w-fit min-w-0 max-w-full flow-root break-words rounded-lg px-3 py-1.5 text-[14.2px] leading-[19px] text-[#111B21] shadow-[0_1px_0.5px_rgba(11,20,26,0.13)] has-[[data-slot=reactions]]:mb-3 group-data-[direction=Incoming]/bubble:rounded-tl-none group-data-[direction=Incoming]/bubble:bg-white group-data-[direction=Outgoing]/bubble:rounded-tr-none group-data-[direction=Outgoing]/bubble:bg-[#D9FDD3]"
 			>
 				<!--
 					reply_message/reply_to_* only: `header`/`footer` describe *this* message's template.
@@ -153,6 +154,32 @@ function nameFor(direction?: WhatsAppDirection) {
 					The chip straddles the bubble and the page, so it carries its own surface. The
 					hover fill marks it as the thing to hover for who reacted.
 				-->
+				<span class="float-right ml-3 mt-1 inline-flex items-center gap-0.5 whitespace-nowrap text-[11px] leading-none text-[#667781]">
+					<Tooltip :text="creation.format('ddd, MMM D, YYYY')">
+						<time :datetime="creation.format('YYYY-MM-DDTHH:mm:ssZ')">
+							{{ creation.format("h:mm A") }}
+						</time>
+					</Tooltip>
+					<template v-if="message.direction == 'Outgoing' && message.status != 'Failed'">
+						<LoadingIndicator v-if="message.status == 'Pending'" class="size-3 text-[#667781]" />
+						<span
+							v-else-if="message.status == 'Sent'"
+							class="lucide-check size-3.5 text-[#667781]"
+							aria-hidden="true"
+						/>
+						<span
+							v-else-if="message.status == 'Delivered'"
+							class="lucide-check-check size-3.5 text-[#667781]"
+							aria-hidden="true"
+						/>
+						<span
+							v-else-if="message.status == 'Read'"
+							class="lucide-check-check size-3.5 text-[#53BDEB]"
+							aria-hidden="true"
+						/>
+					</template>
+				</span>
+
 				<div
 					v-if="message.reactions?.length"
 					data-slot="reactions"
@@ -176,6 +203,17 @@ function nameFor(direction?: WhatsAppDirection) {
 				inert to the pointer until then: an invisible button must not be clickable, but
 				must still be reachable by keyboard.
 			-->
+			<button
+				v-if="message.direction == 'Outgoing' && message.status == 'Failed'"
+				type="button"
+				class="mb-1 inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-white text-[#EA3943] shadow-[0_1px_0.5px_rgba(11,20,26,0.13)] hover:bg-red-50"
+				aria-label="Retry sending this message"
+				title="Retry"
+				@click="emit('retry', message)"
+			>
+				<span class="lucide-rotate-ccw size-4" aria-hidden="true" />
+			</button>
+
 			<div
 				v-if="message.status != 'Failed'"
 				class="pointer-events-none flex shrink-0 items-center gap-0.5 rounded-full border border-gray-200 bg-white/95 px-1 py-0.5 shadow-xs opacity-0 backdrop-blur-xs group-hover/bubble:pointer-events-auto group-hover/bubble:opacity-100 group-focus-within/bubble:pointer-events-auto group-focus-within/bubble:opacity-100"
@@ -201,38 +239,11 @@ function nameFor(direction?: WhatsAppDirection) {
 			than on the bubble. Room for an overhanging reaction chip comes from the body's own
 			`has-[]` margin, not from a margin computed per row.
 		-->
-		<div
-			class="flex max-w-full items-center gap-1.5 px-1 text-xs text-ink-gray-6 group-data-[direction=Outgoing]/bubble:flex-row-reverse"
+		<p
+			v-if="message.status == 'Failed'"
+			class="max-w-full px-1 text-[11px] leading-snug text-[#EA3943] group-data-[direction=Outgoing]/bubble:text-right"
 		>
-			<Tooltip :text="creation.format('ddd, MMM D, YYYY')">
-				<!--
-					dayjsLocal, not dayjs: `creation` is naive and in the site's timezone,
-					so plain dayjs would read it as browser-local and shift every stamp.
-				-->
-				<time :datetime="creation.format('YYYY-MM-DDTHH:mm:ssZ')">
-					{{ creation.format("hh:mm a") }}
-				</time>
-			</Tooltip>
-
-			<template v-if="message.direction == 'Outgoing'">
-				<LoadingIndicator v-if="message.status == 'Pending'" class="size-3" />
-				<span
-					v-else-if="message.status == 'Sent'"
-					class="lucide-check size-4"
-					aria-hidden="true"
-				/>
-				<span
-					v-else-if="['Read', 'Delivered'].includes(message.status || '')"
-					class="lucide-check-check size-4"
-					:class="{ 'text-ink-blue-5': message.status == 'Read' }"
-					aria-hidden="true"
-				/>
-			</template>
-
-			<!-- readable rather than hover-only: a send failure is the one thing worth reading -->
-			<span v-if="message.status == 'Failed'" class="min-w-0 break-words text-ink-red-6">
-				{{ message.error_message || failedMessageLabel }}
-			</span>
-		</div>
+			{{ message.error_message || failedMessageLabel }}
+		</p>
 	</div>
 </template>

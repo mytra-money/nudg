@@ -6,7 +6,10 @@ import { router } from './router'
 import { initSocket } from './socket'
 import translationPlugin from './translation'
 import { createDialog } from './utils/dialogs'
+import { purgeSharedDeskCache } from './utils/deskCache'
 import './style.css'
+
+purgeSharedDeskCache()
 
 const pinia = createPinia()
 const app = createApp(App)

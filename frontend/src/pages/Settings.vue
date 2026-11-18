@@ -95,7 +95,7 @@ const siteSettings = ref({
   webhook_verify_token: '',
   webhook_secret: '',
   has_webhook_secret: false,
-  callback_method: 'nudg.integrations.webhook.handler',
+  callback_method: 'whatsapp.whatsapp.webhook.handler',
 })
 const savingSite = ref(false)
 
@@ -439,7 +439,7 @@ async function loadSiteSettings() {
       webhook_verify_token: result?.webhook_verify_token || '',
       webhook_secret: '',
       has_webhook_secret: Boolean(result?.has_webhook_secret),
-      callback_method: result?.callback_method || 'nudg.integrations.webhook.handler',
+      callback_method: result?.callback_method || 'whatsapp.whatsapp.webhook.handler',
     }
   } catch (caught) {
     showToast(errorText(caught), true)

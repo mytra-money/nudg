@@ -323,7 +323,8 @@ def run_campaign(name: str, claimed: int = 0) -> dict:
 	if hasattr(doc, "failed_count"):
 		doc.failed_count = failed
 
-	# Update funnel totals across all recipients
+	# Recipient rows must be stored before the funnel count, which reads them from the database.
+	doc.save()
 	recalculate_campaign_funnel_counts(doc)
 
 	pending = any(r.status == "Pending" for r in recipients)

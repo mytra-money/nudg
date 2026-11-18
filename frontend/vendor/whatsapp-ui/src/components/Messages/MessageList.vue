@@ -26,6 +26,7 @@ const props = withDefaults(defineProps<MessageListProps>(), {
 const emit = defineEmits<{
 	reply: [message: WhatsAppMessage];
 	react: [payload: ReactPayload];
+	retry: [message: WhatsAppMessage];
 }>();
 
 const FLASH_MS = 1000;
@@ -139,18 +140,16 @@ onBeforeUnmount(() => {
 			</div>
 		</div>
 
-		<ul v-else role="list" class="flex flex-col gap-3">
+		<ul v-else role="list" class="flex flex-col gap-1.5">
 			<template v-for="row in rows" :key="row.key">
 				<li
 					v-if="row.kind === 'separator'"
 					role="presentation"
-					class="flex items-center gap-3 py-1"
+					class="flex justify-center py-1.5"
 				>
-					<!-- a border, not a background: `bg-` registers `surface` only, so
-					     `bg-outline-*` produces no colour at all -->
-					<span class="flex-1 border-t border-outline-gray-2" />
-					<span class="text-xs text-ink-gray-6">{{ row.label }}</span>
-					<span class="flex-1 border-t border-outline-gray-2" />
+					<span class="rounded-lg bg-white/90 px-3 py-1 text-[12px] font-medium text-[#54656F] shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]">
+						{{ row.label }}
+					</span>
 				</li>
 
 				<li
@@ -181,6 +180,7 @@ onBeforeUnmount(() => {
 						:replying-to-label="replyingToLabel"
 						:failed-message-label="failedMessageLabel"
 						@reply="emit('reply', $event)"
+						@retry="emit('retry', $event)"
 						@jump-to="scrollToMessage"
 					>
 						<!-- the bubble owns the reveal and the Failed guard for this whole pair -->

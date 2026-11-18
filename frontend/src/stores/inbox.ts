@@ -6,6 +6,7 @@ import { errorText } from '@/utils/format'
 import { sampleInbox, sampleLogs } from '@/mocks/sample'
 import { isLiveSession } from '@/stores/session'
 import { playSound } from '@/stores/sounds'
+import { deskCacheKey } from '@/utils/deskCache'
 import type { Inbox, LogRow } from '@/types'
 
 export type PresenceRow = { user: string; name: string; typing: boolean; viewing: boolean }
@@ -20,14 +21,14 @@ export const useInboxStore = defineStore('nudg-inbox', () => {
 
   const inboxResource = createResource<Inbox | null>({
     url: 'nudg.api.get_inbox',
-    cache: 'nudg:inbox',
+    cache: deskCacheKey('inbox'),
     initialData: null,
     auto: false,
   })
 
   const logsResource = createResource<LogRow[]>({
     url: 'nudg.api.get_logs',
-    cache: 'nudg:logs',
+    cache: deskCacheKey('logs'),
     initialData: [],
     auto: false,
   })

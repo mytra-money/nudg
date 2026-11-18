@@ -134,6 +134,9 @@ def _empty_inbox() -> dict:
 def get_inbox(account: str | None = None, tag: str | None = None, tags: str | None = None, queue: str | None = "all") -> dict:
 	if not _ready():
 		return _empty_inbox()
+	from nudg.services.delivery import fail_stuck_outgoing
+
+	fail_stuck_outgoing()
 	profiles = frappe.get_list(
 		"WA Profile",
 		fields=_profile_fields(),
@@ -338,6 +341,9 @@ def publish_presence(conversation_id: str, action: str) -> dict:
 def get_thread(profile: str) -> dict:
 	if not _ready():
 		frappe.throw(_("WhatsApp is not connected on this site."))
+	from nudg.services.delivery import fail_stuck_outgoing
+
+	fail_stuck_outgoing()
 	visible = frappe.get_list(
 		"WA Profile",
 		filters={"name": profile},

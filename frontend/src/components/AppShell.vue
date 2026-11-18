@@ -168,7 +168,7 @@ onUnmounted(() => window.clearInterval(timer))
             <img :src="logoUrl" alt="Nudg" class="size-full object-cover" />
           </template>
         </SidebarHeader>
-        <AccountSelect />
+        <AccountSelect v-show="!sidebarCollapsed" />
         <div class="min-h-0 flex-1 overflow-y-auto px-2">
           <SidebarSection>
             <SidebarItem
@@ -229,6 +229,9 @@ onUnmounted(() => window.clearInterval(timer))
             </ol>
           </nav>
           <h1 class="truncate text-base font-semibold text-ink-gray-9">{{ title }}</h1>
+        </div>
+        <div v-if="sidebarCollapsed" class="hidden w-44 shrink-0 md:block">
+          <AccountSelect inline />
         </div>
         <div class="ml-auto flex min-w-0 items-center gap-2">
           <div class="w-28 min-w-0 overflow-hidden sm:w-40 md:hidden">

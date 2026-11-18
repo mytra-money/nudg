@@ -35,18 +35,21 @@ logger = logging.getLogger("nudg.integrations.webhook")
 
 @frappe.whitelist(allow_guest=True, methods=["GET", "POST"])
 def handler() -> Response | str:
-	"""Entry point for Meta WhatsApp Business webhooks."""
-	request = getattr(frappe.local, "request", None)
-	method = getattr(request, "method", "GET") if request else "GET"
-
-	if method == "GET":
-		return _handle_verification()
-	return _handle_event()
+	"""Entry point delegating to standard Frappe WhatsApp webhook handler."""
+	try:
+		from whatsapp.whatsapp.webhook import handler as wa_handler
+		return wa_handler()
+	except Exception:
+		request = getattr(frappe.local, "request", None)
+		method = getattr(request, "method", "GET") if request else "GET"
+		if method == "GET":
+			return _handle_verification()
+		return _handle_event()
 
 
 @frappe.whitelist(allow_guest=True, methods=["GET", "POST"])
 def receive() -> Response | str:
-	"""Alias for handler endpoint."""
+	"""Alias delegating to standard Frappe WhatsApp webhook handler."""
 	return handler()
 
 
