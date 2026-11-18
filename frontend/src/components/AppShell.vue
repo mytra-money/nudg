@@ -9,7 +9,6 @@ import {
   Popover,
   Sidebar,
   SidebarCollapseToggle,
-  SidebarHeader,
   SidebarItem,
   SidebarSection,
 } from 'frappe-ui'
@@ -30,7 +29,14 @@ const sessionUser = window.user || ''
 const sessionSite = window.sitename || ''
 const visibleNav = computed(() => shellNav.filter((link) => !link.managerOnly || isManager.value))
 const accounts = ref<Array<{ name: string; account_name: string }>>([])
-const activeAccount = computed(() => accounts.value[0]?.account_name || '')
+const selectedAccountLabel = computed(() => {
+  const selected = desk.account.value
+  if (!selected || selected === 'all') return selected === 'all' ? 'All numbers' : ''
+  const fromInbox = desk.inbox.value?.accounts?.find((row) => row.name === selected)
+  if (fromInbox) return fromInbox.account_name || fromInbox.name
+  const fromList = accounts.value.find((row) => row.name === selected)
+  return fromList?.account_name || fromList?.name || ''
+})
 const SIDEBAR_KEY = 'nudg.sidebar_collapsed'
 const sidebarCollapsed = ref(
   typeof localStorage !== 'undefined' ? localStorage.getItem(SIDEBAR_KEY) === '1' : false,
@@ -57,13 +63,6 @@ async function loadAccounts() {
   }
 }
 
-const subtitle = computed(() => {
-  if (desk.mode.value === 'sample') return 'Local preview'
-  if (activeAccount.value) return activeAccount.value
-  if (desk.inbox.value && !desk.inbox.value.connected) return 'Not connected'
-  return desk.inbox.value?.site || sessionSite || 'Site'
-})
-
 const title = computed(() => route.meta.title || 'Nudg')
 const breadcrumb = computed(() => route.meta.parent || null)
 const userLabel = sessionLive ? sessionUser || 'Signed in' : 'Local preview'
@@ -76,7 +75,9 @@ const userMenu = computed<DropdownOptions>(() =>
           hideLabel: true,
           options: [
             { label: sessionUser || 'Signed in', description: 'Session user', disabled: true },
-            ...(activeAccount.value ? [{ label: activeAccount.value, description: 'Account', disabled: true }] : []),
+            ...(desk.account.value && desk.account.value !== 'all' && selectedAccountLabel.value
+              ? [{ label: selectedAccountLabel.value, description: 'Account', disabled: true }]
+              : []),
             ...(sessionSite ? [{ label: sessionSite, description: 'Site', disabled: true }] : []),
             {
               label: 'Sign out',
@@ -163,12 +164,19 @@ onUnmounted(() => window.clearInterval(timer))
         width="14rem"
         collapsed-width="3rem"
       >
-        <SidebarHeader title="" :subtitle="subtitle">
-          <template #prefix>
-            <img :src="logoUrl" alt="Nudg" class="size-full object-cover" />
-          </template>
-        </SidebarHeader>
-        <AccountSelect v-show="!sidebarCollapsed" />
+        <div class="flex h-12 shrink-0 items-center px-1">
+          <div
+            class="flex h-10 min-w-0 items-center rounded-4 px-1.5"
+            :class="sidebarCollapsed ? 'w-auto' : 'w-full'"
+          >
+            <div class="size-7 shrink-0 overflow-hidden rounded-[6px]">
+              <img :src="logoUrl" alt="Nudg" class="size-full object-cover" />
+            </div>
+            <div v-show="!sidebarCollapsed" class="ml-2 min-w-0 flex-1">
+              <AccountSelect inline />
+            </div>
+          </div>
+        </div>
         <div class="min-h-0 flex-1 overflow-y-auto px-2">
           <SidebarSection>
             <SidebarItem
@@ -238,11 +246,11 @@ onUnmounted(() => window.clearInterval(timer))
             <AccountSelect inline />
           </div>
           <div
-            v-if="activeAccount"
+            v-if="selectedAccountLabel"
             class="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-800"
           >
             <span class="lucide-building-2 size-3 text-emerald-600" aria-hidden="true" />
-            <span class="truncate max-w-[10rem]">{{ activeAccount }}</span>
+            <span class="truncate max-w-[10rem]">{{ selectedAccountLabel }}</span>
           </div>
           <Popover align="end">
             <template #trigger>
