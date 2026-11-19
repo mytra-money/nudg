@@ -21,17 +21,14 @@ DESK_GRANTS = {
 	"WA Catalog Item": ("read", "report", "print"),
 	"WA Quick Reply": ("read", "write", "create", "report", "print"),
 	"UTM Campaign": ("read", "report", "print"),
-	"WA Automation Rule": ("read", "report", "print"),
-	"WA Automation Run": ("read", "report", "print"),
 	"WA Chatbot Session": ("read", "report", "print"),
 	"WA Agent Transfer": ("read", "write", "create", "report", "print"),
 	"WA Bulk Message": ("read", "report", "print"),
 }
 
-# Broadcasts, automation, and catalogs are manager work. Agents keep the inbox.
+# Broadcasts and catalogs are manager work. Agents keep the inbox.
 AGENT_LOCKED = (
 	"UTM Campaign",
-	"WA Automation Rule",
 	"WA Catalog",
 	"WA Catalog Item",
 	"WA Bulk Message",
@@ -45,8 +42,6 @@ AGENT_LOCKED = (
 MANAGER_GRANTS = {
 	"WA Account": ("read", "write", "create", "report", "print"),
 	"UTM Campaign": ("read", "write", "create", "delete", "report", "print"),
-	"WA Automation Rule": ("read", "write", "create", "delete", "report", "print"),
-	"WA Automation Run": ("read", "write", "report", "print"),
 	"WA Quick Reply": ("read", "write", "create", "delete", "report", "print"),
 	"WA Catalog": ("read", "write", "create", "delete", "report", "print"),
 	"WA Catalog Item": ("read", "write", "create", "delete", "report", "print"),
@@ -80,7 +75,6 @@ def after_install():
 	ensure_role()
 	setup_standard_custom_fields()
 	_ensure_desk_modules()
-	_ensure_facebook_login()
 
 
 def after_migrate():
@@ -88,13 +82,6 @@ def after_migrate():
 	ensure_role()
 	setup_standard_custom_fields()
 	_ensure_desk_modules()
-	_ensure_facebook_login()
-
-
-def _ensure_facebook_login():
-	from nudg.integrations.facebook_login import ensure_facebook_login
-
-	ensure_facebook_login(seed=True)
 
 
 def _ensure_desk_modules():

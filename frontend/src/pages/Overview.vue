@@ -359,6 +359,20 @@ const recentLogs = computed(() => logs.value.slice(0, 4))
             </a>
 
             <a
+              href="/catalogs"
+              class="flex items-start gap-3 rounded-xl border border-outline-gray-2 bg-white p-4 shadow-xs transition-all hover:border-[#128C7E] hover:bg-surface-gray-2"
+              @click.prevent="navigateTo('/catalogs')"
+            >
+              <div class="grid size-9 shrink-0 place-items-center rounded-lg bg-orange-50 text-orange-700">
+                <span class="lucide-shopping-bag size-5" aria-hidden="true" />
+              </div>
+              <div class="min-w-0">
+                <p class="text-sm font-semibold text-ink-gray-9">Catalogs</p>
+                <p class="mt-0.5 text-xs text-ink-gray-6">Products, prices, and the Meta catalog id for this number.</p>
+              </div>
+            </a>
+
+            <a
               href="/template-studio"
               class="flex items-start gap-3 rounded-xl border border-outline-gray-2 bg-white p-4 shadow-xs transition-all hover:border-[#128C7E] hover:bg-surface-gray-2"
               @click.prevent="navigateTo('/template-studio')"
@@ -382,7 +396,7 @@ const recentLogs = computed(() => logs.value.slice(0, 4))
               </div>
               <div class="min-w-0">
                 <p class="text-sm font-semibold text-ink-gray-9">Integrations & WABA</p>
-                <p class="mt-0.5 text-xs text-ink-gray-6">Configure WhatsApp Cloud API tokens, webhooks, and catalogs.</p>
+                <p class="mt-0.5 text-xs text-ink-gray-6">Configure WhatsApp Cloud API tokens, webhooks, and ERPNext.</p>
               </div>
             </a>
           </div>

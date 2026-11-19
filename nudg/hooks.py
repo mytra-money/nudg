@@ -42,7 +42,6 @@ after_migrate = ["nudg.install.after_migrate"]
 permission_query_conditions = {
 	"WA Profile": "nudg.security.get_tenant_conversation_query",
 	"UTM Campaign": "nudg.security.get_tenant_campaign_query",
-	"WA Automation Rule": "nudg.security.get_tenant_rule_query",
 	"WA Quick Reply": "nudg.security.get_tenant_quick_reply_query",
 	"WA Catalog": "nudg.security.get_tenant_catalog_query",
 	"WA Bulk Message": "nudg.security.get_tenant_bulk_query",
@@ -58,7 +57,6 @@ permission_query_conditions = {
 has_permission = {
 	"WA Profile": "nudg.security.has_tenant_permission",
 	"UTM Campaign": "nudg.security.has_tenant_permission",
-	"WA Automation Rule": "nudg.security.has_tenant_permission",
 	"WA Quick Reply": "nudg.security.has_tenant_permission",
 	"WA Catalog": "nudg.security.has_tenant_permission",
 	"WA Bulk Message": "nudg.security.has_tenant_permission",
@@ -77,7 +75,6 @@ export_python_type_annotations = True
 # payload for chatbot button ids and WhatsApp Flow replies, then calls it.
 override_whitelisted_methods = {
 	"whatsapp.whatsapp.webhook.handler": "nudg.integrations.webhook.handler",
-	"frappe.integrations.oauth2_logins.login_via_facebook": "nudg.integrations.facebook_login.login_via_facebook",
 }
 
 extend_bootinfo = ["nudg.desk_access.extend_bootinfo"]

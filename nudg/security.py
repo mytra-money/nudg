@@ -139,14 +139,13 @@ def is_account_manager(account: str, user: str | None = None) -> bool:
 
 
 def on_user_created(doc, method=None):
-	"""Grant WhatsApp User when Facebook sign-in creates the account.
+	"""Leave new users alone.
 
-	Other new users stay as they are. WhatsApp Manager is still granted when
-	someone creates a WA Account, and team APIs set roles explicitly.
+	WhatsApp Manager is granted when someone creates a WA Account, and team
+	APIs set WhatsApp User or WhatsApp Manager explicitly. Auto-promoting every
+	ERPNext user would give the whole company the desk manager role.
 	"""
-	from nudg.integrations.facebook_login import grant_new_facebook_user
-
-	grant_new_facebook_user(doc)
+	return
 
 
 def ensure_account_user_permission(account: str, user: str | None = None) -> bool:
@@ -224,10 +223,6 @@ def get_tenant_campaign_query(user: str | None = None) -> str:
 
 	escaped = ", ".join(frappe.db.escape(a) for a in accounts)
 	return f"(`tabUTM Campaign`.whatsapp_account IN ({escaped}) OR `tabUTM Campaign`.whatsapp_account IS NULL OR `tabUTM Campaign`.whatsapp_account = '')"
-
-
-def get_tenant_rule_query(user: str | None = None) -> str:
-	return _account_query_for("WA Automation Rule", "whatsapp_account", user)
 
 
 def get_tenant_hours_query(user: str | None = None) -> str:

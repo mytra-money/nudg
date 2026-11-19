@@ -207,11 +207,9 @@ class TestWebhookReceiver(unittest.TestCase):
 					with patch("nudg.integrations.repository.contact_repo.DeskContactRepository.get_or_create_contact", return_value="Alice-Contact"):
 						with patch("nudg.integrations.repository.message_repo.DeskMessageRepository.save_incoming_message", return_value={"record_name": "MSG-99", "content": "STOP"}):
 							with patch("nudg.integrations.repository.contact_repo.DeskContactRepository.update_consent") as mock_consent:
-								with patch.object(webhook, "_trigger_automations") as mock_auto:
-									resp = webhook.handler()
-									self.assertEqual(resp, "ok")
-									mock_consent.assert_called_once_with("Alice-Contact", "Opted-Out", reason="STOP keyword")
-									mock_auto.assert_called_once_with("Alice-Contact", "", "MSG-99")
+								resp = webhook.handler()
+								self.assertEqual(resp, "ok")
+								mock_consent.assert_called_once_with("Alice-Contact", "Opted-Out", reason="STOP keyword")
 
 	def test_post_status_update_delivered(self):
 		"""Incoming status update updates message status in repository."""

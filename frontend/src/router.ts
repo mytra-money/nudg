@@ -24,8 +24,9 @@ export const shellNav: NavItem[] = [
   { to: '/', label: 'Overview', icon: 'lucide-layout-dashboard' },
   { to: '/conversations', label: 'Conversations', icon: 'lucide-inbox' },
   { to: '/marketing', label: 'Marketing', icon: 'lucide-megaphone', managerOnly: true },
+  { to: '/catalogs', label: 'Catalogs', icon: 'lucide-shopping-bag', managerOnly: true },
   { to: '/template-studio', label: 'Template Studio', icon: 'lucide-layout-template' },
-  { to: '/automation', label: 'Automation', icon: 'lucide-workflow', managerOnly: true },
+  { to: '/automation', label: 'Automation', icon: 'lucide-bot', managerOnly: true },
   { to: '/analytics', label: 'Analytics', icon: 'lucide-chart-column' },
   { to: '/integrations', label: 'Integrations', icon: 'lucide-plug', managerOnly: true },
   { to: '/settings', label: 'Settings', icon: 'lucide-settings' },
@@ -46,6 +47,7 @@ export const router = createRouter({
     { path: '/', component: OverviewView, meta: { title: 'Overview' } },
     { path: '/conversations', component: InboxView, meta: { title: 'Conversations', desk: true } },
     { path: '/marketing', component: MarketingView, meta: { title: 'Marketing', desk: true, manager: true } },
+    { path: '/catalogs', component: CatalogsView, meta: { title: 'Catalogs', desk: true, manager: true } },
     { path: '/template-studio', component: TemplatesView, meta: { title: 'Template Studio', desk: true } },
     { path: '/automation', component: AutomationView, meta: { title: 'Automation', desk: true, manager: true } },
     { path: '/analytics', component: AnalyticsView, meta: { title: 'Analytics', desk: true } },
@@ -60,16 +62,7 @@ export const router = createRouter({
         parent: { label: 'Integrations', to: '/integrations' },
       },
     },
-    {
-      path: '/integrations/catalogs',
-      component: CatalogsView,
-      meta: {
-        title: 'Catalogs',
-        desk: true,
-        manager: true,
-        parent: { label: 'Integrations', to: '/integrations' },
-      },
-    },
+    { path: '/integrations/catalogs', redirect: '/catalogs' },
     {
       path: '/integrations/logs',
       component: LogsView,
@@ -84,7 +77,6 @@ export const router = createRouter({
     { path: '/templates', redirect: '/template-studio' },
     { path: '/accounts', redirect: '/integrations' },
     { path: '/logs', redirect: '/integrations/logs' },
-    { path: '/catalogs', redirect: '/integrations/catalogs' },
   ],
 })
 

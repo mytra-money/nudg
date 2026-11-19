@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { Avatar, Button, Combobox, Dialog, toast } from 'frappe-ui'
 import { isManager } from '@/stores/desk'
 import { whatsappScreen } from '@/utils/format'
@@ -14,7 +14,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   assign: [user: string]
-  unassign: []
+  unassign: [user: string]
 }>()
 
 function linkedScreen(doctype: string) {
@@ -52,6 +52,10 @@ async function loadUsers(txt = '') {
   }
 }
 
+onMounted(() => {
+  void loadUsers('')
+})
+
 watch(assignDialogOpen, (open) => {
   if (!open) return
   newAssignee.value = null
@@ -82,8 +86,23 @@ function submitAssignment() {
   assignDialogOpen.value = false
 }
 
-function handleUnassign() {
-  emit('unassign')
+const assignees = computed(() => {
+  const listed = (props.assignment?.assignees || []).filter((person): person is string => Boolean(person))
+  if (listed.length) return listed
+  const one = props.assignment?.assignee
+  if (!one || props.assignment?.assignment_status === 'Unassigned') return []
+  return [one]
+})
+
+function personLabel(user: string) {
+  const known = userOptions.value.find((row) => row.value === user)?.label
+  if (known) return known
+  const local = user.split('@')[0] || user
+  return local.replace(/[._]/g, ' ')
+}
+
+function handleUnassign(user: string) {
+  emit('unassign', user)
 }
 
 function promptLink() {
@@ -124,34 +143,37 @@ defineExpose({ openAssign })
 
     <div class="space-y-1.5 border-t border-[#E9EDEF] px-3 py-2">
       <div class="flex items-center justify-between gap-2">
-        <span class="text-[11px] font-semibold uppercase tracking-wide text-[#667781]">Assigned agent</span>
+        <span class="text-[11px] font-semibold uppercase tracking-wide text-[#667781]">Assigned to</span>
         <button
           type="button"
           class="text-[11px] font-semibold text-[#00A884] hover:underline"
           @click="assignDialogOpen = true"
         >
-          {{ assignment?.assignee ? 'Reassign' : 'Assign' }}
+          Assign
         </button>
       </div>
-      <div
-        v-if="assignment?.assignee"
-        class="flex items-center gap-2 rounded-lg bg-[#F0F2F5] px-2 py-1.5"
-      >
-        <Avatar :label="assignment.assignee" size="sm" />
-        <div class="min-w-0 flex-1">
-          <p class="break-all text-xs font-medium leading-snug text-[#111B21]">{{ assignment.assignee }}</p>
-          <p class="text-[11px] text-[#667781]">{{ assignment.assignment_status }}</p>
-        </div>
-        <button
-          type="button"
-          class="grid size-6 shrink-0 place-items-center rounded-full text-[#667781] hover:bg-white"
-          title="Remove assignment"
-          @click="handleUnassign"
+      <div v-if="assignees.length" class="space-y-1">
+        <div
+          v-for="person in assignees"
+          :key="person"
+          class="flex items-center gap-2 rounded-lg bg-[#F0F2F5] px-2 py-1.5"
         >
-          <span class="lucide-x size-3.5" aria-hidden="true" />
-        </button>
+          <Avatar :label="personLabel(person)" size="sm" />
+          <div class="min-w-0 flex-1">
+            <p class="break-all text-xs font-medium leading-snug text-[#111B21]">{{ personLabel(person) }}</p>
+            <p class="text-[11px] text-[#667781]">{{ assignment?.assignment_status || 'Assigned' }}</p>
+          </div>
+          <button
+            type="button"
+            class="grid size-6 shrink-0 place-items-center rounded-full text-[#667781] hover:bg-white"
+            title="Remove assignment"
+            @click="handleUnassign(person)"
+          >
+            <span class="lucide-x size-3.5" aria-hidden="true" />
+          </button>
+        </div>
       </div>
-      <p v-else class="text-xs text-[#667781]">No agent assigned yet.</p>
+      <p v-else class="text-xs text-[#667781]">No one assigned yet.</p>
     </div>
 
     <div class="space-y-1.5 border-t border-[#E9EDEF] px-3 py-2">
@@ -197,7 +219,7 @@ defineExpose({ openAssign })
     <Dialog v-model="assignDialogOpen" title="Assign Conversation" size="md">
       <div class="space-y-4 py-2">
         <p class="text-xs text-ink-gray-6">
-          Select the team member to assign this conversation to.
+          Add a team member. People already assigned stay assigned.
         </p>
         <Combobox
           v-model="newAssignee"

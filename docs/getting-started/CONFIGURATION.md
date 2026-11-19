@@ -2,15 +2,9 @@
 
 Connect a WhatsApp number from **Integrations** in Nudg, or create the account in Desk on the official WhatsApp DocTypes. Do this as System Manager.
 
-## Sign in to Nudg with Facebook
-
-A System Manager turns this on under **Settings → Facebook login**. People then see **Login with Facebook** on the site login page and land in Nudg. A new person gets the WhatsApp User role. Google sign-in is not set up yet.
-
-In the Meta app, add the Facebook Login product and paste the redirect URI shown on that settings page. The App ID and app secret can be the same Meta app used for Embedded Signup. If that app already has an App ID and secret saved, Nudg turns Facebook sign-in on during migrate.
-
 ## Login with Facebook
 
-Use **Login with Facebook** on **Integrations** when Embedded Signup is turned on for the site. The customer picks their WhatsApp Business account and number. Nudg stores the account. The signup PIN is shown once. Save it. This connects a number. It does not sign a person in to Nudg.
+Use **Login with Facebook** when Embedded Signup is turned on for the site. The customer picks their WhatsApp Business account and number. Nudg stores the account. The signup PIN is shown once. Save it.
 
 ## Already have credentials
 

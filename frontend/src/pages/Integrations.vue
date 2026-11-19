@@ -46,19 +46,6 @@ const isAccountsActive = computed(() => route.path === '/integrations' || route.
         </RouterLink>
 
         <RouterLink
-          to="/integrations/catalogs"
-          class="flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold sm:text-sm transition-all"
-          :class="
-            route.path.includes('/catalogs')
-              ? 'bg-[#075E54]/10 text-[#075E54] border border-[#075E54]/20 shadow-xs'
-              : 'text-ink-gray-6 hover:bg-surface-gray-2 hover:text-ink-gray-9'
-          "
-        >
-          <span class="lucide-shopping-bag size-4" />
-          <span>Catalogs</span>
-        </RouterLink>
-
-        <RouterLink
           v-if="showLogs"
           to="/integrations/logs"
           class="flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold sm:text-sm transition-all"

@@ -10,7 +10,7 @@ const desk = useDesk()
 const loading = ref(true)
 const error = ref<string | null>(null)
 const replies = ref<any[]>([])
-const activeTab = ref<'replies' | 'hours' | 'routing' | 'profile' | 'team' | 'login'>('replies')
+const activeTab = ref<'replies' | 'hours' | 'routing' | 'profile' | 'team'>('replies')
 const searchQuery = ref('')
 const channelFilter = ref('all')
 const isRefreshing = ref(false)
@@ -98,15 +98,6 @@ const siteSettings = ref({
   callback_method: 'whatsapp.whatsapp.webhook.handler',
 })
 const savingSite = ref(false)
-const facebookLogin = ref({
-  enabled: false,
-  app_id: '',
-  app_secret: '',
-  has_secret: false,
-  redirect_uri: '',
-  ready: false,
-})
-const savingFacebook = ref(false)
 
 // Enriched sample quick replies for demo/preview mode
 const fallbackQuickReplies: any[] = [
@@ -437,59 +428,6 @@ async function handleUpdateMember() {
   }
 }
 
-async function loadFacebookLogin() {
-  if (!isSiteAdmin.value || desk.mode.value !== 'live') return
-  try {
-    const result = await call<typeof facebookLogin.value>('nudg.desk_api.get_facebook_login_settings')
-    facebookLogin.value = {
-      enabled: Boolean(result?.enabled),
-      app_id: result?.app_id || '',
-      app_secret: '',
-      has_secret: Boolean(result?.has_secret),
-      redirect_uri: result?.redirect_uri || '',
-      ready: Boolean(result?.ready),
-    }
-  } catch (caught) {
-    showToast(errorText(caught), true)
-  }
-}
-
-async function saveFacebookLogin() {
-  if (!isSiteAdmin.value || desk.mode.value !== 'live') return
-  savingFacebook.value = true
-  try {
-    const result = await call<typeof facebookLogin.value>('nudg.desk_api.save_facebook_login_settings', {
-      app_id: facebookLogin.value.app_id.trim(),
-      app_secret: facebookLogin.value.app_secret.trim() || undefined,
-      enabled: facebookLogin.value.enabled ? 1 : 0,
-    })
-    facebookLogin.value = {
-      enabled: Boolean(result?.enabled),
-      app_id: result?.app_id || facebookLogin.value.app_id,
-      app_secret: '',
-      has_secret: Boolean(result?.has_secret),
-      redirect_uri: result?.redirect_uri || facebookLogin.value.redirect_uri,
-      ready: Boolean(result?.ready),
-    }
-    showToast(facebookLogin.value.enabled ? 'Login with Facebook is on.' : 'Login with Facebook is off.')
-  } catch (caught) {
-    showToast(errorText(caught), true)
-  } finally {
-    savingFacebook.value = false
-  }
-}
-
-async function copyRedirectUri() {
-  const uri = facebookLogin.value.redirect_uri
-  if (!uri) return
-  try {
-    await navigator.clipboard.writeText(uri)
-    showToast('Redirect URI copied.')
-  } catch {
-    showToast('Copy the redirect URI from the field.', true)
-  }
-}
-
 async function loadSiteSettings() {
   if (!isSiteAdmin.value || desk.mode.value !== 'live') return
   try {
@@ -672,20 +610,6 @@ onMounted(() => {
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
           </svg>
           <span>WABA Profile</span>
-        </button>
-
-        <button
-          v-if="isSiteAdmin"
-          type="button"
-          @click="activeTab = 'login'; loadFacebookLogin()"
-          class="flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs sm:text-sm font-semibold transition-all"
-          :class="
-            activeTab === 'login'
-              ? 'border-[#128C7E] text-[#075E54]'
-              : 'border-transparent text-ink-gray-6 hover:text-ink-gray-9'
-          "
-        >
-          <span>Facebook login</span>
         </button>
       </div>
 
@@ -1012,63 +936,6 @@ onMounted(() => {
       </div>
 
       <!-- TAB 5: TEAM & AGENTS -->
-      <div v-else-if="activeTab === 'login'" class="mt-6 space-y-6">
-        <div class="rounded-xl border border-outline-gray-2 bg-white p-6 shadow-2xs">
-          <h2 class="text-lg font-bold text-ink-gray-9">Login with Facebook</h2>
-          <p class="mt-1 text-sm text-ink-gray-6">
-            People use this to sign in to Nudg. A new person gets the WhatsApp User role and opens Nudg.
-            Google sign-in is not available yet.
-          </p>
-          <p class="mt-2 text-sm text-ink-gray-6">
-            Connecting a WhatsApp number stays on Integrations. That Facebook window is Embedded Signup, not this login.
-          </p>
-          <div v-if="desk.mode.value !== 'live'" class="mt-4 text-sm text-ink-gray-6">
-            Open Nudg on the site to save the Facebook App ID and app secret.
-          </div>
-          <div v-else class="mt-4 max-w-xl space-y-4">
-            <label class="flex items-center gap-2 text-sm font-medium text-ink-gray-8">
-              <input v-model="facebookLogin.enabled" type="checkbox" class="rounded border-outline-gray-2" />
-              Enable Login with Facebook
-            </label>
-            <label class="block text-sm font-medium text-ink-gray-8">
-              Facebook App ID
-              <input v-model="facebookLogin.app_id" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 font-normal" />
-            </label>
-            <label class="block text-sm font-medium text-ink-gray-8">
-              App secret
-              <input
-                v-model="facebookLogin.app_secret"
-                type="password"
-                autocomplete="new-password"
-                class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 font-normal"
-                :placeholder="facebookLogin.has_secret ? 'Saved. Type a new secret to replace it.' : 'Meta app secret'"
-              />
-            </label>
-            <label class="block text-sm font-medium text-ink-gray-8">
-              Redirect URI
-              <input
-                :value="facebookLogin.redirect_uri"
-                readonly
-                class="mt-1 block w-full rounded-lg border border-outline-gray-2 bg-surface-gray-1 px-3 py-2 font-normal text-ink-gray-7"
-              />
-            </label>
-            <p class="text-xs leading-relaxed text-ink-gray-6">
-              In the Meta app, add Facebook Login and paste this redirect URI. The App ID can be the same one used for Embedded Signup.
-            </p>
-            <div class="flex flex-wrap gap-2">
-              <Button
-                variant="solid"
-                class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-                :loading="savingFacebook"
-                label="Save"
-                @click="saveFacebookLogin"
-              />
-              <Button variant="subtle" label="Copy redirect URI" @click="copyRedirectUri" />
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div v-else-if="activeTab === 'team'" class="mt-6 space-y-6">
         <div class="rounded-xl border border-outline-gray-2 bg-white p-6 shadow-2xs">
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-outline-gray-2 pb-5">

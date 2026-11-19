@@ -155,18 +155,20 @@ def complete_signup(
 				waba_id, phone_number_id = alt_waba, alt_phone
 				subscribed, registered, warnings = alt_subscribed, alt_registered, alt_warnings
 
+	title = account_name or _account_title(phone_number_id, token, version, found)
 	account = _upsert_account(
-		account_name=account_name or f"WhatsApp {phone_number_id[-4:]}",
+		account_name=title,
 		phone_id=phone_number_id,
 		business_id=waba_id,
 		access_token=token,
 		app_id=settings["app_id"],
 		pin=pin if registered else "",
 	)
+	stored_name = frappe.db.get_value("WA Account", account, "account_name") or title
 	return {
 		"status": "success",
 		"account": account,
-		"account_name": account_name or f"WhatsApp {phone_number_id[-4:]}",
+		"account_name": stored_name,
 		"phone_number_id": phone_number_id,
 		"waba_id": waba_id,
 		"pin": pin if registered else "",
@@ -215,7 +217,20 @@ def discover_assets(token: str, app_id: str, app_secret: str, version: str) -> d
 		phone_ids = [str(row.get("id") or "") for row in rows if row.get("id")]
 		if phone_ids:
 			phone_number_id = phone_ids[0]
-	return {"waba_id": waba_id, "phone_number_id": phone_number_id, "phone_number_ids": phone_ids}
+		for row in rows:
+			if str(row.get("id") or "") == phone_number_id:
+				display_phone_number = _mobile_title(str(row.get("display_phone_number") or ""))
+				break
+		else:
+			display_phone_number = ""
+	else:
+		display_phone_number = ""
+	return {
+		"waba_id": waba_id,
+		"phone_number_id": phone_number_id,
+		"phone_number_ids": phone_ids,
+		"display_phone_number": display_phone_number,
+	}
 
 
 def subscribe_app(waba_id: str, token: str, version: str) -> None:
@@ -410,6 +425,39 @@ def _finish_cloud(waba_id: str, phone_number_id: str, token: str, pin: str, vers
 	return subscribed, registered, unique
 
 
+def _mobile_title(display: str | None) -> str:
+	"""Turn Meta's display phone number into the WA Account title."""
+	text = (display or "").strip()
+	digits = re.sub(r"\D", "", text)
+	if not digits:
+		return ""
+	if text.startswith("+"):
+		return f"+{digits}"
+	return digits
+
+
+def _display_phone_number(phone_number_id: str, token: str, version: str) -> str:
+	try:
+		body = _graph(
+			"GET",
+			f"https://graph.facebook.com/{version}/{phone_number_id}",
+			params={"fields": "display_phone_number"},
+			token=token,
+		)
+	except EmbeddedSignupError as exc:
+		_log_meta(exc.detail)
+		return ""
+	return _mobile_title(str((body or {}).get("display_phone_number") or ""))
+
+
+def _account_title(phone_number_id: str, token: str, version: str, found: dict[str, Any] | None) -> str:
+	"""Name a new account after the mobile number, never `WhatsApp` plus the phone-id suffix."""
+	title = _display_phone_number(phone_number_id, token, version)
+	if not title and found:
+		title = _mobile_title(str(found.get("display_phone_number") or ""))
+	return title or phone_number_id
+
+
 def _log_meta(detail: str) -> None:
 	try:
 		frappe.log_error(message=redact(detail)[:14000], title="WhatsApp setup")
@@ -422,7 +470,10 @@ def _upsert_account(account_name: str, phone_id: str, business_id: str, access_t
 	if existing:
 		doc = frappe.get_doc("WA Account", existing)
 	else:
-		doc = frappe.get_doc({"doctype": "WA Account", "account_name": account_name, "status": "Active"})
+		title = account_name
+		if title and frappe.db.exists("WA Account", title):
+			title = f"{account_name} {phone_id}"
+		doc = frappe.get_doc({"doctype": "WA Account", "account_name": title, "status": "Active"})
 	doc.account_name = doc.account_name or account_name
 	doc.phone_id = phone_id
 	doc.business_id = business_id

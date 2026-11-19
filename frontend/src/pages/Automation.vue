@@ -1,877 +1,669 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { Badge, Button, Dialog, Select, TextInput, toast } from 'frappe-ui'
-import EmptyState from '@/components/EmptyState.vue'
-import ErrorState from '@/components/ErrorState.vue'
-import LoadingState from '@/components/LoadingState.vue'
-import { errorText, formatDay, formatTime, initials } from '@/utils/format'
-import { formatErrorMessage } from '@/utils/errors'
-import { createAutomationRule, deleteAutomationRule, listAutomationRules, listAutomationRuns, updateAutomationRule } from '@/services/catalogApi'
-import { isManager, useDesk } from '@/stores/desk'
+import { computed, onMounted, ref, watch } from 'vue'
+import { Button, Dialog, toast } from 'frappe-ui'
+import { formatDay, formatTime, rawErrorText } from '@/utils/format'
+import {
+  cancelChatbotSession,
+  deleteChatbotFlow,
+  deleteChatbotKeyword,
+  getChatbot,
+  listChatbotFlows,
+  listChatbotHandoffs,
+  listChatbotKeywords,
+  resumeChatbotHandoff,
+  saveChatbot,
+  saveChatbotFlow,
+  saveChatbotKeyword,
+} from '@/services/catalogApi'
+import { useDesk } from '@/stores/desk'
+
+type Tab = 'bot' | 'keywords' | 'flows' | 'handoffs'
+
+interface HourRow {
+  day: string
+  enabled: number
+  start_time: string
+  end_time: string
+}
+
+interface FlowStep {
+  step_name: string
+  message: string
+  input_type: string
+  store_as: string
+}
 
 const desk = useDesk()
-const live = Boolean(window.csrf_token)
-
+const tab = ref<Tab>('bot')
+const account = ref('')
 const loading = ref(true)
-const error = ref<string | null>(null)
-const rules = ref<any[]>([])
-const runs = ref<any[]>([])
-
-const query = ref('')
-const selectedTab = ref<'all' | 'active_rules' | 'runs' | 'failed_runs'>('all')
-const accountFilter = ref('all')
-
-const selectedRule = ref<any | null>(null)
-const ruleDialogOpen = ref(false)
-
-const selectedRun = ref<any | null>(null)
-const runDialogOpen = ref(false)
-const editorOpen = ref(false)
-const editorMode = ref<'create' | 'edit'>('create')
-const editingName = ref('')
 const saving = ref(false)
-const form = ref({
-  rule_name: '',
-  trigger: 'Incoming Message',
-  action: 'Send Text',
-  action_reference: '',
-  whatsapp_account: '',
-  status: 'Active',
-  condition_operator: 'Contains',
-  condition_keyword: '',
+const error = ref<string | null>(null)
+
+const bot = ref({
+  enabled: 0,
+  default_response: '',
+  business_hours_only: 0,
+  out_of_hours_message: '',
+  business_hours: [] as HourRow[],
+  enable_ai: 0,
+  ai_provider: '',
+  has_ai_key: 0,
+  ai_api_key: '',
+  ai_model: '',
+  session_timeout_minutes: 30,
+  excluded_numbers: '',
 })
 
-const triggerOptions = [
-  { label: 'Incoming Message', value: 'Incoming Message' },
-  { label: 'Status Failed', value: 'Status Failed' },
-  { label: 'Keyword Match', value: 'Keyword Match' },
-  { label: 'Keyword Rule', value: 'Keyword Rule' },
-]
-const actionOptions = [
-  { label: 'Send Template', value: 'Send Template' },
-  { label: 'Assign', value: 'Assign' },
-  { label: 'Quick Reply', value: 'Quick Reply' },
-  { label: 'Send Text', value: 'Send Text' },
-]
-const ruleStatusOptions = [
-  { label: 'Active', value: 'Active' },
-  { label: 'Inactive', value: 'Inactive' },
-]
-const operatorOptions = [
-  { label: 'Contains', value: 'Contains' },
-  { label: 'Exact', value: 'Exact' },
-  { label: 'Starts With', value: 'Starts With' },
-  { label: 'Regex', value: 'Regex' },
-]
+const keywords = ref<any[]>([])
+const flows = ref<any[]>([])
+const transfers = ref<any[]>([])
+const sessions = ref<any[]>([])
 
-const sampleRules: any[] = [
-  {
-    name: 'rule-welcome-01',
-    rule_name: 'Instant Welcome Greeting',
-    trigger: 'First Incoming Message',
-    action: 'Send Auto Reply',
-    action_reference: 'Hello! Welcome to Sundarban Spices. An agent has been assigned to your query.',
-    status: 'Active',
-    whatsapp_account: 'Sundarban Sales',
-    modified: new Date(Date.now() - 3600000 * 48).toISOString(),
-  },
-  {
-    name: 'rule-dispatch-02',
-    rule_name: 'Delivery Note Auto-Notification',
-    trigger: 'Delivery Note Submitted',
-    action: 'Send WhatsApp Template',
-    action_reference: 'dispatch_notice',
-    status: 'Active',
-    whatsapp_account: 'Sundarban Dispatch',
-    modified: new Date(Date.now() - 3600000 * 24).toISOString(),
-  },
-  {
-    name: 'rule-after-hours-03',
-    rule_name: 'Out-of-Hours Auto-Responder',
-    trigger: 'After Business Hours (7PM - 9AM)',
-    action: 'Send Auto Reply',
-    action_reference: 'Thank you for contacting us! Our team is currently offline. We will reply at 9:00 AM.',
-    status: 'Active',
-    whatsapp_account: 'Sundarban Sales',
-    modified: new Date(Date.now() - 3600000 * 12).toISOString(),
-  },
-  {
-    name: 'rule-vip-assign-04',
-    rule_name: 'VIP Customer Priority Routing',
-    trigger: 'Incoming Message (VIP Tag)',
-    action: 'Assign to Agent',
-    action_reference: 'sales-lead@sundarban.com',
-    status: 'Inactive',
-    whatsapp_account: 'Sundarban Sales',
-    modified: new Date().toISOString(),
-  },
-]
+const keywordOpen = ref(false)
+const flowOpen = ref(false)
+const keywordForm = ref(emptyKeyword())
+const flowForm = ref(emptyFlow())
 
-const sampleRuns: any[] = [
-  {
-    name: 'run-101',
-    rule: 'Instant Welcome Greeting',
-    profile: 'Meera Iyer (+91 98450 22119)',
-    status: 'Success',
-    started_at: new Date(Date.now() - 60000 * 18).toISOString(),
-    finished_at: new Date(Date.now() - 60000 * 18 + 420).toISOString(),
-    detail: 'Triggered by inbound message wamid.meera.3. Auto-reply delivered in 420ms.',
-    reference_message: 'wamid.meera.3',
-  },
-  {
-    name: 'run-102',
-    rule: 'Delivery Note Auto-Notification',
-    profile: 'Rafiq Traders (+91 33 4065 1180)',
-    status: 'Success',
-    started_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-    finished_at: new Date(Date.now() - 3600000 * 2 + 650).toISOString(),
-    detail: 'Delivery Note MAT-DN-0194 submitted in ERPNext. Sent dispatch_notice template.',
-    reference_message: 'wamid.rafiq.2',
-  },
-  {
-    name: 'run-103',
-    rule: 'Out-of-Hours Auto-Responder',
-    profile: 'Anita Desai (+91 98200 44110)',
-    status: 'Success',
-    started_at: new Date(Date.now() - 3600000 * 11).toISOString(),
-    finished_at: new Date(Date.now() - 3600000 * 11 + 310).toISOString(),
-    detail: 'Customer message received at 11:24 PM. Sent offline business hours notification.',
-    reference_message: 'wamid.anita.1',
-  },
-  {
-    name: 'run-104',
-    rule: 'VIP Customer Priority Routing',
-    profile: 'Hotel Grand Chowringhee (+91 33 2223 8890)',
-    status: 'Failed',
-    started_at: new Date(Date.now() - 3600000 * 26).toISOString(),
-    finished_at: new Date(Date.now() - 3600000 * 26 + 120).toISOString(),
-    detail: 'Execution failed: Customer profile is marked as Blocked / Opted-Out. Routing aborted.',
-    reference_message: 'wamid.hotel.fail',
-  },
-]
+const accounts = computed(() => desk.inbox.value?.accounts || [])
+const flowOptions = computed(() => flows.value.map((row) => ({ name: row.name, label: row.flow_name || row.name })))
 
-async function load() {
+function emptyKeyword() {
+  return {
+    name: '',
+    keywords: '',
+    match_type: 'Contains',
+    response_type: 'Text',
+    response_text: '',
+    trigger_flow: '',
+    enabled: 1,
+  }
+}
+
+function emptyFlow() {
+  return {
+    name: '',
+    flow_name: '',
+    trigger_keywords: '',
+    initial_message: '',
+    completion_message: '',
+    cancel_keywords: 'stop',
+    enabled: 1,
+    steps: [emptyStep(1)] as FlowStep[],
+  }
+}
+
+function emptyStep(index: number): FlowStep {
+  return { step_name: `step_${index}`, message: '', input_type: 'Text', store_as: '' }
+}
+
+function clock(value: string) {
+  return (value || '').slice(0, 5)
+}
+
+async function loadAccount() {
+  if (!account.value) return
   loading.value = true
   error.value = null
   try {
-    if (!live) {
-      rules.value = sampleRules
-      runs.value = sampleRuns
-      return
-    }
-    const [fetchedRules, fetchedRuns] = await Promise.all([
-      listAutomationRules().catch(() => []),
-      listAutomationRuns().catch(() => []),
+    const [settings, keywordRows, flowRows, handoff] = await Promise.all([
+      getChatbot(account.value),
+      listChatbotKeywords(account.value),
+      listChatbotFlows(account.value),
+      listChatbotHandoffs(account.value),
     ])
-    rules.value = fetchedRules || []
-    runs.value = fetchedRuns || []
-  } catch (caught) {
-    if (!live) {
-      rules.value = sampleRules
-      runs.value = sampleRuns
-    } else {
-      error.value = errorText(caught)
+    bot.value = {
+      enabled: settings.enabled || 0,
+      default_response: settings.default_response || '',
+      business_hours_only: settings.business_hours_only || 0,
+      out_of_hours_message: settings.out_of_hours_message || '',
+      business_hours: (settings.business_hours || []).map((row: HourRow) => ({
+        ...row,
+        start_time: clock(row.start_time),
+        end_time: clock(row.end_time),
+      })),
+      enable_ai: settings.enable_ai || 0,
+      ai_provider: settings.ai_provider || '',
+      has_ai_key: settings.has_ai_key || 0,
+      ai_api_key: '',
+      ai_model: settings.ai_model || '',
+      session_timeout_minutes: settings.session_timeout_minutes || 30,
+      excluded_numbers: (settings.excluded_numbers || []).join('\n'),
     }
+    keywords.value = keywordRows || []
+    flows.value = flowRows || []
+    transfers.value = handoff?.transfers || []
+    sessions.value = handoff?.sessions || []
+  } catch (err) {
+    error.value = rawErrorText(err)
   } finally {
     loading.value = false
   }
 }
 
-const ruleAccountOptions = computed(() =>
-  (desk.inbox.value?.accounts || []).map((row) => ({
-    label: row.account_name || row.name,
-    value: row.name,
-  })),
-)
-
-function startCreate() {
-  editorMode.value = 'create'
-  editingName.value = ''
-  form.value = {
-    rule_name: '',
-    trigger: 'Incoming Message',
-    action: 'Send Text',
-    action_reference: '',
-    whatsapp_account: ruleAccountOptions.value[0]?.value || '',
-    status: 'Active',
-    condition_operator: 'Contains',
-    condition_keyword: '',
-  }
-  editorOpen.value = true
-}
-
-function startEdit(rule: any) {
-  editorMode.value = 'edit'
-  editingName.value = rule.name
-  const allowed = new Set(triggerOptions.map((option) => option.value))
-  form.value = {
-    rule_name: rule.rule_name || rule.name || '',
-    trigger: allowed.has(rule.trigger) ? rule.trigger : 'Incoming Message',
-    action: rule.action || 'Send Text',
-    action_reference: rule.action_reference || '',
-    whatsapp_account: rule.whatsapp_account || '',
-    status: rule.status || 'Active',
-    condition_operator: rule.condition_operator || 'Contains',
-    condition_keyword: rule.condition_keyword || '',
-  }
-  ruleDialogOpen.value = false
-  editorOpen.value = true
-}
-
-async function removeRule() {
-  if (editorMode.value !== 'edit' || !editingName.value) return
-  if (!window.confirm(`Delete rule “${form.value.rule_name || editingName.value}”?`)) return
+async function saveBot() {
+  if (!account.value) return
   saving.value = true
   try {
-    if (live) await deleteAutomationRule(editingName.value)
-    rules.value = rules.value.filter((row) => row.name !== editingName.value)
-    if (selectedRule.value?.name === editingName.value) selectedRule.value = null
-    editorOpen.value = false
-    toast.success('Rule deleted')
-  } catch (caught) {
-    toast.error(errorText(caught))
+    const saved = await saveChatbot(account.value, {
+      ...bot.value,
+      excluded_numbers: bot.value.excluded_numbers
+        .split(/[\n,]/)
+        .map((item) => item.trim())
+        .filter(Boolean),
+    })
+    bot.value.has_ai_key = saved.has_ai_key || 0
+    bot.value.ai_api_key = ''
+    toast.success('Chatbot saved')
+  } catch (err) {
+    toast.error(rawErrorText(err))
   } finally {
     saving.value = false
   }
 }
 
-async function saveRule() {
-  const ruleName = form.value.rule_name.trim()
-  if (!ruleName) {
-    toast.error('Rule name is required.')
-    return
-  }
+function openKeyword(row?: any) {
+  keywordForm.value = row
+    ? {
+        name: row.name,
+        keywords: row.keywords || '',
+        match_type: row.match_type || 'Contains',
+        response_type: row.response_type === 'Flow' ? 'Flow' : 'Text',
+        response_text: row.response_text || '',
+        trigger_flow: row.trigger_flow || '',
+        enabled: row.enabled ? 1 : 0,
+      }
+    : emptyKeyword()
+  keywordOpen.value = true
+}
+
+async function saveKeyword() {
   saving.value = true
   try {
-    if (!live) {
-      const row = {
-        name: editorMode.value === 'edit' ? editingName.value || ruleName : ruleName,
-        rule_name: ruleName,
-        trigger: form.value.trigger,
-        action: form.value.action,
-        action_reference: form.value.action_reference.trim(),
-        whatsapp_account: form.value.whatsapp_account,
-        status: form.value.status,
-        condition_operator: form.value.condition_operator,
-        condition_keyword: form.value.condition_keyword.trim(),
-        modified: new Date().toISOString(),
-      }
-      if (editorMode.value === 'edit') {
-        const index = rules.value.findIndex((item) => item.name === editingName.value)
-        if (index >= 0) rules.value[index] = { ...rules.value[index], ...row }
-      } else {
-        rules.value = [row, ...rules.value]
-      }
-      editorOpen.value = false
-      toast.success(editorMode.value === 'edit' ? 'Rule updated' : 'Rule created')
-      return
-    }
-    const saved =
-      editorMode.value === 'edit'
-        ? await updateAutomationRule({
-            name: editingName.value,
-            rule_name: ruleName,
-            trigger: form.value.trigger,
-            action: form.value.action,
-            action_reference: form.value.action_reference.trim(),
-            whatsapp_account: form.value.whatsapp_account || undefined,
-            status: form.value.status,
-            condition_operator: form.value.condition_operator,
-            condition_keyword: form.value.condition_keyword.trim(),
-          })
-        : await createAutomationRule({
-            rule_name: ruleName,
-            trigger: form.value.trigger,
-            action: form.value.action,
-            action_reference: form.value.action_reference.trim(),
-            whatsapp_account: form.value.whatsapp_account || undefined,
-            status: form.value.status,
-            condition_operator: form.value.condition_operator,
-            condition_keyword: form.value.condition_keyword.trim(),
-          })
-    editorOpen.value = false
-    toast.success(editorMode.value === 'edit' ? 'Rule updated' : 'Rule created')
-    await load()
-    if (saved?.name) selectedRule.value = rules.value.find((item) => item.name === saved.name) || saved
-  } catch (caught) {
-    toast.error(errorText(caught))
+    await saveChatbotKeyword(account.value, { ...keywordForm.value })
+    keywordOpen.value = false
+    keywords.value = (await listChatbotKeywords(account.value)) || []
+    toast.success('Keyword saved')
+  } catch (err) {
+    toast.error(rawErrorText(err))
   } finally {
     saving.value = false
   }
 }
 
-function inspectRule(rule: any) {
-  selectedRule.value = rule
-  ruleDialogOpen.value = true
+async function removeKeyword(name: string) {
+  if (!window.confirm('Delete this keyword?')) return
+  try {
+    await deleteChatbotKeyword(account.value, name)
+    keywords.value = keywords.value.filter((row) => row.name !== name)
+  } catch (err) {
+    toast.error(rawErrorText(err))
+  }
 }
 
-function inspectRun(run: any) {
-  selectedRun.value = run
-  runDialogOpen.value = true
+function openFlow(row?: any) {
+  flowForm.value = row
+    ? {
+        name: row.name,
+        flow_name: row.flow_name || row.name,
+        trigger_keywords: row.trigger_keywords || '',
+        initial_message: row.initial_message || '',
+        completion_message: row.completion_message || '',
+        cancel_keywords: row.cancel_keywords || 'stop',
+        enabled: row.enabled ? 1 : 0,
+        steps: (row.steps || []).map((step: FlowStep, index: number) => ({
+          step_name: step.step_name || `step_${index + 1}`,
+          message: step.message || '',
+          input_type: step.input_type || 'Text',
+          store_as: step.store_as || '',
+        })),
+      }
+    : emptyFlow()
+  if (!flowForm.value.steps.length) flowForm.value.steps = [emptyStep(1)]
+  flowOpen.value = true
 }
 
-// KPI Metrics
-const countTotalRules = computed(() => rules.value.length)
-const countActiveRules = computed(() => rules.value.filter((r) => r.status === 'Active').length)
-const countTotalRuns = computed(() => runs.value.length)
-const countSuccessRuns = computed(() => runs.value.filter((r) => r.status === 'Success').length)
-const countFailedRuns = computed(() => runs.value.filter((r) => r.status === 'Failed').length)
-
-const successRate = computed(() => {
-  if (countTotalRuns.value === 0) return 100
-  return Math.round((countSuccessRuns.value / countTotalRuns.value) * 100)
-})
-
-// Account Options
-const accountOptions = computed(() => {
-  const accs = desk.inbox.value?.accounts || []
-  return [
-    { label: 'All Accounts', value: 'all' },
-    ...accs.map((a) => ({ label: a.account_name || a.name, value: a.name })),
-  ]
-})
-
-// Filtered Rules
-const filteredRules = computed(() => {
-  return rules.value.filter((row) => {
-    if (selectedTab.value === 'active_rules' && row.status !== 'Active') return false
-    if (accountFilter.value !== 'all' && row.whatsapp_account && row.whatsapp_account !== accountFilter.value) {
-      return false
-    }
-    if (!query.value.trim()) return true
-    const term = query.value.toLowerCase()
-    return (
-      (row.rule_name || '').toLowerCase().includes(term) ||
-      (row.trigger || '').toLowerCase().includes(term) ||
-      (row.action || '').toLowerCase().includes(term) ||
-      (row.action_reference || '').toLowerCase().includes(term)
-    )
-  })
-})
-
-// Filtered Runs
-const filteredRuns = computed(() => {
-  return runs.value.filter((row) => {
-    if (selectedTab.value === 'failed_runs' && row.status !== 'Failed') return false
-    if (!query.value.trim()) return true
-    const term = query.value.toLowerCase()
-    return (
-      (row.rule || '').toLowerCase().includes(term) ||
-      (row.profile || '').toLowerCase().includes(term) ||
-      (row.detail || '').toLowerCase().includes(term)
-    )
-  })
-})
-
-function clearFilters() {
-  query.value = ''
-  selectedTab.value = 'all'
-  accountFilter.value = 'all'
+function addStep() {
+  flowForm.value.steps.push(emptyStep(flowForm.value.steps.length + 1))
 }
 
-onMounted(() => {
-  if (!desk.inbox.value) void desk.load()
-  void load()
+function removeStep(index: number) {
+  flowForm.value.steps.splice(index, 1)
+  if (!flowForm.value.steps.length) flowForm.value.steps.push(emptyStep(1))
+}
+
+async function saveFlow() {
+  saving.value = true
+  try {
+    await saveChatbotFlow(account.value, {
+      ...flowForm.value,
+      steps: flowForm.value.steps.map((step, index) => ({
+        ...step,
+        step_name: (step.store_as || step.step_name || `step_${index + 1}`).trim().replace(/\s+/g, '_'),
+      })),
+    })
+    flowOpen.value = false
+    flows.value = (await listChatbotFlows(account.value)) || []
+    toast.success('Flow saved')
+  } catch (err) {
+    toast.error(rawErrorText(err))
+  } finally {
+    saving.value = false
+  }
+}
+
+async function removeFlow(name: string) {
+  if (!window.confirm('Delete this flow?')) return
+  try {
+    await deleteChatbotFlow(account.value, name)
+    flows.value = flows.value.filter((row) => row.name !== name)
+  } catch (err) {
+    toast.error(rawErrorText(err))
+  }
+}
+
+async function resume(name: string) {
+  try {
+    await resumeChatbotHandoff(account.value, name)
+    transfers.value = transfers.value.map((row) => (row.name === name ? { ...row, status: 'Resumed' } : row))
+    toast.success('Bot is answering this chat again')
+  } catch (err) {
+    toast.error(rawErrorText(err))
+  }
+}
+
+async function cancelSession(name: string) {
+  try {
+    await cancelChatbotSession(account.value, name)
+    sessions.value = sessions.value.filter((row) => row.name !== name)
+    toast.success('Flow stopped')
+  } catch (err) {
+    toast.error(rawErrorText(err))
+  }
+}
+
+function when(value?: string) {
+  if (!value) return ''
+  return `${formatDay(value)} ${formatTime(value)}`.trim()
+}
+
+watch(account, () => {
+  if (account.value) loadAccount()
+})
+
+onMounted(async () => {
+  await desk.load()
+  account.value = accounts.value[0]?.name || ''
+  if (!account.value) loading.value = false
 })
 </script>
 
 <template>
-  <div class="flex h-full min-w-0 flex-col overflow-hidden bg-surface-gray-1">
-    <!-- Top Action Header -->
-    <header class="flex flex-col gap-3 border-b border-outline-gray-2 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between shrink-0">
-      <div>
-        <div class="flex items-center gap-2">
-          <span class="rounded bg-[#075E54]/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-[#075E54]">
-            Automation Engine
-          </span>
-          <span class="text-xs text-ink-gray-5">·</span>
-          <span class="text-xs font-medium text-ink-gray-6">Triggers & Webhook Rules</span>
+  <div class="flex h-full min-h-0 flex-col bg-surface-gray-2/60">
+    <div class="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6 sm:px-8">
+      <div class="flex flex-col gap-4 border-b border-outline-gray-2 pb-6 md:flex-row md:items-center md:justify-between">
+        <div class="flex items-center gap-2.5">
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#075E54]/10 text-[#075E54]">
+            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.8L3 20l1.2-3.6A7.7 7.7 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+          </div>
+          <div>
+            <h1 class="text-2xl font-bold tracking-tight text-ink-gray-9">Automation</h1>
+            <p class="text-xs text-ink-gray-6 sm:text-sm">Replies, questions, and handoff for one WhatsApp number.</p>
+          </div>
         </div>
-        <h1 class="mt-1 text-xl font-bold tracking-tight text-ink-gray-9">
-          WhatsApp Automation & Workflows
-        </h1>
+        <label class="block w-full text-xs font-semibold text-ink-gray-7 md:w-72">
+          WhatsApp account
+          <select v-model="account" class="mt-1 block w-full rounded-lg border border-outline-gray-2 bg-white px-3 py-2 text-sm font-normal text-ink-gray-9">
+            <option v-if="!accounts.length" value="">No account connected</option>
+            <option v-for="item in accounts" :key="item.name" :value="item.name">
+              {{ item.account_name || item.name }}
+            </option>
+          </select>
+        </label>
       </div>
 
-      <div class="flex flex-wrap items-center gap-2">
-        <Button
-          variant="subtle"
-          size="sm"
-          icon="lucide-refresh-cw"
-          label="Refresh"
-          :loading="loading"
-          @click="load"
-        />
-        <Button
-          v-if="isManager"
-          variant="solid"
-          size="sm"
-          class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-          icon-left="lucide-plus"
-          label="New Rule"
-          @click="startCreate()"
-        />
+      <div class="mt-6 flex flex-wrap items-center gap-1 border-b border-outline-gray-2 pb-px">
+        <button
+          v-for="item in [
+            { id: 'bot', label: 'Bot' },
+            { id: 'keywords', label: 'Keywords' },
+            { id: 'flows', label: 'Flows' },
+            { id: 'handoffs', label: 'Handoffs' },
+          ]"
+          :key="item.id"
+          type="button"
+          class="border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors"
+          :class="tab === item.id ? 'border-[#128C7E] text-[#075E54]' : 'border-transparent text-ink-gray-6 hover:text-ink-gray-9'"
+          @click="tab = item.id as Tab"
+        >
+          {{ item.label }}
+        </button>
       </div>
-    </header>
 
-    <!-- Top KPI Performance Bar -->
-    <section class="border-b border-outline-gray-2 bg-white px-4 py-3 shrink-0">
-      <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <!-- Metric 1: Active Rules -->
-        <div class="rounded-lg border border-outline-gray-2 bg-surface-gray-1/50 p-2.5">
-          <span class="text-[11px] font-medium uppercase tracking-wider text-ink-gray-5">Active Rules</span>
-          <div class="mt-1 flex items-baseline gap-1.5">
-            <span class="text-xl font-bold text-[#075E54]">{{ countActiveRules }}</span>
-            <span class="text-[11px] text-ink-gray-5">/ {{ countTotalRules }} configured</span>
-          </div>
-        </div>
+      <p v-if="error" class="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
+      <p v-else-if="!account" class="mt-6 rounded-xl border border-outline-gray-2 bg-white p-6 text-sm text-ink-gray-6">
+        Connect a WhatsApp account before setting up the bot.
+      </p>
+      <p v-else-if="loading" class="mt-6 text-sm text-ink-gray-5">Loading…</p>
 
-        <!-- Metric 2: Total Executions -->
-        <div class="rounded-lg border border-outline-gray-2 bg-surface-gray-1/50 p-2.5">
-          <span class="text-[11px] font-medium uppercase tracking-wider text-ink-gray-5">Runs Executed</span>
-          <div class="mt-1 flex items-baseline gap-1.5">
-            <span class="text-xl font-bold text-ink-gray-9">{{ countTotalRuns }}</span>
-            <span class="text-[11px] text-ink-gray-5">triggers fired</span>
-          </div>
-        </div>
-
-        <!-- Metric 3: Success Rate -->
-        <div class="rounded-lg border border-outline-gray-2 bg-surface-gray-1/50 p-2.5">
-          <span class="text-[11px] font-medium uppercase tracking-wider text-ink-gray-5">Execution Success</span>
-          <div class="mt-1 flex items-baseline gap-1.5">
-            <span class="text-xl font-bold text-emerald-700">{{ successRate }}%</span>
-            <span class="text-[11px] text-emerald-600 font-medium">({{ countSuccessRuns }} passed)</span>
-          </div>
-        </div>
-
-        <!-- Metric 4: Failed Runs -->
-        <div class="rounded-lg border border-outline-gray-2 bg-surface-gray-1/50 p-2.5">
-          <span class="text-[11px] font-medium uppercase tracking-wider text-ink-gray-5">Trigger Issues</span>
-          <div class="mt-1 flex items-baseline gap-1.5">
-            <span class="text-xl font-bold" :class="countFailedRuns ? 'text-red-700' : 'text-ink-gray-6'">
-              {{ countFailedRuns }}
-            </span>
-            <span class="text-[11px]" :class="countFailedRuns ? 'text-red-600' : 'text-ink-gray-5'">
-              {{ countFailedRuns ? 'requires review' : 'all nominal' }}
-            </span>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Toolbar: Search & Segment Tabs -->
-    <section class="border-b border-outline-gray-2 bg-white px-4 py-2.5 space-y-2 shrink-0">
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
-        <!-- Search Input -->
-        <div class="relative flex-1 max-w-sm">
-          <TextInput
-            v-model="query"
-            placeholder="Search rules, triggers, actions, or runs…"
-            class="w-full text-xs"
-          />
-          <button
-            v-if="query"
-            type="button"
-            class="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-gray-4 hover:text-ink-gray-7"
-            @click="query = ''"
-          >
-            <span class="lucide-x size-3" />
-          </button>
-        </div>
-
-        <div class="flex flex-wrap items-center gap-2">
-          <!-- Segment Tabs -->
-          <div class="flex flex-wrap items-center gap-1 rounded-lg bg-surface-gray-2 p-0.5 text-xs">
-            <button
-              type="button"
-              class="rounded-md px-2.5 py-1 font-medium transition-colors"
-              :class="selectedTab === 'all' ? 'bg-white text-ink-gray-9 shadow-xs' : 'text-ink-gray-6 hover:text-ink-gray-9'"
-              @click="selectedTab = 'all'"
-            >
-              All Rules & Runs
-            </button>
-            <button
-              type="button"
-              class="rounded-md px-2.5 py-1 font-medium transition-colors"
-              :class="selectedTab === 'active_rules' ? 'bg-white text-[#075E54] shadow-xs' : 'text-ink-gray-6 hover:text-ink-gray-9'"
-              @click="selectedTab = 'active_rules'"
-            >
-              Active Rules ({{ countActiveRules }})
-            </button>
-            <button
-              type="button"
-              class="rounded-md px-2.5 py-1 font-medium transition-colors"
-              :class="selectedTab === 'runs' ? 'bg-white text-blue-700 shadow-xs' : 'text-ink-gray-6 hover:text-ink-gray-9'"
-              @click="selectedTab = 'runs'"
-            >
-              Runs Log ({{ countTotalRuns }})
-            </button>
-            <button
-              type="button"
-              class="rounded-md px-2.5 py-1 font-medium transition-colors"
-              :class="selectedTab === 'failed_runs' ? 'bg-white text-red-700 shadow-xs' : 'text-ink-gray-6 hover:text-ink-gray-9'"
-              @click="selectedTab = 'failed_runs'"
-            >
-              Failed Runs ({{ countFailedRuns }})
-            </button>
-          </div>
-
-          <!-- Channel Filter -->
-          <Select
-            class="w-36 text-xs"
-            :model-value="accountFilter"
-            :options="accountOptions"
-            @update:model-value="(val) => (accountFilter = String(val || 'all'))"
-          />
-        </div>
-      </div>
-    </section>
-
-    <!-- Content State Handlers -->
-    <LoadingState v-if="loading && !rules.length" label="Loading automation workflows…" />
-    <ErrorState v-else-if="error" :message="error" allow-retry @retry="load" />
-
-    <!-- Two-Column Master-Detail Automation Canvas -->
-    <div v-else class="nudg-split grid min-h-0 flex-1 grid-cols-1 divide-y divide-outline-gray-2 overflow-hidden md:grid-cols-2 md:divide-x md:divide-y-0">
-      <!-- Left Column: Automation Rules -->
-      <section class="flex flex-col min-h-0 bg-white overflow-hidden" aria-labelledby="rules-heading">
-        <div class="flex items-center justify-between border-b border-outline-gray-1 px-4 py-3 bg-surface-gray-1/40">
-          <div class="flex items-center gap-2">
-            <span class="lucide-workflow size-4 text-[#075E54]" />
-            <h2 id="rules-heading" class="text-xs font-bold uppercase tracking-wider text-ink-gray-8">
-              Configured Rules ({{ filteredRules.length }})
-            </h2>
-          </div>
-          <span class="text-[11px] text-ink-gray-5">Evaluated on webhook events</span>
-        </div>
-
-        <div class="min-h-0 flex-1 overflow-y-auto divide-y divide-outline-gray-1">
-          <div v-if="filteredRules.length === 0" class="p-8 text-center text-xs text-ink-gray-5">
-            <div class="mx-auto grid size-10 place-items-center rounded-full bg-surface-gray-2 text-ink-gray-4">
-              <span class="lucide-workflow size-5" />
-            </div>
-            <p class="mt-2 text-sm font-semibold text-ink-gray-8">No automation rules found</p>
-            <p class="mt-1 text-ink-gray-5">Create a rule here to automate replies or notifications.</p>
-            <button
-              v-if="isManager"
-              type="button"
-              class="mt-3 text-xs font-semibold text-[#075E54] hover:underline"
-              @click="startCreate()"
-            >
-              New rule
-            </button>
-          </div>
-
-          <div
-            v-for="row in filteredRules"
-            :key="row.name"
-            class="flex flex-col gap-2 p-4 transition-all hover:bg-surface-gray-1"
-          >
-            <!-- Rule Title & Status -->
-            <div class="flex items-start justify-between gap-2">
+      <div v-else-if="tab === 'bot'" class="mt-6 space-y-4">
+        <div class="grid items-start gap-4 lg:grid-cols-2">
+          <section class="rounded-xl border border-outline-gray-2 bg-white p-5 shadow-2xs">
+            <div class="flex items-center justify-between gap-3">
               <div>
-                <p class="text-sm font-bold text-ink-gray-9 leading-tight">
-                  {{ row.rule_name }}
-                </p>
-                <p v-if="row.whatsapp_account" class="text-[11px] font-mono text-ink-gray-5 mt-0.5">
-                  Channel: {{ row.whatsapp_account }}
-                </p>
+                <h2 class="text-sm font-bold text-ink-gray-9">Replies</h2>
+                <p class="mt-1 text-xs text-ink-gray-5">Used when no keyword or flow matches.</p>
               </div>
-              <div class="flex items-center gap-1.5 shrink-0">
-                <Badge :label="row.status" :theme="row.status === 'Active' ? 'green' : 'gray'" size="sm" />
-                <button
-                  type="button"
-                  class="rounded p-1 text-ink-gray-4 hover:bg-surface-gray-2 hover:text-[#075E54]"
-                  title="Inspect Rule Details"
-                  @click="inspectRule(row)"
-                >
-                  <span class="lucide-eye size-3.5" />
-                </button>
+              <label class="flex items-center gap-2 text-xs font-semibold text-ink-gray-7">
+                <input v-model="bot.enabled" type="checkbox" class="h-4 w-4 rounded border-outline-gray-3" :true-value="1" :false-value="0" />
+                On
+              </label>
+            </div>
+            <label class="mt-4 block text-xs font-semibold text-ink-gray-7">
+              Default reply
+              <textarea v-model="bot.default_response" rows="4" class="mt-1 block w-full resize-y rounded-lg border border-outline-gray-2 px-3 py-2 text-sm font-normal" placeholder="Thanks, we will reply shortly." />
+            </label>
+            <label class="mt-3 block max-w-[12rem] text-xs font-semibold text-ink-gray-7">
+              Forget a chat after
+              <span class="mt-1 flex items-center gap-2 font-normal">
+                <input v-model.number="bot.session_timeout_minutes" type="number" min="5" class="w-20 rounded-lg border border-outline-gray-2 px-3 py-2 text-sm" />
+                minutes
+              </span>
+            </label>
+          </section>
+
+          <section class="rounded-xl border border-outline-gray-2 bg-white p-5 shadow-2xs">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <h2 class="text-sm font-bold text-ink-gray-9">Business hours</h2>
+                <p class="mt-1 text-xs text-ink-gray-5">Outside these hours the bot sends the away message.</p>
+              </div>
+              <label class="flex items-center gap-2 text-xs font-semibold text-ink-gray-7">
+                <input v-model="bot.business_hours_only" type="checkbox" class="h-4 w-4 rounded border-outline-gray-3" :true-value="1" :false-value="0" />
+                Limit
+              </label>
+            </div>
+            <label class="mt-4 block text-xs font-semibold text-ink-gray-7">
+              Away message
+              <textarea v-model="bot.out_of_hours_message" rows="2" class="mt-1 block w-full resize-y rounded-lg border border-outline-gray-2 px-3 py-2 text-sm font-normal" placeholder="We are closed. We will reply in the morning." />
+            </label>
+            <div class="mt-3 overflow-x-auto rounded-lg border border-outline-gray-2">
+              <div class="grid min-w-[22rem] grid-cols-[7.5rem_4.5rem_minmax(0,1fr)_minmax(0,1fr)] gap-2 border-b border-outline-gray-2 bg-surface-gray-1 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-ink-gray-5">
+                <span>Day</span>
+                <span>Open</span>
+                <span>From</span>
+                <span>To</span>
+              </div>
+              <div v-for="row in bot.business_hours" :key="row.day" class="grid min-w-[22rem] grid-cols-[7.5rem_4.5rem_minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 border-b border-outline-gray-1 px-3 py-2 last:border-b-0">
+                <span class="text-xs font-semibold text-ink-gray-8">{{ row.day }}</span>
+                <label class="flex items-center gap-1.5 text-xs text-ink-gray-6">
+                  <input v-model="row.enabled" type="checkbox" class="h-3.5 w-3.5" :true-value="1" :false-value="0" />
+                  Open
+                </label>
+                <input v-model="row.start_time" type="time" class="w-full rounded-md border border-outline-gray-2 px-2 py-1 text-xs" :disabled="!row.enabled" />
+                <input v-model="row.end_time" type="time" class="w-full rounded-md border border-outline-gray-2 px-2 py-1 text-xs" :disabled="!row.enabled" />
               </div>
             </div>
-
-            <!-- Workflow Pipeline Badges -->
-            <div class="flex flex-wrap items-center gap-1.5 text-xs pt-1">
-              <span class="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 font-medium text-amber-800 text-[11px]">
-                <span class="lucide-zap size-3" />
-                Trigger: {{ row.trigger }}
-              </span>
-              <span class="text-ink-gray-4 font-bold">&rarr;</span>
-              <span class="inline-flex items-center gap-1 rounded bg-teal-50 px-2 py-0.5 font-medium text-[#075E54] text-[11px]">
-                <span class="lucide-play-circle size-3" />
-                Action: {{ row.action }}
-              </span>
-            </div>
-
-            <!-- Action Reference / Content Preview -->
-            <p v-if="row.action_reference" class="text-xs text-ink-gray-6 italic line-clamp-2 bg-surface-gray-1/70 rounded p-2 mt-1">
-              "{{ row.action_reference }}"
-            </p>
-
-            <!-- Bottom Row: Modified Date & Actions -->
-            <div class="flex items-center justify-between text-[11px] text-ink-gray-5 pt-1">
-              <span>Updated {{ formatDay(row.modified) }}</span>
-              <button
-                v-if="isManager"
-                type="button"
-                class="font-medium text-[#075E54] hover:underline"
-                @click="startEdit(row)"
-              >
-                Edit
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Right Column: Live Execution Runs & Log Stream -->
-      <section class="flex flex-col min-h-0 bg-white overflow-hidden" aria-labelledby="runs-heading">
-        <div class="flex items-center justify-between border-b border-outline-gray-1 px-4 py-3 bg-surface-gray-1/40">
-          <div class="flex items-center gap-2">
-            <span class="lucide-history size-4 text-blue-600" />
-            <h2 id="runs-heading" class="text-xs font-bold uppercase tracking-wider text-ink-gray-8">
-              Live Execution Audit Runs ({{ filteredRuns.length }})
-            </h2>
-          </div>
-          <span class="text-[11px] text-ink-gray-5">Real-time webhook log</span>
+          </section>
         </div>
 
-        <div class="min-h-0 flex-1 overflow-y-auto divide-y divide-outline-gray-1">
-          <div v-if="filteredRuns.length === 0" class="p-8 text-center text-xs text-ink-gray-5">
-            <div class="mx-auto grid size-10 place-items-center rounded-full bg-surface-gray-2 text-ink-gray-4">
-              <span class="lucide-history size-5" />
+        <section class="rounded-xl border border-outline-gray-2 bg-white p-5 shadow-2xs">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <h2 class="text-sm font-bold text-ink-gray-9">AI fallback</h2>
+              <p class="mt-1 text-xs text-ink-gray-5">Optional. The bot asks the model only after keywords and flows miss.</p>
             </div>
-            <p class="mt-2 text-sm font-semibold text-ink-gray-8">No execution runs recorded</p>
-            <p class="mt-1 text-ink-gray-5">Runs appear automatically whenever incoming messages trigger active rules.</p>
+            <label class="flex items-center gap-2 text-xs font-semibold text-ink-gray-7">
+              <input v-model="bot.enable_ai" type="checkbox" class="h-4 w-4 rounded border-outline-gray-3" :true-value="1" :false-value="0" />
+              On
+            </label>
           </div>
+          <div v-if="bot.enable_ai" class="mt-4 grid gap-3 sm:grid-cols-3">
+            <label class="block text-xs font-semibold text-ink-gray-7">
+              Provider
+              <select v-model="bot.ai_provider" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 text-sm font-normal">
+                <option value="">Select</option>
+                <option>OpenAI</option>
+                <option>Anthropic</option>
+                <option>Google</option>
+                <option>Custom</option>
+              </select>
+            </label>
+            <label class="block text-xs font-semibold text-ink-gray-7">
+              Model
+              <input v-model="bot.ai_model" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 text-sm font-normal" placeholder="gpt-4o-mini" />
+            </label>
+            <label class="block text-xs font-semibold text-ink-gray-7">
+              API key
+              <input v-model="bot.ai_api_key" type="password" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 text-sm font-normal" :placeholder="bot.has_ai_key ? 'Saved. Type a new key to replace it.' : 'Paste the key'" />
+            </label>
+          </div>
+          <label class="mt-4 block text-xs font-semibold text-ink-gray-7">
+            Never reply to
+            <textarea v-model="bot.excluded_numbers" rows="2" class="mt-1 block w-full resize-y rounded-lg border border-outline-gray-2 px-3 py-2 text-sm font-normal" placeholder="One phone number per line" />
+          </label>
+          <div class="mt-4 flex justify-end">
+            <Button variant="solid" class="bg-[#075E54] text-white hover:bg-[#128C7E]" label="Save bot" :loading="saving" @click="saveBot" />
+          </div>
+        </section>
+      </div>
 
-          <div
-            v-for="row in filteredRuns"
-            :key="row.name"
-            class="flex flex-col gap-2 p-4 transition-all hover:bg-surface-gray-1"
-          >
-            <!-- Run Header -->
-            <div class="flex items-start justify-between gap-2">
-              <div class="flex items-center gap-2 min-w-0">
-                <span
-                  class="size-2 rounded-full shrink-0"
-                  :class="row.status === 'Success' ? 'bg-emerald-500' : 'bg-red-500'"
-                />
-                <span class="font-bold text-sm text-ink-gray-9 truncate">
-                  {{ row.rule }}
-                </span>
-              </div>
-              <Badge
-                :label="row.status"
-                :theme="row.status === 'Success' ? 'green' : row.status === 'Failed' ? 'red' : 'gray'"
-                size="sm"
-              />
-            </div>
+      <div v-else-if="tab === 'keywords'" class="mt-6">
+        <div class="mb-3 flex items-center justify-between gap-3">
+          <p class="text-xs text-ink-gray-5">A matching word sends a reply or starts a flow.</p>
+          <Button variant="solid" size="sm" class="bg-[#075E54] text-white hover:bg-[#128C7E]" label="Add keyword" @click="openKeyword()" />
+        </div>
+        <div class="overflow-x-auto rounded-xl border border-outline-gray-2 bg-white shadow-2xs">
+          <p v-if="!keywords.length" class="px-5 py-8 text-center text-sm text-ink-gray-5">No keywords for this account yet.</p>
+          <table v-else class="w-full text-left text-sm">
+            <thead class="border-b border-outline-gray-2 bg-surface-gray-1 text-xs font-semibold text-ink-gray-5">
+              <tr>
+                <th class="px-4 py-2.5 font-semibold">Words</th>
+                <th class="px-4 py-2.5 font-semibold">Match</th>
+                <th class="px-4 py-2.5 font-semibold">Reply</th>
+                <th class="w-28 px-4 py-2.5" />
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in keywords" :key="row.name" class="border-b border-outline-gray-1 last:border-b-0">
+                <td class="px-4 py-3 font-medium text-ink-gray-9">{{ row.keywords }}</td>
+                <td class="px-4 py-3 text-ink-gray-6">{{ row.match_type }}</td>
+                <td class="max-w-xs truncate px-4 py-3 text-ink-gray-7">{{ row.response_type === 'Flow' ? `Flow · ${row.trigger_flow}` : row.response_text }}</td>
+                <td class="px-4 py-3 text-right">
+                  <button type="button" class="text-xs font-semibold text-[#075E54]" @click="openKeyword(row)">Edit</button>
+                  <button type="button" class="ml-3 text-xs font-semibold text-red-600" @click="removeKeyword(row.name)">Delete</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
 
-            <!-- Profile & Timestamp -->
-            <div class="flex items-center justify-between text-xs text-ink-gray-6">
-              <div class="flex items-center gap-2 min-w-0">
-                <span class="grid size-6 shrink-0 place-items-center rounded-full bg-teal-100 text-[10px] font-bold text-[#075E54]">
-                  {{ initials(row.profile) }}
-                </span>
-                <span class="font-medium text-ink-gray-9 truncate">{{ row.profile }}</span>
+      <div v-else-if="tab === 'flows'" class="mt-6">
+        <div class="mb-3 flex items-center justify-between gap-3">
+          <p class="text-xs text-ink-gray-5">Ask a few questions, then send the closing message. Use {email} to repeat a saved answer.</p>
+          <Button variant="solid" size="sm" class="bg-[#075E54] text-white hover:bg-[#128C7E]" label="Add flow" @click="openFlow()" />
+        </div>
+        <div v-if="!flows.length" class="rounded-xl border border-outline-gray-2 bg-white px-5 py-8 text-center text-sm text-ink-gray-5 shadow-2xs">
+          No flows for this account yet.
+        </div>
+        <div v-else class="grid gap-3 lg:grid-cols-2">
+          <article v-for="row in flows" :key="row.name" class="rounded-xl border border-outline-gray-2 bg-white p-4 shadow-2xs">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <h2 class="truncate text-sm font-bold text-ink-gray-9">{{ row.flow_name || row.name }}</h2>
+                <p class="mt-1 text-xs text-ink-gray-5">Starts on: {{ row.trigger_keywords || 'a keyword that points here' }}</p>
               </div>
-              <span class="text-[11px] text-ink-gray-5 shrink-0 font-mono">
-                {{ formatDay(row.started_at) }} · {{ formatTime(row.started_at) }}
+              <span class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold" :class="row.enabled ? 'bg-green-50 text-green-700' : 'bg-surface-gray-2 text-ink-gray-5'">
+                {{ row.enabled ? 'On' : 'Off' }}
               </span>
             </div>
-
-            <!-- Detail Execution Log Message -->
-            <div class="rounded-lg bg-surface-gray-1 p-2.5 text-xs text-ink-gray-7 leading-relaxed">
-              <p>{{ row.detail }}</p>
-              <div v-if="row.reference_message" class="mt-1 text-[11px] font-mono text-ink-gray-5">
-                Ref Message: {{ row.reference_message }}
-              </div>
+            <ol class="mt-3 space-y-1 text-xs text-ink-gray-7">
+              <li v-for="(step, index) in row.steps" :key="step.step_name">{{ Number(index) + 1 }}. {{ step.message }}</li>
+            </ol>
+            <div class="mt-3 flex justify-end gap-3">
+              <button type="button" class="text-xs font-semibold text-[#075E54]" @click="openFlow(row)">Edit</button>
+              <button type="button" class="text-xs font-semibold text-red-600" @click="removeFlow(row.name)">Delete</button>
             </div>
-
-            <div class="flex justify-end pt-0.5">
-              <button
-                type="button"
-                class="text-[11px] font-medium text-[#075E54] hover:underline"
-                @click="inspectRun(row)"
-              >
-                Inspect Payload &rarr;
-              </button>
-            </div>
-          </div>
+          </article>
         </div>
-      </section>
+      </div>
+
+      <div v-else class="mt-6 grid items-start gap-4 lg:grid-cols-2">
+        <section class="rounded-xl border border-outline-gray-2 bg-white shadow-2xs">
+          <div class="border-b border-outline-gray-2 px-5 py-4">
+            <h2 class="text-sm font-bold text-ink-gray-9">With an agent</h2>
+            <p class="mt-1 text-xs text-ink-gray-5">The bot stays quiet until you hand the chat back.</p>
+          </div>
+          <p v-if="!transfers.length" class="px-5 py-8 text-center text-sm text-ink-gray-5">No handoffs.</p>
+          <ul v-else>
+            <li v-for="row in transfers" :key="row.name" class="flex items-center justify-between gap-3 border-b border-outline-gray-1 px-5 py-3 last:border-b-0">
+              <div class="min-w-0">
+                <p class="truncate text-sm font-medium text-ink-gray-9">{{ row.phone_number }}</p>
+                <p class="text-xs text-ink-gray-5">{{ row.agent_name || 'Unassigned' }} · {{ row.status }} · {{ when(row.transferred_at) }}</p>
+              </div>
+              <Button v-if="row.status === 'Active'" variant="subtle" size="sm" label="Resume bot" @click="resume(row.name)" />
+            </li>
+          </ul>
+        </section>
+        <section class="rounded-xl border border-outline-gray-2 bg-white shadow-2xs">
+          <div class="border-b border-outline-gray-2 px-5 py-4">
+            <h2 class="text-sm font-bold text-ink-gray-9">In a flow</h2>
+            <p class="mt-1 text-xs text-ink-gray-5">Someone is answering questions. Stop it to let the normal bot reply.</p>
+          </div>
+          <p v-if="!sessions.length" class="px-5 py-8 text-center text-sm text-ink-gray-5">No active flows.</p>
+          <ul v-else>
+            <li v-for="row in sessions" :key="row.name" class="flex items-center justify-between gap-3 border-b border-outline-gray-1 px-5 py-3 last:border-b-0">
+              <div class="min-w-0">
+                <p class="truncate text-sm font-medium text-ink-gray-9">{{ row.phone_number }}</p>
+                <p class="text-xs text-ink-gray-5">{{ row.current_flow }} · {{ row.current_step }}</p>
+              </div>
+              <Button variant="subtle" size="sm" label="Stop" @click="cancelSession(row.name)" />
+            </li>
+          </ul>
+        </section>
+      </div>
     </div>
 
-    <Dialog v-model="editorOpen" :title="editorMode === 'edit' ? 'Edit rule' : 'New rule'">
-      <div class="space-y-3 py-1 text-sm">
-        <label class="block text-xs font-medium text-ink-gray-7">
-          Rule name
-          <TextInput v-model="form.rule_name" class="mt-1" placeholder="After-hours reply" />
+    <Dialog v-model="keywordOpen" :title="keywordForm.name ? 'Edit keyword' : 'Add keyword'">
+      <div class="space-y-3">
+        <label class="block text-xs font-semibold text-ink-gray-7">
+          Words, separated by commas
+          <input v-model="keywordForm.keywords" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 text-sm font-normal" placeholder="hello, hi" />
         </label>
-        <label class="block text-xs font-medium text-ink-gray-7">
-          Trigger
-          <Select
-            class="mt-1"
-            :model-value="form.trigger"
-            :options="triggerOptions"
-            @update:model-value="(val) => (form.trigger = String(val || 'Incoming Message'))"
-          />
+        <div class="grid gap-3 sm:grid-cols-2">
+          <label class="block text-xs font-semibold text-ink-gray-7">
+            Match
+            <select v-model="keywordForm.match_type" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 text-sm font-normal">
+              <option>Contains</option>
+              <option>Exact</option>
+              <option>Starts With</option>
+            </select>
+          </label>
+          <label class="block text-xs font-semibold text-ink-gray-7">
+            Then
+            <select v-model="keywordForm.response_type" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 text-sm font-normal">
+              <option value="Text">Send a reply</option>
+              <option value="Flow">Start a flow</option>
+            </select>
+          </label>
+        </div>
+        <label v-if="keywordForm.response_type === 'Text'" class="block text-xs font-semibold text-ink-gray-7">
+          Reply
+          <textarea v-model="keywordForm.response_text" rows="3" class="mt-1 block w-full resize-y rounded-lg border border-outline-gray-2 px-3 py-2 text-sm font-normal" />
         </label>
-        <label class="block text-xs font-medium text-ink-gray-7">
-          Match
-          <Select
-            class="mt-1"
-            :model-value="form.condition_operator"
-            :options="operatorOptions"
-            @update:model-value="(val) => (form.condition_operator = String(val || 'Contains'))"
-          />
+        <label v-else class="block text-xs font-semibold text-ink-gray-7">
+          Flow
+          <select v-model="keywordForm.trigger_flow" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 text-sm font-normal">
+            <option value="">Select a flow</option>
+            <option v-for="item in flowOptions" :key="item.name" :value="item.name">{{ item.label }}</option>
+          </select>
         </label>
-        <label class="block text-xs font-medium text-ink-gray-7">
-          Keyword
-          <TextInput v-model="form.condition_keyword" class="mt-1" placeholder="Leave empty to match every message" />
-        </label>
-        <label class="block text-xs font-medium text-ink-gray-7">
-          Action
-          <Select
-            class="mt-1"
-            :model-value="form.action"
-            :options="actionOptions"
-            @update:model-value="(val) => (form.action = String(val || 'Send Text'))"
-          />
-        </label>
-        <label class="block text-xs font-medium text-ink-gray-7">
-          Action reference
-          <TextInput v-model="form.action_reference" class="mt-1" placeholder="Template, user, quick reply, or message text" />
-        </label>
-        <label class="block text-xs font-medium text-ink-gray-7">
-          WhatsApp account
-          <Select
-            class="mt-1"
-            :model-value="form.whatsapp_account"
-            :options="ruleAccountOptions"
-            @update:model-value="(val) => (form.whatsapp_account = String(val || ''))"
-          />
-        </label>
-        <label class="block text-xs font-medium text-ink-gray-7">
-          Status
-          <Select
-            class="mt-1"
-            :model-value="form.status"
-            :options="ruleStatusOptions"
-            @update:model-value="(val) => (form.status = String(val || 'Active'))"
-          />
+        <label class="flex items-center gap-2 text-xs font-semibold text-ink-gray-7">
+          <input v-model="keywordForm.enabled" type="checkbox" class="h-4 w-4" :true-value="1" :false-value="0" />
+          Enabled
         </label>
       </div>
       <template #actions>
-        <div class="flex w-full items-center justify-between gap-2">
-          <Button v-if="editorMode === 'edit'" variant="subtle" label="Delete" :loading="saving" @click="removeRule" />
-          <span v-else />
-          <div class="flex gap-2">
-            <Button label="Cancel" @click="editorOpen = false" />
-            <Button
-              variant="solid"
-              class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-              :label="editorMode === 'edit' ? 'Save' : 'Create rule'"
-              :loading="saving"
-              @click="saveRule"
-            />
-          </div>
+        <div class="flex justify-end gap-2">
+          <Button variant="subtle" label="Cancel" @click="keywordOpen = false" />
+          <Button variant="solid" class="bg-[#075E54] text-white hover:bg-[#128C7E]" label="Save" :loading="saving" @click="saveKeyword" />
         </div>
       </template>
     </Dialog>
 
-    <!-- Rule Inspector Modal Dialog -->
-    <Dialog v-model="ruleDialogOpen" title="Automation Rule Specification" size="xl">
-      <div v-if="selectedRule" class="space-y-4 py-2 text-xs">
-        <div class="flex items-center justify-between border-b border-outline-gray-2 pb-3">
-          <div>
-            <h3 class="text-base font-bold text-ink-gray-9">{{ selectedRule.rule_name }}</h3>
-            <p class="font-mono text-ink-gray-5">{{ selectedRule.name }}</p>
-          </div>
-          <Badge :label="selectedRule.status" :theme="selectedRule.status === 'Active' ? 'green' : 'gray'" />
+    <Dialog v-model="flowOpen" :title="flowForm.name ? 'Edit flow' : 'Add flow'" size="lg">
+      <div class="space-y-3">
+        <div class="grid gap-3 sm:grid-cols-2">
+          <label class="block text-xs font-semibold text-ink-gray-7">
+            Name
+            <input v-model="flowForm.flow_name" :disabled="Boolean(flowForm.name)" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 text-sm font-normal disabled:bg-surface-gray-1" placeholder="Book a demo" />
+          </label>
+          <label class="block text-xs font-semibold text-ink-gray-7">
+            Start words
+            <input v-model="flowForm.trigger_keywords" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 text-sm font-normal" placeholder="book, demo" />
+          </label>
         </div>
-
-        <div class="grid grid-cols-2 gap-3">
-          <div class="rounded-lg border border-outline-gray-2 p-3 bg-white">
-            <span class="text-ink-gray-5 block text-[10px] font-bold uppercase">Trigger Condition</span>
-            <p class="mt-1 font-semibold text-ink-gray-9">{{ selectedRule.trigger }}</p>
-          </div>
-          <div class="rounded-lg border border-outline-gray-2 p-3 bg-white">
-            <span class="text-ink-gray-5 block text-[10px] font-bold uppercase">Action Dispatched</span>
-            <p class="mt-1 font-semibold text-[#075E54]">{{ selectedRule.action }}</p>
-          </div>
+        <label class="block text-xs font-semibold text-ink-gray-7">
+          Opening message
+          <input v-model="flowForm.initial_message" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 text-sm font-normal" placeholder="Sure, a few quick questions." />
+        </label>
+        <div class="overflow-x-auto rounded-lg border border-outline-gray-2">
+          <table class="w-full min-w-[32rem] text-left text-xs">
+            <thead class="border-b border-outline-gray-2 bg-surface-gray-1 text-ink-gray-5">
+              <tr>
+                <th class="px-3 py-2 font-semibold">Question</th>
+                <th class="w-28 px-3 py-2 font-semibold">Answer</th>
+                <th class="w-28 px-3 py-2 font-semibold">Save as</th>
+                <th class="w-10 px-3 py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(step, index) in flowForm.steps" :key="index" class="border-b border-outline-gray-1 last:border-b-0">
+                <td class="px-3 py-2">
+                  <input v-model="step.message" class="w-full rounded-md border border-outline-gray-2 px-2 py-1.5 text-sm" placeholder="What is your email?" />
+                </td>
+                <td class="px-3 py-2">
+                  <select v-model="step.input_type" class="w-full rounded-md border border-outline-gray-2 px-2 py-1.5 text-sm">
+                    <option>Text</option>
+                    <option>Email</option>
+                    <option>Phone</option>
+                    <option>Number</option>
+                  </select>
+                </td>
+                <td class="px-3 py-2">
+                  <input v-model="step.store_as" class="w-full rounded-md border border-outline-gray-2 px-2 py-1.5 text-sm" placeholder="email" />
+                </td>
+                <td class="px-3 py-2 text-right">
+                  <button type="button" class="text-xs font-semibold text-red-600" @click="removeStep(index)">Remove</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-
-        <div v-if="selectedRule.action_reference" class="rounded-lg border border-outline-gray-2 p-3 bg-white">
-          <span class="text-ink-gray-5 block text-[10px] font-bold uppercase mb-1">Action Payload / Template Reference</span>
-          <p class="text-xs text-ink-gray-8 font-mono bg-surface-gray-1 p-2 rounded whitespace-pre-wrap">
-            {{ selectedRule.action_reference }}
-          </p>
+        <button type="button" class="text-xs font-semibold text-[#075E54]" @click="addStep">Add question</button>
+        <div class="grid gap-3 sm:grid-cols-2">
+          <label class="block text-xs font-semibold text-ink-gray-7">
+            Closing message
+            <input v-model="flowForm.completion_message" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 text-sm font-normal" placeholder="Booked for {email}" />
+          </label>
+          <label class="block text-xs font-semibold text-ink-gray-7">
+            Cancel words
+            <input v-model="flowForm.cancel_keywords" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 text-sm font-normal" placeholder="stop, cancel" />
+          </label>
         </div>
-
-        <div class="rounded-lg border border-outline-gray-2 p-3 bg-white">
-          <span class="text-ink-gray-5 block text-[10px] font-bold uppercase mb-1">Sender WhatsApp Channel</span>
-          <p class="font-medium text-ink-gray-9">{{ selectedRule.whatsapp_account || 'Default Sender Line' }}</p>
-        </div>
+        <label class="flex items-center gap-2 text-xs font-semibold text-ink-gray-7">
+          <input v-model="flowForm.enabled" type="checkbox" class="h-4 w-4" :true-value="1" :false-value="0" />
+          Enabled
+        </label>
       </div>
-
       <template #actions>
-        <div class="flex justify-between w-full">
-          <Button
-            v-if="isManager"
-            variant="solid"
-            class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-            label="Edit Rule"
-            icon-left="lucide-pencil"
-            @click="startEdit(selectedRule); ruleDialogOpen = false"
-          />
-          <Button label="Close" @click="ruleDialogOpen = false" />
+        <div class="flex justify-end gap-2">
+          <Button variant="subtle" label="Cancel" @click="flowOpen = false" />
+          <Button variant="solid" class="bg-[#075E54] text-white hover:bg-[#128C7E]" label="Save" :loading="saving" @click="saveFlow" />
         </div>
-      </template>
-    </Dialog>
-
-    <!-- Run Inspector Modal Dialog -->
-    <Dialog v-model="runDialogOpen" title="Execution Run Audit Log" size="xl">
-      <div v-if="selectedRun" class="space-y-4 py-2 text-xs">
-        <div class="flex items-center justify-between border-b border-outline-gray-2 pb-3">
-          <div>
-            <h3 class="text-base font-bold text-ink-gray-9">{{ selectedRun.rule }}</h3>
-            <p class="font-mono text-ink-gray-5">{{ selectedRun.name }}</p>
-          </div>
-          <Badge
-            :label="selectedRun.status"
-            :theme="selectedRun.status === 'Success' ? 'green' : selectedRun.status === 'Failed' ? 'red' : 'gray'"
-          />
-        </div>
-
-        <div class="grid grid-cols-2 gap-3">
-          <div class="rounded-lg border border-outline-gray-2 p-3 bg-white">
-            <span class="text-ink-gray-5 block text-[10px] font-bold uppercase">Customer Profile</span>
-            <p class="mt-1 font-semibold text-ink-gray-9">{{ selectedRun.profile }}</p>
-          </div>
-          <div class="rounded-lg border border-outline-gray-2 p-3 bg-white">
-            <span class="text-ink-gray-5 block text-[10px] font-bold uppercase">Timestamp</span>
-            <p class="mt-1 font-mono text-ink-gray-8">
-              {{ formatDay(selectedRun.started_at) }} · {{ formatTime(selectedRun.started_at) }}
-            </p>
-          </div>
-        </div>
-
-        <div class="rounded-lg border border-outline-gray-2 p-3 bg-white">
-          <span class="text-ink-gray-5 block text-[10px] font-bold uppercase mb-1">Execution Detail</span>
-          <p class="text-xs text-ink-gray-8 leading-relaxed">
-            {{ selectedRun.detail }}
-          </p>
-        </div>
-
-        <div v-if="selectedRun.reference_message" class="rounded-lg border border-outline-gray-2 p-3 bg-white">
-          <span class="text-ink-gray-5 block text-[10px] font-bold uppercase mb-1">Linked WA Message ID</span>
-          <p class="font-mono text-xs text-[#075E54]">{{ selectedRun.reference_message }}</p>
-        </div>
-      </div>
-
-      <template #actions>
-        <Button label="Close" @click="runDialogOpen = false" />
       </template>
     </Dialog>
   </div>

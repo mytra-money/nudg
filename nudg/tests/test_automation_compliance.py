@@ -1,12 +1,10 @@
 # Copyright (c) 2026, Nudg and contributors
 # For license information, please see license.txt
 
-"""Hermetic unit tests for Keyword Automation, Business Hours & STOP Consent compliance."""
+"""Hermetic unit tests for STOP consent and duplicate inbound messages."""
 
 from __future__ import annotations
 
-import datetime
-import json
 import unittest
 from unittest.mock import MagicMock, patch
 import zoneinfo
@@ -50,103 +48,6 @@ class TestAutomationCompliance(unittest.TestCase):
 				setattr(frappe.local, name, val)
 		super().tearDown()
 
-	# -------------------------------------------------------------------------
-	# 1. Keyword Matching Unit Tests
-	# -------------------------------------------------------------------------
-
-	def test_window_closed_and_out_of_office_cannot_be_saved(self):
-		from nudg.services.automation import _TRIGGERS, create_rule
-
-		self.assertNotIn("Window Closed", _TRIGGERS)
-		self.assertNotIn("Out of Office", _TRIGGERS)
-		with patch("frappe.has_permission", return_value=True):
-			with self.assertRaises(frappe.ValidationError):
-				create_rule("Night reply", "Out of Office", "Send Text", action_reference="We are closed")
-			with self.assertRaises(frappe.ValidationError):
-				create_rule("Closed window", "Window Closed", "Send Template", action_reference="hello")
-
-	def test_keyword_match_exact(self):
-		from nudg.services.automation import evaluate_keyword_match
-
-		self.assertTrue(evaluate_keyword_match("HELP", "help", "Exact"))
-		self.assertTrue(evaluate_keyword_match("  pricing  ", "pricing", "Exact"))
-		self.assertFalse(evaluate_keyword_match("Help me please", "help", "Exact"))
-		# Case-sensitive check
-		self.assertFalse(evaluate_keyword_match("help", "HELP", "Exact", case_sensitive=True))
-		self.assertTrue(evaluate_keyword_match("HELP", "HELP", "Exact", case_sensitive=True))
-
-	def test_keyword_match_contains(self):
-		from nudg.services.automation import evaluate_keyword_match
-
-		self.assertTrue(evaluate_keyword_match("Where is my order #12345?", "order", "Contains"))
-		self.assertTrue(evaluate_keyword_match("I need support urgently", "SUPPORT", "Contains"))
-		self.assertFalse(evaluate_keyword_match("Just saying hello", "refund", "Contains"))
-
-	def test_keyword_match_starts_with(self):
-		from nudg.services.automation import evaluate_keyword_match
-
-		self.assertTrue(evaluate_keyword_match("#HELP account issue", "#help", "Starts With"))
-		self.assertTrue(evaluate_keyword_match("ORDER 99281", "order", "Starts With"))
-		self.assertFalse(evaluate_keyword_match("my ORDER 99281", "order", "Starts With"))
-
-	def test_keyword_match_regex(self):
-		from nudg.services.automation import evaluate_keyword_match
-
-		pattern = r"^ORDER[-_]\d{4,6}$"
-		self.assertTrue(evaluate_keyword_match("ORDER-12345", pattern, "Regex"))
-		self.assertTrue(evaluate_keyword_match("order_9999", pattern, "Regex"))
-		self.assertFalse(evaluate_keyword_match("ORDER-abc", pattern, "Regex"))
-		# Invalid regex should fail gracefully without crashing
-		self.assertFalse(evaluate_keyword_match("test", r"[unclosed", "Regex"))
-
-	def test_keyword_match_multiple_values(self):
-		from nudg.services.automation import evaluate_keyword_match
-
-		keywords = ["hi", "hello", "hey", "greetings"]
-		self.assertTrue(evaluate_keyword_match("Hello there!", keywords, "Contains"))
-		self.assertTrue(evaluate_keyword_match("hey", keywords, "Exact"))
-		self.assertFalse(evaluate_keyword_match("goodbye", keywords, "Contains"))
-
-	def test_condition_matches_composite(self):
-		from nudg.services.automation import _condition_matches
-
-		doc = {
-			"message": "Can I get a refund for my item?",
-			"direction": "Incoming",
-			"status": "Sent",
-		}
-
-		# Nested keyword condition + direction equality
-		cond_nested = json.dumps({
-			"keyword_match": {
-				"operator": "Contains",
-				"value": "refund",
-			},
-			"direction": "Incoming",
-		})
-		self.assertTrue(_condition_matches(cond_nested, doc))
-
-		# Mismatched direction
-		cond_mismatch = json.dumps({
-			"keyword_match": {
-				"operator": "Contains",
-				"value": "refund",
-			},
-			"direction": "Outgoing",
-		})
-		self.assertFalse(_condition_matches(cond_mismatch, doc))
-
-		# Flat keyword condition
-		cond_flat = json.dumps({
-			"operator": "Starts With",
-			"keyword": "Can I",
-		})
-		self.assertTrue(_condition_matches(cond_flat, doc))
-
-	# -------------------------------------------------------------------------
-	# 2. Consent Management Unit Tests
-	# -------------------------------------------------------------------------
-
 	def test_evaluate_consent_keywords(self):
 		from nudg.services.consent import evaluate_consent_keyword
 
@@ -167,55 +68,6 @@ class TestAutomationCompliance(unittest.TestCase):
 		# Non-consent regular conversation
 		self.assertIsNone(evaluate_consent_keyword("Hello, when does the bus stop?")[0])
 		self.assertIsNone(evaluate_consent_keyword("Can you start my subscription?")[0])
-
-	def test_incoming_rule_sends_once_when_evaluated_twice(self):
-		"""A webhook retry and the message hook must not both send the reply."""
-		from nudg.services.automation import process_trigger
-
-		message = frappe._dict(
-			name="MSG-1",
-			message_id="wamid.HELLO",
-			message="hello",
-			direction="Incoming",
-			to="PROF-1",
-			whatsapp_account="ACC",
-			status="Sent",
-		)
-		rule = frappe._dict(
-			name="Welcome",
-			action="Send Text",
-			action_reference="Thank You For Reaching Us.!",
-			condition_json="",
-			whatsapp_account="ACC",
-			trigger="Incoming Message",
-		)
-		runs = []
-
-		def exists(doctype, name=None, filters=None, **kwargs):
-			if doctype == "DocType":
-				return True
-			if doctype == "WA Message":
-				return True
-			if doctype == "WA Automation Run":
-				return "RUN-1" if runs else None
-			return None
-
-		def get_doc(arg, name=None):
-			if arg == "WA Message":
-				return message
-			doc = MagicMock()
-			doc.insert.side_effect = lambda *args, **kwargs: runs.append(arg)
-			return doc
-
-		self.mock_db.exists.side_effect = exists
-		self.mock_db.get_value.return_value = "wamid.HELLO"
-		with patch("nudg.services.automation.frappe.get_all", return_value=[rule]):
-			with patch("nudg.services.automation.frappe.get_doc", side_effect=get_doc):
-				with patch("nudg.services.automation.adapter.send_message") as send:
-					process_trigger("Incoming Message", "PROF-1", "ACC", "MSG-1")
-					process_trigger("Incoming Message", "PROF-1", "ACC", "MSG-1")
-					send.assert_called_once_with(to="PROF-1", message="Thank You For Reaching Us.!")
-					self.assertEqual(len(runs), 1)
 
 	def test_duplicate_inbound_id_is_rejected(self):
 		from nudg.services.automation import guard_duplicate_inbound

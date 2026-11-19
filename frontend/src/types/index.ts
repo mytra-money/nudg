@@ -51,6 +51,8 @@ export interface Template {
 export interface AssignmentInfo {
   name?: string
   assignee?: string | null
+  /** Every person with an open Frappe assignment on this conversation. */
+  assignees?: string[]
   assignment_status: 'Unassigned' | 'Assigned' | 'Closed' | string
   priority?: string
   assignment_source?: string | null

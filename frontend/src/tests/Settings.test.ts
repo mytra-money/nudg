@@ -52,20 +52,6 @@ describe('SettingsView', () => {
     expect(wrapper.text()).toContain('Frappe Assignment Rules')
   })
 
-  it('shows Facebook login settings to a site admin', async () => {
-    window.is_system_manager = true
-    const wrapper = mount(SettingsView)
-    await flushPromises()
-
-    const loginTab = wrapper.findAll('button').find((button) => button.text().includes('Facebook login'))
-    expect(loginTab).toBeDefined()
-    await loginTab!.trigger('click')
-    expect(wrapper.text()).toContain('Login with Facebook')
-    expect(wrapper.text()).toContain('Google sign-in is not available yet.')
-    expect(wrapper.text()).toContain('Open Nudg on the site to save the Facebook App ID and app secret.')
-    window.is_system_manager = undefined
-  })
-
   it('switches to WABA Profile tab and displays Meta verified metadata', async () => {
     const wrapper = mount(SettingsView)
     await flushPromises()

@@ -8,16 +8,16 @@ import DeskTemplatePreview from '@/components/DeskTemplatePreview.vue'
 import ProfileDetails from '@/components/ProfileDetails.vue'
 import {
   CONVERSATION_STATUS_FILTERS,
-  CONVERSATION_STATUS_LABEL,
   conversationStatusAt,
   conversationStatusOf,
 } from '@/utils/conversationStatus'
 import { useDeskComposer } from '@/composables/useComposer'
-import { formatDay, formatRemaining, formatTime, initials, previewText, serviceWindow } from '@/utils/format'
+import { formatRemaining, formatTime, previewText, serviceWindow } from '@/utils/format'
 import { userFacingError } from '@/utils/errors'
 import { useDesk } from '@/stores/desk'
 import {
   assignConversation,
+  listAssignableUsers,
   listCatalogItems,
   listQuickReplies,
   sendCatalogProduct,
@@ -33,8 +33,8 @@ const route = useRoute()
 const composer = useDeskComposer()
 const query = ref('')
 const filter = ref<'all' | ReturnType<typeof conversationStatusOf>>('all')
-const assignFilter = ref<'all' | 'mine' | 'unassigned'>('all')
-const quickTab = ref<'all' | 'needs_reply' | 'window_open' | 'unassigned'>('all')
+const assignFilter = ref('all')
+const filterUsers = ref<Array<{ value: string; label: string }>>([])
 
 const details = ref(false)
 const CONTACT_KEY = 'nudg.contact_sidebar'
@@ -109,6 +109,13 @@ onMounted(() => {
   clock = window.setInterval(() => {
     now.value = Date.now()
   }, 30000)
+  void listAssignableUsers()
+    .then((rows) => {
+      filterUsers.value = Array.isArray(rows) ? rows : []
+    })
+    .catch(() => {
+      filterUsers.value = []
+    })
 })
 onUnmounted(() => window.clearInterval(clock))
 
@@ -121,7 +128,6 @@ const filterOptions = CONVERSATION_STATUS_FILTERS.map((row) => ({
   value: row.value,
 }))
 
-// Synchronize quickTab with filter and assignFilter
 function applyInboxTab(tab: string) {
   if (tab === 'all' || tab === 'needs_reply' || tab === 'window_open' || tab === 'unassigned') {
     selectQuickTab(tab)
@@ -135,7 +141,6 @@ watch(
 )
 
 function selectQuickTab(tab: 'all' | 'needs_reply' | 'window_open' | 'unassigned') {
-  quickTab.value = tab
   if (tab === 'all') {
     filter.value = 'all'
     assignFilter.value = 'all'
@@ -151,6 +156,23 @@ function selectQuickTab(tab: 'all' | 'needs_reply' | 'window_open' | 'unassigned
   }
 }
 
+function assigneesOf(row: { assignment?: { assignee?: string | null; assignees?: string[]; assignment_status?: string } | null }) {
+  const listed = (row.assignment?.assignees || []).filter((person): person is string => Boolean(person))
+  if (listed.length) return listed
+  const one = row.assignment?.assignee
+  if (!one || row.assignment?.assignment_status === 'Unassigned') return []
+  return [one]
+}
+
+const assignOptions = computed(() => [
+  { label: 'Anyone', value: 'all' },
+  { label: 'Assigned to me', value: 'mine' },
+  { label: 'Unassigned', value: 'unassigned' },
+  ...filterUsers.value
+    .filter((row) => row.value && row.value !== sessionUser)
+    .map((row) => ({ label: row.label || row.value, value: row.value })),
+])
+
 // Live counts for quick chips
 const allRows = computed(() => {
   const rows = desk.inbox.value?.conversations || []
@@ -158,24 +180,22 @@ const allRows = computed(() => {
   if (!selected || selected === 'all') return rows
   return rows.filter((row) => row.profile.whatsapp_account === selected)
 })
-const countAll = computed(() => allRows.value.length)
-const countNeedsReply = computed(
-  () => allRows.value.filter((r) => rowStatus(r) === 'needs_reply').length,
-)
-const countWindowOpen = computed(
-  () => allRows.value.filter((r) => rowStatus(r) === 'window_open').length,
-)
-const countUnassigned = computed(
-  () => allRows.value.filter((r) => !r.assignment?.assignee || r.assignment?.assignment_status === 'Unassigned').length,
-)
-
 const conversations = computed(() => {
   const rows = allRows.value
   return rows.filter((row) => {
     const haystack = `${row.profile.profile_name} ${row.profile.phone_number} ${previewText(row.preview)}`.toLowerCase()
     if (query.value && !haystack.includes(query.value.toLowerCase())) return false
-    if (assignFilter.value === 'mine' && row.assignment?.assignee !== sessionUser) return false
-    if (assignFilter.value === 'unassigned' && row.assignment?.assignee && row.assignment?.assignment_status !== 'Unassigned') return false
+    const people = assigneesOf(row)
+    if (assignFilter.value === 'mine' && !people.includes(sessionUser)) return false
+    if (assignFilter.value === 'unassigned' && people.length) return false
+    if (
+      assignFilter.value !== 'all' &&
+      assignFilter.value !== 'mine' &&
+      assignFilter.value !== 'unassigned' &&
+      !people.includes(assignFilter.value)
+    ) {
+      return false
+    }
     if (filter.value === 'all') return true
     if (filter.value === 'window_open') return rowStatus(row) === 'window_open'
     return rowStatus(row) === filter.value
@@ -299,7 +319,7 @@ const catalogSetupError = computed(() => {
   if (!invalid.length) return ''
   const names = [...new Set(invalid.map((item) => item.catalog_name || item.catalog || 'Catalog'))]
   const found = String(invalid[0].meta_catalog_id || '').trim() || 'empty'
-  return `Catalog ${names.join(', ')} cannot send any product. Meta Catalog ID must be digits only (found: ${found}). Set the numeric id from Meta Commerce Manager under Integrations → Catalogs.`
+  return `Catalog ${names.join(', ')} cannot send any product. Meta Catalog ID must be digits only (found: ${found}). Set the numeric id from Meta Commerce Manager under Catalogs.`
 })
 
 function catalogItemBlocked(item: any) {
@@ -374,11 +394,11 @@ async function assignToUser() {
   }
 }
 
-async function clearAssignment() {
+async function clearAssignment(user?: string) {
   if (!desk.profile.value) return
   try {
-    await unassignConversation(desk.profile.value)
-    toast.success('Unassigned')
+    await unassignConversation(desk.profile.value, user)
+    toast.success(user ? 'Removed assignment' : 'Unassigned')
     await desk.refresh()
   } catch (caught) {
     toast.error(errorText(caught))
@@ -387,8 +407,18 @@ async function clearAssignment() {
 
 function agentLabel(user?: string | null) {
   if (!user) return 'Unassigned'
+  const known = filterUsers.value.find((row) => row.value === user)
+  if (known?.label) return known.label
   const local = user.split('@')[0] || user
   return local.replace(/[._]/g, ' ')
+}
+
+const headerAssignees = computed(() => assigneesOf({ assignment: currentAssignment.value }))
+
+function assigneeSummary(people: string[]) {
+  if (!people.length) return 'Unassigned'
+  if (people.length === 1) return agentLabel(people[0])
+  return `${agentLabel(people[0])} +${people.length - 1}`
 }
 
 const chatMatches = computed(() => {
@@ -485,83 +515,18 @@ async function retryMessage(message: WhatsAppMessage) {
           </button>
         </div>
 
-        <!-- Quick Filter Pills -->
-        <div class="flex flex-wrap items-center gap-1.5 pb-1 text-xs">
-          <button
-            type="button"
-            class="inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 font-medium transition-colors"
-            :class="quickTab === 'all' ? 'bg-[#075E54] text-white shadow-xs' : 'bg-surface-gray-2 text-ink-gray-7 hover:bg-surface-gray-3 hover:text-ink-gray-9'"
-            @click="selectQuickTab('all')"
-          >
-            <span>All</span>
-            <span class="rounded-full px-1.5 py-0.2 text-[10px] font-bold" :class="quickTab === 'all' ? 'bg-white/25 text-white' : 'bg-black/10 text-ink-gray-7'">{{ countAll }}</span>
-          </button>
-
-          <button
-            type="button"
-            class="inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 font-medium transition-colors"
-            :class="quickTab === 'needs_reply' ? 'bg-red-600 text-white shadow-xs' : 'bg-red-50 text-red-700 hover:bg-red-100'"
-            @click="selectQuickTab('needs_reply')"
-          >
-            <span>Needs Reply</span>
-            <span
-              v-if="countNeedsReply > 0"
-              class="rounded-full px-1.5 py-0.2 text-[10px] font-bold"
-              :class="quickTab === 'needs_reply' ? 'bg-white/25 text-white' : 'bg-red-200 text-red-800'"
-            >
-              {{ countNeedsReply }}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            class="inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 font-medium transition-colors"
-            :class="quickTab === 'window_open' ? 'bg-[#075E54] text-white shadow-xs' : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'"
-            @click="selectQuickTab('window_open')"
-          >
-            <span class="size-1.5 rounded-full" :class="quickTab === 'window_open' ? 'bg-white' : 'bg-emerald-600'" />
-            <span>Open 24h</span>
-            <span
-              class="rounded-full px-1.5 py-0.2 text-[10px] font-bold"
-              :class="quickTab === 'window_open' ? 'bg-white/25 text-white' : 'bg-emerald-200 text-emerald-900'"
-            >
-              {{ countWindowOpen }}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            class="inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 font-medium transition-colors"
-            :class="quickTab === 'unassigned' ? 'bg-blue-600 text-white shadow-xs' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'"
-            @click="selectQuickTab('unassigned')"
-          >
-            <span>Unassigned</span>
-            <span
-              class="rounded-full px-1.5 py-0.2 text-[10px] font-bold"
-              :class="quickTab === 'unassigned' ? 'bg-white/25 text-white' : 'bg-blue-200 text-blue-800'"
-            >
-              {{ countUnassigned }}
-            </span>
-          </button>
-        </div>
-
-        <!-- Secondary Filter Controls -->
         <div class="grid grid-cols-2 gap-2 pt-0.5">
           <Select
             class="w-full text-xs"
             :model-value="filter"
             :options="filterOptions"
-            @update:model-value="(value) => { filter = (String(value || 'all') as typeof filter); quickTab = 'all'; }"
+            @update:model-value="(value) => { filter = (String(value || 'all') as typeof filter) }"
           />
           <Select
             class="w-full text-xs"
             :model-value="assignFilter"
-            :options="[
-              { label: 'Anyone', value: 'all' },
-              { label: 'Assigned to me', value: 'mine' },
-              { label: 'Unassigned', value: 'unassigned' },
-            ]"
-            @update:model-value="(value) => { assignFilter = (String(value || 'all') as typeof assignFilter); quickTab = 'all'; }"
+            :options="assignOptions"
+            @update:model-value="(value) => { assignFilter = String(value || 'all') }"
           />
         </div>
       </div>
@@ -632,63 +597,24 @@ async function retryMessage(message: WhatsAppMessage) {
                 <span>{{ previewText(row.preview) }}</span>
               </p>
 
-              <!-- Row 3: Status Tags & Meta -->
-              <div class="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]">
-                <!-- Needs Reply Badge -->
-                <span
-                  v-if="row.needs_reply"
-                  class="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 font-semibold text-red-700 ring-1 ring-red-600/20"
-                >
-                  Needs reply
-                </span>
-
-                <!-- Window Open Remaining Time -->
-                <span
-                  v-else-if="rowStatus(row) === 'window_open'"
-                  class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700 ring-1 ring-emerald-600/20"
-                >
-                  <span class="size-1.5 rounded-full bg-emerald-500" />
-                  {{ formatRemaining(row.window.expires_at, now) }}
-                </span>
-
-                <!-- Failed Pill -->
-                <span
-                  v-else-if="rowStatus(row) === 'failed'"
-                  class="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 font-medium text-red-700"
-                >
-                  Failed
-                </span>
-
-                <!-- Blocked Pill -->
-                <span
-                  v-else-if="rowStatus(row) === 'blocked'"
-                  class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 font-medium text-gray-700"
-                >
-                  Blocked
-                </span>
-
-                <!-- Template Only -->
-                <span
-                  v-else-if="rowStatus(row) === 'template_only'"
-                  class="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-700"
-                >
-                  Template only
-                </span>
-              </div>
             </div>
 
-            <!-- Timestamp, with assignee initial under it -->
+            <!-- Timestamp, with assignee initials under it -->
             <div class="flex shrink-0 flex-col items-end gap-1">
               <span class="text-[11px] text-ink-gray-5 font-mono">
                 {{ row.preview?.creation ? formatTime(row.preview.creation) : '' }}
               </span>
-              <Avatar
-                v-if="row.assignment?.assignee && row.assignment.assignment_status !== 'Unassigned'"
-                :label="row.assignment.assignee"
-                size="sm"
-                theme="blue"
-                :title="row.assignment.assignee"
-              />
+              <div v-if="assigneesOf(row).length" class="flex items-center justify-end">
+                <Avatar
+                  v-for="person in assigneesOf(row).slice(0, 3)"
+                  :key="person"
+                  :label="agentLabel(person)"
+                  size="sm"
+                  theme="blue"
+                  class="-ml-1 first:ml-0"
+                  :title="agentLabel(person)"
+                />
+              </div>
             </div>
           </div>
         </button>
@@ -811,16 +737,25 @@ async function retryMessage(message: WhatsAppMessage) {
             <Dropdown
               :options="[
                 { label: 'Assign to me', onClick: assignToMe },
-                { label: 'Reassign', onClick: openAssign },
-                ...(currentAssignment?.assignee ? [{ label: 'Unassign', onClick: clearAssignment }] : []),
+                { label: 'Assign', onClick: openAssign },
+                ...(headerAssignees.length ? [{ label: 'Unassign all', onClick: () => clearAssignment() }] : []),
               ]"
             >
               <button
                 type="button"
                 class="hidden h-8 items-center gap-1.5 rounded-full border border-[#E9EDEF] bg-white px-2 text-xs font-medium text-[#111B21] hover:bg-[#F0F2F5] sm:inline-flex"
               >
-                <Avatar :label="currentAssignment?.assignee || 'Unassigned'" size="sm" />
-                <span class="whitespace-nowrap">{{ agentLabel(currentAssignment?.assignee) }}</span>
+                <span v-if="headerAssignees.length" class="flex items-center">
+                  <Avatar
+                    v-for="person in headerAssignees.slice(0, 3)"
+                    :key="person"
+                    :label="agentLabel(person)"
+                    size="sm"
+                    class="-ml-1 first:ml-0"
+                  />
+                </span>
+                <Avatar v-else label="Unassigned" size="sm" />
+                <span class="whitespace-nowrap">{{ assigneeSummary(headerAssignees) }}</span>
                 <span class="lucide-chevron-down size-3 text-[#667781]" aria-hidden="true" />
               </button>
             </Dropdown>
@@ -992,7 +927,7 @@ async function retryMessage(message: WhatsAppMessage) {
           :thread="current"
           :assignment="currentAssignment"
           @assign="(user) => { assignUser = user; assignToUser(); }"
-          @unassign="clearAssignment"
+          @unassign="(user: string) => clearAssignment(user)"
         />
       </aside>
     </section>
@@ -1012,7 +947,7 @@ async function retryMessage(message: WhatsAppMessage) {
           :thread="current"
           :assignment="currentAssignment"
           @assign="(user) => { assignUser = user; assignToUser(); }"
-          @unassign="clearAssignment"
+          @unassign="(user: string) => clearAssignment(user)"
         />
       </aside>
     </div>
@@ -1197,7 +1132,7 @@ async function retryMessage(message: WhatsAppMessage) {
           <p class="mt-2">Loading catalog items…</p>
         </div>
         <div v-else-if="!filteredCatalogItems.length" class="py-8 text-center text-xs text-ink-gray-5">
-          No catalog items found. Manage products under <strong>Integrations → Catalogs</strong>.
+          No catalog items found. Manage products under <strong>Catalogs</strong>.
         </div>
         <div v-else class="grid max-h-96 gap-2.5 overflow-y-auto">
           <div

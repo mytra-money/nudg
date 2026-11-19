@@ -494,7 +494,6 @@ onMounted(load)
     <header class="flex flex-wrap items-center gap-2 border-b border-outline-gray-2 bg-white px-4 py-2 sm:px-6">
       <RouterLink to="/integrations" class="rounded-lg px-3 py-1.5 text-sm font-semibold text-ink-gray-6 hover:bg-surface-gray-2">WhatsApp numbers</RouterLink>
       <RouterLink to="/integrations/erpnext" class="rounded-lg border border-[#075E54]/20 bg-[#075E54]/10 px-3 py-1.5 text-sm font-semibold text-[#075E54]">ERPNext</RouterLink>
-      <RouterLink to="/integrations/catalogs" class="rounded-lg px-3 py-1.5 text-sm font-semibold text-ink-gray-6 hover:bg-surface-gray-2">Catalogs</RouterLink>
     </header>
 
     <div class="min-h-0 flex-1 overflow-auto p-4 sm:p-6">

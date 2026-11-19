@@ -541,15 +541,14 @@ class TestInboundWebhookMocked(unittest.TestCase):
 						with patch.object(DeskContactRepository, "get_or_create_contact", return_value="CONTACT-BOB") as mock_contact:
 							with patch.object(DeskMessageRepository, "save_incoming_message", return_value={"record_name": "MSG-001", "content": "I need support with my order"}) as mock_save:
 								with patch.object(consent, "handle_incoming_consent", return_value=(False, None)):
-									with patch.object(webhook, "_trigger_automations"):
-										resp = webhook.handler()
-										self.assertEqual(resp, "ok")
-										mock_contact.assert_called_once_with(
-											wa_id="15559876543",
-											profile_name="Bob Builder",
-											account_or_channel="",
-										)
-										mock_save.assert_called_once()
+									resp = webhook.handler()
+									self.assertEqual(resp, "ok")
+									mock_contact.assert_called_once_with(
+										wa_id="15559876543",
+										profile_name="Bob Builder",
+										account_or_channel="",
+									)
+									mock_save.assert_called_once()
 
 	def test_inbound_order_cart_parsing(self):
 		"""Inbound order cart webhook parses cart items and formats markdown transcript."""

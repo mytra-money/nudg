@@ -667,21 +667,14 @@ class TestAdversarialContractCompliance(unittest.TestCase):
 		with patch.object(webhook, "_resolve_channel", return_value=None):
 			with patch.object(webhook, "_get_webhook_secret", return_value=None):
 				with patch.object(DeskMessageRepository, "update_message_status") as mock_update:
-					with patch.object(webhook, "_trigger_automations") as mock_auto:
-						resp = webhook.handler()
-						self.assertEqual(resp, "ok")
-						mock_update.assert_called_once_with(
-							message_id="wamid.FAILED_MSG_1",
-							new_status_raw="failed",
-							timestamp="1700000010",
-							errors=errors_payload,
-						)
-						mock_auto.assert_called_once_with(
-							profile=None,
-							channel_name="",
-							message_name="wamid.FAILED_MSG_1",
-							trigger="Status Failed",
-						)
+					resp = webhook.handler()
+					self.assertEqual(resp, "ok")
+					mock_update.assert_called_once_with(
+						message_id="wamid.FAILED_MSG_1",
+						new_status_raw="failed",
+						timestamp="1700000010",
+						errors=errors_payload,
+					)
 
 	def test_webhook_batch_messages_and_statuses_in_single_entry(self):
 		"""Payload with multiple messages and multiple statuses processes all items."""

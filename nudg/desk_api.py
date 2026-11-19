@@ -10,7 +10,6 @@ from frappe import _
 from nudg.services import (
 	analytics,
 	assignments,
-	automation,
 	campaigns,
 	catalog as catalog_service,
 	quick_replies,
@@ -23,7 +22,7 @@ def _require_login():
 
 
 def _require_manager():
-	"""Broadcasts, automation, catalogs, accounts, and team changes are manager work."""
+	"""Broadcasts, catalogs, accounts, and team changes are manager work."""
 	_require_login()
 	user = frappe.session.user
 	if user == "Administrator":
@@ -140,7 +139,7 @@ def _catalog_send_problems(profile: str, catalog_doc, item_doc) -> list[str]:
 	if not catalog_id:
 		problems.append(
 			_(
-				"Catalog '{0}' has no Meta Catalog ID. Set the numeric id from Meta Commerce Manager in Integrations → Catalogs. "
+				"Catalog '{0}' has no Meta Catalog ID. Set the numeric id from Meta Commerce Manager in Catalogs. "
 				"Every product in this catalog is blocked for that reason."
 			).format(catalog_name)
 		)
@@ -148,7 +147,7 @@ def _catalog_send_problems(profile: str, catalog_doc, item_doc) -> list[str]:
 		problems.append(
 			_(
 				"Catalog '{0}' has Meta Catalog ID '{1}', which is not a numeric Meta Commerce catalog id. "
-				"Update it in Integrations → Catalogs. Every product in this catalog is blocked for that reason."
+				"Update it in Catalogs. Every product in this catalog is blocked for that reason."
 			).format(catalog_name, catalog_id)
 		)
 
@@ -269,6 +268,9 @@ def list_assignable_users(txt: str | None = None) -> list:
 	_require_login()
 	needle = (txt or "").strip().lower()
 	names = assignments.get_assignable_account_users()
+	if not assignments.can_view_team_users():
+		me = frappe.session.user
+		names = [me] if me in names else []
 	if not names:
 		return []
 
@@ -300,13 +302,13 @@ def list_assignable_users(txt: str | None = None) -> list:
 @frappe.whitelist()
 def assign_conversation(profile: str, user: str) -> dict:
 	_require_login()
-	return assignments.assign_conversation(profile, user, source="Manual")
+	return assignments.assign_conversation(profile, user, source="Manual", enforce_visibility=True)
 
 
 @frappe.whitelist()
-def unassign_conversation(profile: str) -> dict:
+def unassign_conversation(profile: str, user: str | None = None) -> dict:
 	_require_login()
-	return assignments.unassign_conversation(profile)
+	return assignments.unassign_conversation(profile, user)
 
 
 @frappe.whitelist()
@@ -496,81 +498,6 @@ def delete_catalog_item(name: str) -> dict:
 		_assert_account_access(account)
 	frappe.delete_doc("WA Catalog Item", name, ignore_permissions=True, force=True)
 	return {"name": name, "deleted": True}
-
-
-@frappe.whitelist()
-def list_automation_rules(account: str | None = None) -> list:
-	_require_manager()
-	return automation.list_rules(account)
-
-
-@frappe.whitelist()
-def create_automation_rule(
-	rule_name: str,
-	trigger: str,
-	action: str,
-	action_reference: str | None = None,
-	whatsapp_account: str | None = None,
-	status: str | None = None,
-	condition_operator: str | None = None,
-	condition_keyword: str | None = None,
-) -> dict:
-	_require_manager()
-	return automation.create_rule(
-		rule_name,
-		trigger,
-		action,
-		action_reference,
-		whatsapp_account,
-		status,
-		condition_operator,
-		condition_keyword,
-	)
-
-
-@frappe.whitelist()
-def update_automation_rule(
-	name: str,
-	rule_name: str | None = None,
-	trigger: str | None = None,
-	action: str | None = None,
-	action_reference: str | None = None,
-	whatsapp_account: str | None = None,
-	status: str | None = None,
-	condition_operator: str | None = None,
-	condition_keyword: str | None = None,
-) -> dict:
-	_require_manager()
-	return automation.update_rule(
-		name,
-		rule_name,
-		trigger,
-		action,
-		action_reference,
-		whatsapp_account,
-		status,
-		condition_operator,
-		condition_keyword,
-	)
-
-
-@frappe.whitelist()
-def delete_automation_rule(name: str) -> dict:
-	_require_manager()
-	name = (name or "").strip()
-	if not name or not frappe.db.exists("WA Automation Rule", name):
-		frappe.throw(_("Automation rule not found."))
-	account = frappe.db.get_value("WA Automation Rule", name, "whatsapp_account")
-	if account:
-		_assert_account_access(account)
-	frappe.delete_doc("WA Automation Rule", name, ignore_permissions=True, force=True)
-	return {"name": name, "deleted": True}
-
-
-@frappe.whitelist()
-def list_automation_runs(rule: str | None = None) -> list:
-	_require_manager()
-	return automation.list_runs(rule)
 
 
 @frappe.whitelist()
@@ -1030,24 +957,6 @@ def _template_language(requested: str | None) -> str:
 
 
 @frappe.whitelist()
-def get_facebook_login_settings() -> dict:
-	"""Facebook sign-in for the Nudg site. The app secret is never returned."""
-	_require_system_manager()
-	from nudg.integrations.facebook_login import public_config
-
-	return public_config()
-
-
-@frappe.whitelist()
-def save_facebook_login_settings(app_id: str, app_secret: str | None = None, enabled: int | None = 1) -> dict:
-	"""Turn Login with Facebook on or off. Google is not configured here."""
-	_require_system_manager()
-	from nudg.integrations.facebook_login import save_settings
-
-	return save_settings(app_id, app_secret, enabled)
-
-
-@frappe.whitelist()
 def get_embedded_signup_config() -> dict:
 	"""Public Embedded Signup values for the connect dialog. Never returns the app secret."""
 	_require_manager()
@@ -1246,3 +1155,108 @@ def update_team_member(
 		"message": _("Team member updated successfully."),
 		"email": email,
 	}
+
+
+def _chatbot_payload(payload):
+	if isinstance(payload, str):
+		payload = json.loads(payload or "{}")
+	return payload if isinstance(payload, dict) else {}
+
+
+@frappe.whitelist()
+def get_chatbot(account: str) -> dict:
+	_require_manager()
+	_assert_account_access(account)
+	from nudg.services.chatbot_setup import get_bot
+
+	return get_bot(account)
+
+
+@frappe.whitelist()
+def save_chatbot(account: str, payload) -> dict:
+	_require_manager()
+	_assert_account_access(account)
+	from nudg.services.chatbot_setup import save_bot
+
+	return save_bot(account, _chatbot_payload(payload))
+
+
+@frappe.whitelist()
+def list_chatbot_keywords(account: str) -> list:
+	_require_manager()
+	_assert_account_access(account)
+	from nudg.services.chatbot_setup import list_keywords
+
+	return list_keywords(account)
+
+
+@frappe.whitelist()
+def save_chatbot_keyword(account: str, payload) -> dict:
+	_require_manager()
+	_assert_account_access(account)
+	from nudg.services.chatbot_setup import save_keyword
+
+	return save_keyword(account, _chatbot_payload(payload))
+
+
+@frappe.whitelist()
+def delete_chatbot_keyword(account: str, name: str) -> dict:
+	_require_manager()
+	_assert_account_access(account)
+	from nudg.services.chatbot_setup import delete_keyword
+
+	return delete_keyword(account, name)
+
+
+@frappe.whitelist()
+def list_chatbot_flows(account: str) -> list:
+	_require_manager()
+	_assert_account_access(account)
+	from nudg.services.chatbot_setup import list_flows
+
+	return list_flows(account)
+
+
+@frappe.whitelist()
+def save_chatbot_flow(account: str, payload) -> dict:
+	_require_manager()
+	_assert_account_access(account)
+	from nudg.services.chatbot_setup import save_flow
+
+	return save_flow(account, _chatbot_payload(payload))
+
+
+@frappe.whitelist()
+def delete_chatbot_flow(account: str, name: str) -> dict:
+	_require_manager()
+	_assert_account_access(account)
+	from nudg.services.chatbot_setup import delete_flow
+
+	return delete_flow(account, name)
+
+
+@frappe.whitelist()
+def list_chatbot_handoffs(account: str) -> dict:
+	_require_manager()
+	_assert_account_access(account)
+	from nudg.services.chatbot_setup import list_handoffs
+
+	return list_handoffs(account)
+
+
+@frappe.whitelist()
+def resume_chatbot_handoff(account: str, name: str) -> dict:
+	_require_manager()
+	_assert_account_access(account)
+	from nudg.services.chatbot_setup import resume_handoff
+
+	return resume_handoff(account, name)
+
+
+@frappe.whitelist()
+def cancel_chatbot_session(account: str, name: str) -> dict:
+	_require_manager()
+	_assert_account_access(account)
+	from nudg.services.chatbot_setup import cancel_session
+
+	return cancel_session(account, name)

@@ -2,11 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { router, shellNav } from '@/router'
 
 describe('desk routes', () => {
-  it('exposes the eight shell routes in order', () => {
+  it('exposes the shell routes in order', () => {
     expect(shellNav.map((item) => item.label)).toEqual([
       'Overview',
       'Conversations',
       'Marketing',
+      'Catalogs',
       'Template Studio',
       'Automation',
       'Analytics',
@@ -17,6 +18,7 @@ describe('desk routes', () => {
       '/',
       '/conversations',
       '/marketing',
+      '/catalogs',
       '/template-studio',
       '/automation',
       '/analytics',

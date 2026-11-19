@@ -130,6 +130,25 @@ def _empty_inbox() -> dict:
 	}
 
 
+def _assignment_people(assignment: dict | None) -> tuple[str | None, list[str]]:
+	"""Primary assignee plus every open assignee. Unassigned conversations have neither."""
+	assignment = assignment or {}
+	status = assignment.get("assignment_status") or "Unassigned"
+	raw = assignment.get("assignees")
+	people: list[str] = []
+	if isinstance(raw, list):
+		for person in raw:
+			if person and person not in people:
+				people.append(person)
+	single = assignment.get("assignee")
+	if single and single not in people and status != "Unassigned":
+		people.append(single)
+	if status == "Unassigned" and not assignment.get("assignees"):
+		people = []
+	primary = people[-1] if people else None
+	return primary, people
+
+
 def _conversation_item(profile, preview, last_incoming, assignment) -> dict:
 	"""One inbox card. Shared by the list endpoint and the socket payload."""
 	window = _window(last_incoming)
@@ -138,7 +157,7 @@ def _conversation_item(profile, preview, last_incoming, assignment) -> dict:
 	conv_tags = [t.strip() for t in str(raw_tags).split(",") if t.strip()]
 	phone_norm = normalize_mobile_no(profile.phone_number)
 	bot_info = chatbot.get_bot_status(profile.phone_number, profile.whatsapp_account)
-	assignee = assignment.get("assignee")
+	assignee, assignees = _assignment_people(assignment)
 	return {
 		"profile": profile,
 		"phone_normalized": phone_norm,
@@ -153,6 +172,7 @@ def _conversation_item(profile, preview, last_incoming, assignment) -> dict:
 		"assignment": {
 			"name": assignment.get("name"),
 			"assignee": assignee,
+			"assignees": assignees,
 			"assignment_status": assignment.get("assignment_status") or "Unassigned",
 			"priority": assignment.get("priority"),
 			"assignment_source": assignment.get("assignment_source"),
@@ -232,12 +252,12 @@ def get_inbox(account: str | None = None, tag: str | None = None, tags: str | No
 				continue
 
 		bot_info = conv_item["bot_status"]
-		assignee = assignment.get("assignee")
+		assignees = conv_item["assignment"]["assignees"]
 
 		queue_counts["all"] += 1
-		if assignee == frappe.session.user:
+		if frappe.session.user in assignees:
 			queue_counts["mine"] += 1
-		if not assignee or assignment.get("assignment_status") == "Unassigned":
+		if not assignees:
 			queue_counts["unassigned"] += 1
 		if bot_info.get("has_bot_session"):
 			queue_counts["bot"] += 1
@@ -245,9 +265,9 @@ def get_inbox(account: str | None = None, tag: str | None = None, tags: str | No
 			queue_counts["transferred"] += 1
 
 		# Queue Filter
-		if queue_filter == "mine" and assignee != frappe.session.user:
+		if queue_filter == "mine" and frappe.session.user not in assignees:
 			continue
-		if queue_filter == "unassigned" and (assignee and assignment.get("assignment_status") == "Assigned"):
+		if queue_filter == "unassigned" and assignees:
 			continue
 		if queue_filter == "bot" and not bot_info.get("has_bot_session"):
 			continue
@@ -449,7 +469,11 @@ def assign_agent(profile: str, agent: str | None = None) -> dict:
 		frappe.throw(_("Profile is required."))
 
 	agent = (agent or "").strip()
-	res = assignments.assign_conversation(profile, agent, source="Manual") if agent else assignments.unassign_conversation(profile)
+	res = (
+		assignments.assign_conversation(profile, agent, source="Manual", enforce_visibility=True)
+		if agent
+		else assignments.unassign_conversation(profile)
+	)
 
 	# If chatbot is installed, sync transfer / resume
 	if chatbot.is_chatbot_installed():
@@ -489,15 +513,15 @@ def get_assignable_agents(account: str | None = None) -> list[dict]:
 	if account and account not in permitted and "System Manager" not in frappe.get_roles():
 		frappe.throw(_("Permission denied."), frappe.PermissionError)
 
-	role_users = frappe.get_all(
-		"Has Role",
-		filters={"role": ["in", ["WhatsApp Manager", "WhatsApp User"]], "parenttype": "User"},
-		pluck="parent",
-	)
-	role_users = list(set(role_users))
+	names = assignments.get_assignable_account_users()
+	if not assignments.can_view_team_users():
+		me = frappe.session.user
+		names = [me] if me in names else []
+	if not names:
+		return []
 	users = frappe.get_all(
 		"User",
-		filters={"enabled": 1, "name": ["in", role_users]},
+		filters={"enabled": 1, "name": ["in", names]},
 		fields=["name", "full_name", "user_image"],
 		order_by="full_name asc",
 	)
@@ -532,6 +556,38 @@ def resume_conversation_chatbot(profile: str) -> dict:
 	return chatbot.resume_chatbot(phone, account=account)
 
 
+def _profiles_assigned_to(user: str) -> list[str]:
+	"""Profiles with an open ToDo for this user, plus the legacy single assignee field."""
+	names: list[str] = []
+	try:
+		todo_names = frappe.get_all(
+			"ToDo",
+			filters={"reference_type": "WA Profile", "allocated_to": user, "status": "Open"},
+			pluck="reference_name",
+			limit_page_length=0,
+		)
+		if isinstance(todo_names, list):
+			names.extend(todo_names)
+	except Exception:
+		pass
+	try:
+		legacy = frappe.get_all(
+			"WA Profile",
+			filters={"assignee": user, "assignment_status": "Assigned"},
+			pluck="name",
+			limit_page_length=0,
+		)
+		if isinstance(legacy, list):
+			names.extend(legacy)
+	except Exception:
+		pass
+	unique: list[str] = []
+	for name in names:
+		if name and name not in unique:
+			unique.append(name)
+	return unique
+
+
 @frappe.whitelist()
 def get_unread_count() -> dict[str, int]:
 	"""Return counts of unread, needs_reply, and open conversations for Desk navigation."""
@@ -550,13 +606,17 @@ def get_unread_count() -> dict[str, int]:
 				filters={"conversation_status": ["in", ["needs_reply", "window_open"]]},
 			)
 
-			assigned_to_me = frappe.db.count(
-				"WA Profile",
-				filters={
-					"assignee": user,
-					"assignment_status": "Assigned",
-					"conversation_status": ["in", ["needs_reply", "window_open"]],
-				},
+			assigned_names = _profiles_assigned_to(user)
+			assigned_to_me = (
+				frappe.db.count(
+					"WA Profile",
+					filters={
+						"name": ["in", assigned_names],
+						"conversation_status": ["in", ["needs_reply", "window_open"]],
+					},
+				)
+				if assigned_names
+				else 0
 			)
 
 			unassigned = frappe.db.count(

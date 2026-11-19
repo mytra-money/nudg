@@ -29,7 +29,7 @@ If `whatsapp_chat` is installed, `/whatsapp-inbox` belongs to that app. Nudg is 
 | Role | Use |
 | --- | --- |
 | WhatsApp User | Inbox and replies |
-| WhatsApp Manager | Connect a number, campaigns, and automations |
+| WhatsApp Manager | Connect a number, campaigns, and the chatbot |
 | System Manager | Desk, tokens, and site setup |
 
 A System Manager assigns the WhatsApp roles after install.

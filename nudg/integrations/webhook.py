@@ -9,7 +9,7 @@ Alias: /api/method/nudg.integrations.webhook.receive
 Supports:
 - GET: Webhook challenge verification (hub.mode == "subscribe", hub.verify_token, hub.challenge)
 - POST: Validates X-Hub-Signature-256 HMAC-SHA256 signature, deduplicates messages,
-        resolves contact, emits realtime events, triggers STOP opt-outs and automations.
+        resolves contact, emits realtime events, and applies STOP opt-outs.
 """
 
 from __future__ import annotations
@@ -294,9 +294,6 @@ def _process_incoming_message(msg: dict, channel_doc: Any, contact_profile: dict
 		send_acknowledgment=True,
 	)
 
-	# Trigger automation rules
-	_trigger_automations(contact_id, channel_name, saved.get("record_name"))
-
 	# Auto Read Receipts
 	if channel_doc and getattr(channel_doc, "auto_read_receipts", False):
 		try:
@@ -323,31 +320,3 @@ def _process_status_update(status: dict, channel_doc: Any) -> None:
 		update_campaign_recipient_status(message_id, raw_status, errors)
 	except Exception:
 		pass
-
-	if raw_status == "failed":
-		channel_name = channel_doc.name if channel_doc else ""
-		_trigger_automations(profile=None, channel_name=channel_name, message_name=message_id, trigger="Status Failed")
-
-
-def _trigger_automations(profile: str | None, channel_name: str, message_name: str | None, trigger: str = "Incoming Message") -> None:
-	if not frappe.db.exists("DocType", "WA Automation Rule"):
-		return
-	try:
-		from nudg.services.automation import process_trigger
-		args = {
-			"trigger": trigger,
-			"profile": profile,
-			"account": channel_name,
-			"message_name": message_name,
-		}
-		if getattr(getattr(frappe, "session", None), "user", None) == "Guest":
-			frappe.enqueue(
-				"nudg.services.automation.process_trigger",
-				queue="short",
-				enqueue_after_commit=True,
-				**args,
-			)
-		else:
-			process_trigger(**args)
-	except Exception as exc:
-		logger.warning(f"Failed to trigger automation: {exc}")

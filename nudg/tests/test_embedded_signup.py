@@ -54,6 +54,11 @@ class TestEmbeddedSignup(unittest.TestCase):
 		self.assertEqual(request.call_args_list[1].kwargs["params"]["access_token"], "EAABCustomerToken")
 		self.assertNotIn("Authorization", request.call_args_list[1].kwargs["headers"])
 
+	def test_mobile_title_uses_the_number(self):
+		self.assertEqual(embedded_signup._mobile_title("+1 555-010-6909"), "+15550106909")
+		self.assertEqual(embedded_signup._mobile_title("15550106909"), "15550106909")
+		self.assertEqual(embedded_signup._mobile_title(""), "")
+
 	def test_pin_is_six_digits(self):
 		pin = embedded_signup.make_pin()
 		self.assertEqual(len(pin), 6)

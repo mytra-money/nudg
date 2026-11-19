@@ -93,8 +93,8 @@ export async function assignConversation(profile: string, user: string) {
   return call<any>('nudg.desk_api.assign_conversation', { profile, user })
 }
 
-export async function unassignConversation(profile: string) {
-  return call<any>('nudg.desk_api.unassign_conversation', { profile })
+export async function unassignConversation(profile: string, user?: string) {
+  return call<any>('nudg.desk_api.unassign_conversation', user ? { profile, user } : { profile })
 }
 
 export async function listCampaigns(account?: string) {
@@ -134,45 +134,6 @@ export async function updateCampaign(payload: {
 
 export async function deleteCampaign(name: string) {
   return call<any>('nudg.desk_api.delete_campaign', { name })
-}
-
-export async function listAutomationRules(account?: string) {
-  return call<any[]>('nudg.desk_api.list_automation_rules', { account })
-}
-
-export async function listAutomationRuns(rule?: string) {
-  return call<any[]>('nudg.desk_api.list_automation_runs', { rule })
-}
-
-export async function createAutomationRule(payload: {
-  rule_name: string
-  trigger: string
-  action: string
-  action_reference?: string
-  whatsapp_account?: string
-  status?: string
-  condition_operator?: string
-  condition_keyword?: string
-}) {
-  return call<any>('nudg.desk_api.create_automation_rule', payload)
-}
-
-export async function updateAutomationRule(payload: {
-  name: string
-  rule_name?: string
-  trigger?: string
-  action?: string
-  action_reference?: string
-  whatsapp_account?: string
-  status?: string
-  condition_operator?: string
-  condition_keyword?: string
-}) {
-  return call<any>('nudg.desk_api.update_automation_rule', payload)
-}
-
-export async function deleteAutomationRule(name: string) {
-  return call<any>('nudg.desk_api.delete_automation_rule', { name })
 }
 
 export async function getAnalytics(account?: string) {
@@ -251,6 +212,50 @@ export async function deleteWhatsappTemplate(name: string) {
 
 export async function syncWhatsappTemplates(account?: string) {
   return call<any>('nudg.desk_api.sync_whatsapp_templates', { account })
+}
+
+export async function getChatbot(account: string) {
+  return call<any>('nudg.desk_api.get_chatbot', { account })
+}
+
+export async function saveChatbot(account: string, payload: Record<string, unknown>) {
+  return call<any>('nudg.desk_api.save_chatbot', { account, payload })
+}
+
+export async function listChatbotKeywords(account: string) {
+  return call<any[]>('nudg.desk_api.list_chatbot_keywords', { account })
+}
+
+export async function saveChatbotKeyword(account: string, payload: Record<string, unknown>) {
+  return call<any>('nudg.desk_api.save_chatbot_keyword', { account, payload })
+}
+
+export async function deleteChatbotKeyword(account: string, name: string) {
+  return call<any>('nudg.desk_api.delete_chatbot_keyword', { account, name })
+}
+
+export async function listChatbotFlows(account: string) {
+  return call<any[]>('nudg.desk_api.list_chatbot_flows', { account })
+}
+
+export async function saveChatbotFlow(account: string, payload: Record<string, unknown>) {
+  return call<any>('nudg.desk_api.save_chatbot_flow', { account, payload })
+}
+
+export async function deleteChatbotFlow(account: string, name: string) {
+  return call<any>('nudg.desk_api.delete_chatbot_flow', { account, name })
+}
+
+export async function listChatbotHandoffs(account: string) {
+  return call<any>('nudg.desk_api.list_chatbot_handoffs', { account })
+}
+
+export async function resumeChatbotHandoff(account: string, name: string) {
+  return call<any>('nudg.desk_api.resume_chatbot_handoff', { account, name })
+}
+
+export async function cancelChatbotSession(account: string, name: string) {
+  return call<any>('nudg.desk_api.cancel_chatbot_session', { account, name })
 }
 
 export function deskForm(doctype: string, name?: string) {

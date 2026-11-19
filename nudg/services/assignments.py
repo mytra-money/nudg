@@ -110,8 +110,37 @@ def get_assignable_account_users(user: str | None = None) -> list[str]:
 	return [name for name in (active or []) if name and name != "Guest"]
 
 
-def assign_conversation(profile: str, user: str, source: str = "Manual") -> dict:
-	"""Assign a conversation to a user and keep ToDo in sync."""
+def can_view_team_users(user: str | None = None) -> bool:
+	"""Whether this user may see other people on the WhatsApp account.
+
+	WhatsApp User sees only themselves. WhatsApp Manager, System Manager, and
+	anyone allowed to read User can see the rest of the account team.
+	"""
+	user = user or getattr(getattr(frappe, "session", None), "user", None) or "Guest"
+	if not user or user == "Guest":
+		return False
+	if user == "Administrator":
+		return True
+	from nudg.security import _get_roles, get_user_wa_accounts, is_account_manager
+
+	roles = _get_roles(user)
+	if "System Manager" in roles:
+		return True
+	try:
+		if frappe.has_permission("User", "read", user=user):
+			return True
+	except Exception:
+		pass
+	return any(is_account_manager(account, user) for account in get_user_wa_accounts(user))
+
+
+def assign_conversation(profile: str, user: str, source: str = "Manual", enforce_visibility: bool = False) -> dict:
+	"""Add a user to the conversation. People already assigned stay assigned.
+
+	This follows Frappe document assignment: one open ToDo per person, created
+	with ``frappe.desk.form.assign_to.add``. Assigning again does not cancel
+	the other ToDos.
+	"""
 	if not user or user == "Guest":
 		frappe.throw(_("Select a user to assign."))
 	canonical = frappe.db.get_value("User", user, "name")
@@ -122,33 +151,54 @@ def assign_conversation(profile: str, user: str, source: str = "Manual") -> dict
 			_("User {0} is not a member of your WhatsApp account.").format(canonical),
 			frappe.PermissionError,
 		)
+	session_user = getattr(getattr(frappe, "session", None), "user", None)
+	if enforce_visibility and canonical != session_user and not can_view_team_users(session_user):
+		frappe.throw(_("Not permitted to assign other users."), frappe.PermissionError)
 
 	name = ensure_conversation(profile)
 	doc = frappe.get_doc("WA Profile", name)
 	frappe.has_permission("WA Profile", "write", doc=doc, throw=True)
 
+	_sync_todo(doc, user=canonical)
 	doc.assignee = canonical
 	doc.assignment_status = "Assigned"
 	doc.assignment_source = source if source in ("Manual", "Assignment Rule", "Round Robin") else "Manual"
 	doc.last_assigned_on = _safe_now()
 	doc.save()
 
-	_sync_todo(doc)
 	_notify_inbox(name)
-	return _serialize(doc)
+	return _serialize(doc, _assignees_for(name, fallback=canonical))
 
 
-def unassign_conversation(profile: str) -> dict:
+def unassign_conversation(profile: str, user: str | None = None) -> dict:
+	"""Remove one assignee, or everyone when ``user`` is empty.
+
+	Removing one person cancels only that person's ToDo, the same way Frappe
+	removes a single assignment.
+	"""
 	name = ensure_conversation(profile)
 	doc = frappe.get_doc("WA Profile", name)
 	frappe.has_permission("WA Profile", "write", doc=doc, throw=True)
-	doc.assignee = None
-	doc.assignment_status = "Unassigned"
-	doc.assignment_source = "Manual"
+	if user:
+		canonical = frappe.db.get_value("User", user, "name")
+		if not canonical or canonical == "Guest":
+			frappe.throw(_("User {0} does not exist.").format(user), frappe.DoesNotExistError)
+		_remove_assignment(name, canonical)
+		remaining = [person for person in _open_assignees(name) if person != canonical]
+		if doc.assignee and doc.assignee != canonical and doc.assignee not in remaining:
+			remaining.append(doc.assignee)
+		if not remaining or doc.assignee == canonical or doc.assignee not in remaining:
+			doc.assignee = remaining[-1] if remaining else None
+		doc.assignment_status = "Assigned" if remaining else "Unassigned"
+	else:
+		doc.assignee = None
+		doc.assignment_status = "Unassigned"
+		doc.assignment_source = "Manual"
+		_close_todos(name)
+		remaining = []
 	doc.save()
-	_close_todos(doc.name)
 	_notify_inbox(name)
-	return _serialize(doc)
+	return _serialize(doc, remaining)
 
 
 def close_conversation(profile: str) -> dict:
@@ -368,6 +418,7 @@ def get_conversation_map(profiles: list[str]) -> dict[str, dict]:
 			"tags",
 		],
 	)
+	todo_map = _assignees_by_profile(profiles)
 	mapped: dict[str, dict] = {}
 	for row in rows or []:
 		name = row.get("name") if isinstance(row, dict) else getattr(row, "name", None)
@@ -375,6 +426,11 @@ def get_conversation_map(profiles: list[str]) -> dict[str, dict]:
 			continue
 		data = dict(row)
 		data["profile"] = name
+		people = list(todo_map.get(name) or [])
+		single = data.get("assignee")
+		if single and single not in people and data.get("assignment_status") != "Unassigned":
+			people.append(single)
+		data["assignees"] = people
 		mapped[name] = data
 	return mapped
 
@@ -448,42 +504,122 @@ def on_conversation_update(doc, method=None):
 		return
 	if doc.assignee and doc.assignment_status == "Unassigned":
 		doc.db_set("assignment_status", "Assigned", update_modified=False)
-	if not doc.assignee and doc.assignment_status == "Assigned":
+	if not doc.assignee and doc.assignment_status == "Assigned" and not _open_assignees(doc.name):
 		doc.db_set("assignment_status", "Unassigned", update_modified=False)
 	if doc.assignee and not doc.assignment_source:
 		doc.db_set("assignment_source", "Assignment Rule", update_modified=False)
 	if doc.assignee and not doc.last_assigned_on:
 		doc.db_set("last_assigned_on", _safe_now(), update_modified=False)
+	previous = doc.get_doc_before_save() if hasattr(doc, "get_doc_before_save") else None
+	previous_assignee = getattr(previous, "assignee", None) if previous else None
+	if (
+		doc.assignee
+		and doc.assignee != previous_assignee
+		and not getattr(getattr(doc, "flags", None), "nudg_syncing_todo", False)
+	):
+		_sync_todo(doc)
 
 
-def _sync_todo(doc):
-	_close_todos(getattr(doc, "name", None))
-	if not getattr(doc, "assignee", None):
+def _sync_todo(doc, user: str | None = None):
+	"""Create the Frappe assignment ToDo for this user without removing anyone else."""
+	assignee = user or getattr(doc, "assignee", None)
+	name = getattr(doc, "name", None)
+	if not assignee or not name or _has_open_todo(name, assignee):
 		return
 	try:
-		from frappe.desk.form import assign_to
+		from frappe.desk.form.assign_to import add as add_assignment
 
-		assign_to.add(
+		if getattr(doc, "flags", None) is not None:
+			doc.flags.nudg_syncing_todo = True
+		add_assignment(
 			{
-				"assign_to": [doc.assignee],
+				"assign_to": [assignee],
 				"doctype": "WA Profile",
-				"name": doc.name,
-				"description": _("WhatsApp conversation {0}").format(_profile_name(doc) or ""),
-				"notify": 0,
+				"name": name,
+				"description": _("WhatsApp conversation {0}").format(_profile_name(doc) or name),
+				"priority": getattr(doc, "priority", None) or "Medium",
 			}
 		)
 	except Exception:
+		if getattr(doc, "flags", None) is not None:
+			doc.flags.nudg_syncing_todo = False
 		frappe.log_error(title="Nudg assign ToDo")
+
+
+def _has_open_todo(name: str, user: str) -> bool:
+	return user in _open_assignees(name)
+
+
+def _open_assignees(name: str) -> list[str]:
+	grouped = _assignees_by_profile([name])
+	return list(grouped.get(name) or [])
+
+
+def _assignees_by_profile(profiles: list[str]) -> dict[str, list[str]]:
+	"""Open ToDo assignees for these profiles, oldest assignment first."""
+	if not profiles:
+		return {}
+	try:
+		if not frappe.db.exists("DocType", "ToDo"):
+			return {}
+		rows = frappe.get_all(
+			"ToDo",
+			filters={
+				"reference_type": "WA Profile",
+				"reference_name": ["in", profiles],
+				"status": "Open",
+			},
+			fields=["reference_name", "allocated_to"],
+			order_by="creation asc",
+			limit_page_length=0,
+		)
+	except Exception:
+		return {}
+	if not isinstance(rows, list):
+		return {}
+	grouped: dict[str, list[str]] = {}
+	for row in rows:
+		profile = row.get("reference_name") if isinstance(row, dict) else getattr(row, "reference_name", None)
+		person = row.get("allocated_to") if isinstance(row, dict) else getattr(row, "allocated_to", None)
+		if not profile or not person:
+			continue
+		bucket = grouped.setdefault(profile, [])
+		if person not in bucket:
+			bucket.append(person)
+	return grouped
+
+
+def _assignees_for(name: str, fallback: str | None = None) -> list[str]:
+	people = _open_assignees(name)
+	if fallback and fallback not in people:
+		people.append(fallback)
+	return people
+
+
+def _remove_assignment(name: str, user: str) -> None:
+	"""Cancel one person's ToDo the way Frappe removes a document assignment."""
+	from frappe.desk.form.assign_to import remove
+
+	remove("WA Profile", name, user)
 
 
 def _close_todos(name: str):
 	if not name:
 		return
+	try:
+		from frappe.desk.form.assign_to import close_all_assignments
+
+		close_all_assignments("WA Profile", name, ignore_permissions=True)
+		return
+	except Exception:
+		frappe.log_error(title="Nudg assign ToDo")
 	todos = frappe.get_all(
 		"ToDo",
 		filters={"reference_type": "WA Profile", "reference_name": name, "status": "Open"},
 		pluck="name",
 	)
+	if not isinstance(todos, list):
+		return
 	for todo in todos:
 		frappe.db.set_value("ToDo", todo, "status", "Cancelled")
 
@@ -496,14 +632,19 @@ def _iso(val) -> str | None:
 	return str(val)
 
 
-def _serialize(doc) -> dict:
+def _serialize(doc, assignees: list[str] | None = None) -> dict:
 	tags_str = getattr(doc, "tags", "") or ""
 	tags_list = [t.strip() for t in str(tags_str).split(",") if t.strip()]
 	last_assigned = getattr(doc, "last_assigned_on", None)
+	if assignees is None:
+		single = getattr(doc, "assignee", None)
+		assignees = [single] if single else []
+	primary = assignees[-1] if assignees else getattr(doc, "assignee", None)
 	return {
 		"name": getattr(doc, "name", None),
 		"profile": _profile_name(doc),
-		"assignee": getattr(doc, "assignee", None),
+		"assignee": primary,
+		"assignees": list(assignees),
 		"assignment_status": getattr(doc, "assignment_status", None),
 		"conversation_status": getattr(doc, "conversation_status", None),
 		"priority": getattr(doc, "priority", None),

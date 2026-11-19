@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
 import { Badge, Button, Dialog, toast } from 'frappe-ui'
 import EmptyState from '@/components/EmptyState.vue'
 import ErrorState from '@/components/ErrorState.vue'
@@ -21,7 +20,6 @@ import {
 } from '@/services/catalogApi'
 
 const desk = useDesk()
-const showLogs = computed(() => desk.inbox.value?.can_read_logs !== false)
 
 const loading = ref(true)
 const error = ref<string | null>(null)
@@ -562,75 +560,36 @@ onMounted(() => {
 
 <template>
   <div class="flex h-full min-h-0 flex-col bg-surface-gray-2/60">
-    <!-- Sub-navigation Header Bar -->
-    <header class="flex flex-wrap items-center justify-between border-b border-outline-gray-2 bg-white px-4 py-2 sm:px-6">
-      <div class="flex items-center gap-1 sm:gap-2">
-        <RouterLink
-          to="/integrations"
-          class="flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold sm:text-sm text-ink-gray-6 hover:bg-surface-gray-2 hover:text-ink-gray-9 transition-all"
-        >
-          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-          </svg>
-          <span>WABA Channels & Accounts</span>
-        </RouterLink>
-
-        <RouterLink
-          to="/integrations/catalogs"
-          class="flex items-center gap-2 rounded-lg bg-[#075E54]/10 border border-[#075E54]/20 px-3 py-1.5 text-xs font-semibold sm:text-sm text-[#075E54] shadow-2xs transition-all"
-        >
-          <svg class="h-4 w-4 text-[#075E54]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-          </svg>
-          <span>Commerce Catalogs</span>
-        </RouterLink>
-
-        <RouterLink
-          v-if="showLogs"
-          to="/integrations/logs"
-          class="flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold sm:text-sm text-ink-gray-6 hover:bg-surface-gray-2 hover:text-ink-gray-9 transition-all"
-        >
-          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          <span>Message & Webhook Logs</span>
-        </RouterLink>
-      </div>
-
-      <div class="hidden items-center gap-3 sm:flex">
-        <span class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-600/20">
-          Stored on this site
-        </span>
-      </div>
-    </header>
-
     <!-- Main Content Area -->
     <div class="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6 sm:px-8">
       <!-- Page Header & Action Bar -->
-      <div class="flex flex-col gap-4 border-b border-outline-gray-2 pb-6 md:flex-row md:items-center md:justify-between">
-        <div>
-          <div class="flex items-center gap-2.5">
-            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-[#075E54]/10 text-[#075E54]">
-              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-              </svg>
-            </div>
-            <div>
+      <div class="flex flex-col gap-4 border-b border-outline-gray-2 pb-6 md:flex-row md:items-start md:justify-between">
+        <div class="flex min-w-0 items-start gap-2.5">
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#075E54]/10 text-[#075E54]">
+            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+            </svg>
+          </div>
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-2">
               <h1 class="text-2xl font-bold tracking-tight text-ink-gray-9">WhatsApp Product Catalogs</h1>
-              <p class="text-xs sm:text-sm text-ink-gray-6">
-                Add products here and send them in a chat. Meta catalog import is not available in this build.
-              </p>
+              <span class="inline-flex h-6 items-center rounded-full bg-amber-50 px-2.5 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-600/20">
+                Stored on this site
+              </span>
             </div>
+            <p class="mt-1 text-xs text-ink-gray-6 sm:text-sm">
+              Add products here and send them in a chat. Meta catalog import is not available in this build.
+            </p>
           </div>
         </div>
 
         <!-- Header Actions -->
-        <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+        <div class="flex shrink-0 flex-wrap items-center gap-2 md:justify-end">
           <button
             type="button"
             @click="load"
             :disabled="loading"
-            class="inline-flex items-center gap-1.5 rounded-lg border border-outline-gray-2 bg-white px-3.5 py-2 text-xs font-semibold text-ink-gray-8 shadow-2xs hover:bg-surface-gray-2 transition-all disabled:opacity-50"
+            class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-outline-gray-2 bg-white px-3 text-xs font-semibold text-ink-gray-8 shadow-2xs hover:bg-surface-gray-2 disabled:opacity-50"
           >
             <svg
               class="h-4 w-4 text-ink-gray-6"
@@ -647,7 +606,7 @@ onMounted(() => {
           <button
             type="button"
             @click="startCatalog()"
-            class="inline-flex items-center gap-1.5 rounded-lg border border-outline-gray-2 bg-white px-3.5 py-2 text-xs font-semibold text-ink-gray-8 shadow-2xs hover:bg-surface-gray-2 transition-all"
+            class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-outline-gray-2 bg-white px-3 text-xs font-semibold text-ink-gray-8 shadow-2xs hover:bg-surface-gray-2"
           >
             <svg class="h-4 w-4 text-[#075E54]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
@@ -658,7 +617,7 @@ onMounted(() => {
           <button
             type="button"
             @click="startItem()"
-            class="inline-flex items-center gap-1.5 rounded-lg bg-[#075E54] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#128C7E] transition-all"
+            class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#075E54] px-3 text-xs font-semibold text-white hover:bg-[#128C7E]"
           >
             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
@@ -669,44 +628,44 @@ onMounted(() => {
       </div>
 
       <!-- KPI Metrics Ribbon (4 Cards) -->
-      <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div class="rounded-xl border border-outline-gray-2 bg-white p-4 shadow-2xs">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-medium text-ink-gray-6 uppercase tracking-wider">Catalogs</span>
+      <div class="mt-6 grid grid-cols-1 items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div class="flex h-full flex-col rounded-xl border border-outline-gray-2 bg-white p-4 shadow-2xs">
+          <div class="flex h-10 items-start justify-between gap-2">
+            <span class="text-xs font-medium uppercase leading-4 tracking-wider text-ink-gray-6">Catalogs</span>
             <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-[#075E54]/10 text-[#075E54]">
               <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
               </svg>
             </div>
           </div>
-          <div class="mt-2 flex items-baseline gap-2">
-            <span class="text-2xl font-bold text-ink-gray-9">{{ catalogs.length }}</span>
-            <span class="text-xs text-ink-gray-5">active collections</span>
+          <div class="mt-3 flex min-h-8 items-end gap-2">
+            <span class="text-2xl font-bold leading-none text-ink-gray-9">{{ catalogs.length }}</span>
+            <span class="text-xs text-ink-gray-5">collections</span>
           </div>
-          <p class="mt-1 text-xs text-ink-gray-6">
+          <p class="mt-2 line-clamp-2 text-xs text-ink-gray-6">
             {{ selectedCatalog ? 'Selected: ' + selectedCatalog.catalog_name : 'No catalog selected' }}
           </p>
         </div>
 
-        <div class="rounded-xl border border-outline-gray-2 bg-white p-4 shadow-2xs">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-medium text-ink-gray-6 uppercase tracking-wider">Products in Catalog</span>
+        <div class="flex h-full flex-col rounded-xl border border-outline-gray-2 bg-white p-4 shadow-2xs">
+          <div class="flex h-10 items-start justify-between gap-2">
+            <span class="text-xs font-medium uppercase leading-4 tracking-wider text-ink-gray-6">Products</span>
             <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-[#25D366]/10 text-[#075E54]">
               <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
               </svg>
             </div>
           </div>
-          <div class="mt-2 flex items-baseline gap-2">
-            <span class="text-2xl font-bold text-ink-gray-9">{{ totalProductsCount }}</span>
-            <span class="text-xs text-ink-gray-5">listed SKUs</span>
+          <div class="mt-3 flex min-h-8 items-end gap-2">
+            <span class="text-2xl font-bold leading-none text-ink-gray-9">{{ totalProductsCount }}</span>
+            <span class="text-xs text-ink-gray-5">products</span>
           </div>
-          <p class="mt-1 text-xs text-ink-gray-6">Ready for interactive SPM dispatch</p>
+          <p class="mt-2 line-clamp-2 text-xs text-ink-gray-6">In the catalog selected on the left</p>
         </div>
 
-        <div class="rounded-xl border border-outline-gray-2 bg-white p-4 shadow-2xs">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-medium text-ink-gray-6 uppercase tracking-wider">Catalog sync</span>
+        <div class="flex h-full flex-col rounded-xl border border-outline-gray-2 bg-white p-4 shadow-2xs">
+          <div class="flex h-10 items-start justify-between gap-2">
+            <span class="text-xs font-medium uppercase leading-4 tracking-wider text-ink-gray-6">Sync</span>
             <div
               class="flex h-8 w-8 items-center justify-center rounded-lg"
               :class="syncStatusLabel === 'Error' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-700'"
@@ -716,29 +675,29 @@ onMounted(() => {
               </svg>
             </div>
           </div>
-          <div class="mt-2 flex items-center gap-1.5">
+          <div class="mt-3 flex min-h-8 items-end gap-1.5">
             <span
-              class="h-2 w-2 rounded-full"
+              class="mb-1 h-2 w-2 shrink-0 rounded-full"
               :class="syncStatusLabel === 'Error' ? 'bg-red-500' : syncStatusLabel === 'Synced' ? 'bg-emerald-500' : 'bg-amber-500'"
             ></span>
-            <span class="text-base font-bold text-ink-gray-9">{{ syncStatusLabel }}</span>
+            <span class="text-2xl font-bold leading-none text-ink-gray-9">{{ syncStatusLabel }}</span>
           </div>
-          <p class="mt-1 text-xs text-ink-gray-6">{{ syncStatusDetail }}</p>
+          <p class="mt-2 line-clamp-2 text-xs text-ink-gray-6">{{ syncStatusDetail }}</p>
         </div>
 
-        <div class="rounded-xl border border-outline-gray-2 bg-white p-4 shadow-2xs">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-medium text-ink-gray-6 uppercase tracking-wider">Commerce Mode</span>
+        <div class="flex h-full flex-col rounded-xl border border-outline-gray-2 bg-white p-4 shadow-2xs">
+          <div class="flex h-10 items-start justify-between gap-2">
+            <span class="text-xs font-medium uppercase leading-4 tracking-wider text-ink-gray-6">Send</span>
             <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
               <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
               </svg>
             </div>
           </div>
-          <div class="mt-2 flex items-baseline gap-2">
-            <span class="text-base font-bold text-ink-gray-9">Native SPM & MPM</span>
+          <div class="mt-3 flex min-h-8 items-end">
+            <span class="text-2xl font-bold leading-none text-ink-gray-9">In chat</span>
           </div>
-          <p class="mt-1 text-xs text-ink-gray-6">Direct in-chat product messaging</p>
+          <p class="mt-2 line-clamp-2 text-xs text-ink-gray-6">Send one product or a list from a conversation</p>
         </div>
       </div>
 
@@ -752,44 +711,43 @@ onMounted(() => {
       />
 
       <!-- Master-Detail Layout -->
-      <div v-else class="nudg-split mt-8 grid min-h-0 flex-1 gap-6 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
-        <!-- Master Column: Catalog Collections List -->
+      <div v-else class="nudg-split mt-6 grid min-h-0 flex-1 items-start gap-4 lg:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)]">
         <div class="flex flex-col rounded-xl border border-outline-gray-2 bg-white shadow-2xs">
           <div class="border-b border-outline-gray-2 p-4">
-            <div class="flex items-center justify-between">
+            <div class="flex h-9 items-center justify-between gap-3">
               <h2 class="text-sm font-semibold text-ink-gray-9">Collections ({{ catalogs.length }})</h2>
               <button
                 type="button"
+                class="inline-flex h-8 items-center rounded-lg px-2 text-xs font-semibold text-[#075E54] hover:bg-[#075E54]/10"
                 @click="startCatalog()"
-                class="text-xs font-semibold text-[#075E54] hover:underline"
               >
-                + New
+                New
               </button>
             </div>
-            <div class="relative mt-2.5">
+            <div class="relative mt-3">
+              <svg class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-gray-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
               <input
                 v-model="searchQuery"
                 type="text"
                 placeholder="Search collections..."
-                class="h-8.5 w-full rounded-lg border border-outline-gray-2 bg-surface-gray-2/50 pl-8 pr-3 text-xs text-ink-gray-9 placeholder:text-ink-gray-4 focus:border-[#128C7E] focus:outline-none focus:ring-1 focus:ring-[#128C7E]"
+                class="h-9 w-full rounded-lg border border-outline-gray-2 bg-surface-gray-2/50 pl-8 pr-3 text-xs text-ink-gray-9 placeholder:text-ink-gray-4 focus:border-[#128C7E] focus:outline-none focus:ring-1 focus:ring-[#128C7E]"
               />
-              <svg class="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-ink-gray-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
             </div>
           </div>
 
-          <div class="min-h-0 flex-1 divide-y divide-outline-gray-2 overflow-y-auto">
+          <div class="min-h-0 flex-1 divide-y divide-outline-gray-1 overflow-y-auto">
             <button
               v-for="cat in filteredCatalogs"
               :key="cat.name"
               type="button"
+              class="flex w-full flex-col gap-1.5 border-l-4 px-4 py-3 text-left hover:bg-surface-gray-2/50"
+              :class="selectedCatalogName === cat.name ? 'border-l-[#128C7E] bg-[#075E54]/5' : 'border-l-transparent'"
               @click="open(cat.name)"
-              class="flex w-full flex-col gap-2 p-4 text-left transition-all hover:bg-surface-gray-2/50"
-              :class="selectedCatalogName === cat.name ? 'bg-[#075E54]/5 border-l-4 border-l-[#128C7E]' : ''"
             >
-              <div class="flex items-start justify-between gap-2">
-                <span class="text-sm font-semibold text-ink-gray-9">{{ cat.catalog_name }}</span>
+              <div class="flex items-center justify-between gap-2">
+                <span class="min-w-0 truncate text-sm font-semibold text-ink-gray-9">{{ cat.catalog_name }}</span>
                 <span
                   class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium"
                   :class="
@@ -803,59 +761,45 @@ onMounted(() => {
                   {{ cat.sync_status || 'Pending' }}
                 </span>
               </div>
-
-              <p class="line-clamp-2 text-xs text-ink-gray-6">{{ cat.description || 'No catalog description provided.' }}</p>
-
-              <div class="flex items-center justify-between text-[11px] text-ink-gray-5">
-                <span class="flex items-center gap-1">
-                  <svg class="h-3.5 w-3.5 text-[#075E54]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                  </svg>
-                  <span>{{ cat.whatsapp_account || 'Default Account' }}</span>
-                </span>
-                <span class="font-mono">{{ cat.name }}</span>
+              <p class="line-clamp-2 text-xs leading-5 text-ink-gray-6">{{ cat.description || 'No catalog description provided.' }}</p>
+              <div class="flex items-center justify-between gap-3 text-[11px] text-ink-gray-5">
+                <span class="min-w-0 truncate">{{ cat.whatsapp_account || 'No account' }}</span>
+                <span class="shrink-0 font-mono">{{ cat.name }}</span>
               </div>
             </button>
           </div>
         </div>
 
         <!-- Detail Column: Catalog Products & Actions -->
-        <div v-if="selectedCatalog" class="flex flex-col rounded-xl border border-outline-gray-2 bg-white p-6 shadow-2xs">
-          <!-- Catalog Detail Header -->
-          <div class="flex flex-col gap-4 border-b border-outline-gray-2 pb-5 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <div class="flex items-center gap-2">
-                <h2 class="text-lg font-bold text-ink-gray-9">{{ selectedCatalog.catalog_name }}</h2>
-                <span
-                  class="rounded-full px-2.5 py-0.5 text-xs font-medium"
-                  :class="selectedCatalog.status === 'Active' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600'"
-                >
-                  {{ selectedCatalog.status }}
-                </span>
-              </div>
-              <p class="mt-1 text-xs text-ink-gray-6">{{ selectedCatalog.description }}</p>
-              <p v-if="selectedCatalog.sync_error" class="mt-2 max-w-xl text-sm text-red-700" role="alert">
-                {{ selectedCatalog.sync_error }}
-              </p>
-
-              <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
-                <span class="rounded bg-surface-gray-2 px-2 py-0.5 font-mono text-ink-gray-7">
-                  Meta Catalog ID: {{ selectedCatalog.meta_catalog_id || 'Not set' }}
-                </span>
-                <span class="rounded bg-surface-gray-2 px-2 py-0.5 text-ink-gray-7">
-                  WABA: {{ selectedCatalog.whatsapp_account || 'Primary Channel' }}
-                </span>
-              </div>
-            </div>
-
-            <!-- Detail Action Buttons -->
-            <div class="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                :disabled="busy"
-                @click="sync(selectedCatalog.name)"
-                class="inline-flex items-center gap-1.5 rounded-lg border border-outline-gray-2 bg-white px-3.5 py-2 text-xs font-semibold text-ink-gray-8 shadow-2xs hover:bg-surface-gray-2 transition-all disabled:opacity-50"
-              >
+        <div v-if="selectedCatalog" class="flex min-w-0 flex-col rounded-xl border border-outline-gray-2 bg-white p-4 shadow-2xs sm:p-5">
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 class="min-w-0 truncate text-lg font-bold text-ink-gray-9">{{ selectedCatalog.catalog_name }}</h2>
+            <span
+              class="inline-flex h-6 shrink-0 items-center rounded-full px-2.5 text-xs font-medium"
+              :class="selectedCatalog.status === 'Active' ? 'bg-emerald-50 text-emerald-700' : 'bg-surface-gray-2 text-ink-gray-6'"
+            >
+              {{ selectedCatalog.status }}
+            </span>
+          </div>
+          <p class="mt-1 text-xs leading-5 text-ink-gray-6">{{ selectedCatalog.description || 'No description' }}</p>
+          <p v-if="selectedCatalog.sync_error" class="mt-2 text-sm text-red-700" role="alert">
+            {{ selectedCatalog.sync_error }}
+          </p>
+          <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
+            <span class="inline-flex h-7 items-center rounded-md bg-surface-gray-2 px-2 font-mono text-ink-gray-7">
+              Meta ID {{ selectedCatalog.meta_catalog_id || 'Not set' }}
+            </span>
+            <span class="inline-flex h-7 items-center rounded-md bg-surface-gray-2 px-2 text-ink-gray-7">
+              {{ selectedCatalog.whatsapp_account || 'No account' }}
+            </span>
+          </div>
+          <div class="mt-3 flex flex-wrap items-center gap-2 border-b border-outline-gray-2 pb-4">
+            <button
+              type="button"
+              :disabled="busy"
+              class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-outline-gray-2 bg-white px-3 text-xs font-semibold text-ink-gray-8 hover:bg-surface-gray-2 disabled:opacity-50"
+              @click="sync(selectedCatalog.name)"
+            >
                 <svg
                   class="h-4 w-4 text-[#128C7E]"
                   :class="{ 'animate-spin': busy }"
@@ -868,114 +812,102 @@ onMounted(() => {
                 <span>{{ busy ? 'Syncing...' : 'Sync catalog' }}</span>
               </button>
 
-              <button
-                type="button"
-                @click="startCatalog(selectedCatalog)"
-                class="inline-flex items-center gap-1.5 rounded-lg border border-outline-gray-2 bg-white px-3.5 py-2 text-xs font-semibold text-ink-gray-8 shadow-2xs hover:bg-surface-gray-2 transition-all"
-              >
-                <span>Edit</span>
-                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
-              </button>
-
-              <button
-                type="button"
-                @click="startItem()"
-                class="inline-flex items-center gap-1.5 rounded-lg bg-[#075E54] px-3.5 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-[#128C7E] transition-all"
-              >
+            <button
+              type="button"
+              class="inline-flex h-9 items-center rounded-lg border border-outline-gray-2 bg-white px-3 text-xs font-semibold text-ink-gray-8 hover:bg-surface-gray-2"
+              @click="startCatalog(selectedCatalog)"
+            >
+              Edit catalog
+            </button>
+            <button
+              type="button"
+              class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#075E54] px-3 text-xs font-semibold text-white hover:bg-[#128C7E]"
+              @click="startItem()"
+            >
                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                 </svg>
                 <span>New Item</span>
               </button>
-            </div>
           </div>
 
           <!-- Items Filter & Search -->
-          <div class="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div class="relative w-full sm:w-64">
+          <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div class="relative w-full sm:max-w-xs sm:flex-1">
+              <svg class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-gray-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
               <input
                 v-model="itemSearchQuery"
                 type="text"
                 placeholder="Search products or SKU..."
-                class="h-8.5 w-full rounded-lg border border-outline-gray-2 bg-white pl-8 pr-3 text-xs text-ink-gray-9 placeholder:text-ink-gray-4 focus:border-[#128C7E] focus:outline-none focus:ring-1 focus:ring-[#128C7E]"
+                class="h-9 w-full rounded-lg border border-outline-gray-2 bg-white pl-8 pr-3 text-xs text-ink-gray-9 placeholder:text-ink-gray-4 focus:border-[#128C7E] focus:outline-none focus:ring-1 focus:ring-[#128C7E]"
               />
-              <svg class="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-ink-gray-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
             </div>
-
-            <div class="flex rounded-lg border border-outline-gray-2 bg-white p-0.5">
+            <div class="flex h-9 shrink-0 items-center rounded-lg border border-outline-gray-2 bg-white p-0.5">
               <button
                 type="button"
-                @click="itemStatusFilter = 'all'"
-                class="rounded-md px-2.5 py-1 text-xs font-medium transition-all"
+                class="h-8 rounded-md px-3 text-xs font-medium"
                 :class="itemStatusFilter === 'all' ? 'bg-[#075E54] text-white' : 'text-ink-gray-6 hover:text-ink-gray-9'"
+                @click="itemStatusFilter = 'all'"
               >
                 All ({{ items.length }})
               </button>
               <button
                 type="button"
-                @click="itemStatusFilter = 'Active'"
-                class="rounded-md px-2.5 py-1 text-xs font-medium transition-all"
+                class="h-8 rounded-md px-3 text-xs font-medium"
                 :class="itemStatusFilter === 'Active' ? 'bg-[#075E54] text-white' : 'text-ink-gray-6 hover:text-ink-gray-9'"
+                @click="itemStatusFilter = 'Active'"
               >
                 Active
+              </button>
+              <button
+                type="button"
+                class="h-8 rounded-md px-3 text-xs font-medium"
+                :class="itemStatusFilter === 'Inactive' ? 'bg-[#075E54] text-white' : 'text-ink-gray-6 hover:text-ink-gray-9'"
+                @click="itemStatusFilter = 'Inactive'"
+              >
+                Inactive
               </button>
             </div>
           </div>
 
-          <!-- Product Items Grid -->
-          <div v-if="filteredItems.length > 0" class="mt-4 grid gap-3 sm:grid-cols-2">
+          <div v-if="filteredItems.length > 0" class="mt-4 space-y-3">
             <article
               v-for="item in filteredItems"
               :key="item.name"
-              class="flex flex-col justify-between rounded-xl border border-outline-gray-2 bg-white p-4 shadow-2xs transition-all hover:border-[#128C7E]/40 hover:shadow-xs"
+              class="rounded-xl border border-outline-gray-2 bg-white p-4"
             >
-              <div>
-                <div class="flex items-start justify-between gap-3">
-                  <div class="flex items-start gap-3">
-                    <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[#25D366]/10 text-[#075E54] border border-[#25D366]/20">
-                      <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                      </svg>
-                    </div>
-                    <div>
-                      <h3 class="text-sm font-semibold text-ink-gray-9">{{ item.item_name }}</h3>
-                      <div class="mt-0.5 flex items-center gap-1.5">
-                        <span class="rounded bg-surface-gray-2 px-1.5 py-0.2 font-mono text-[10px] text-ink-gray-6">{{ item.sku }}</span>
-                        <span class="text-[11px] font-bold text-emerald-700">
-                          {{ formatCurrency(item.price, item.currency) }}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <Badge
-                    :variant="item.status === 'Active' ? 'subtle' : 'outline'"
-                    :theme="item.status === 'Active' ? 'green' : 'gray'"
-                    size="sm"
-                  >
-                    {{ item.status }}
-                  </Badge>
+              <div class="flex items-start gap-3">
+                <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-[#25D366]/20 bg-[#25D366]/10 text-[#075E54]">
+                  <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                  </svg>
                 </div>
-
-                <p class="mt-3 line-clamp-2 text-xs text-ink-gray-6">
-                  {{ item.description || 'No product description provided.' }}
-                </p>
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-start justify-between gap-3">
+                    <h3 class="min-w-0 truncate text-sm font-semibold text-ink-gray-9">{{ item.item_name }}</h3>
+                    <span class="shrink-0 text-sm font-semibold tabular-nums text-emerald-700">
+                      {{ formatCurrency(item.price, item.currency) }}
+                    </span>
+                  </div>
+                  <div class="mt-1 flex flex-wrap items-center gap-2">
+                    <span class="rounded bg-surface-gray-2 px-1.5 py-0.5 font-mono text-[11px] text-ink-gray-6">{{ item.sku || 'No SKU' }}</span>
+                    <Badge
+                      :variant="item.status === 'Active' ? 'subtle' : 'outline'"
+                      :theme="item.status === 'Active' ? 'green' : 'gray'"
+                      size="sm"
+                    >
+                      {{ item.status }}
+                    </Badge>
+                  </div>
+                  <p class="mt-2 line-clamp-2 text-xs leading-5 text-ink-gray-6">
+                    {{ item.description || 'No product description provided.' }}
+                  </p>
+                </div>
               </div>
-
-              <!-- Product Item Actions -->
-              <div class="mt-4 flex items-center justify-between border-t border-outline-gray-2 pt-3">
-                <Button
-                  variant="subtle"
-                  size="sm"
-                  icon-left="lucide-pencil"
-                  label="Edit"
-                  @click="startItem(item)"
-                />
-
+              <div class="mt-3 flex items-center justify-end gap-2 border-t border-outline-gray-1 pt-3">
+                <Button variant="subtle" size="sm" icon-left="lucide-pencil" label="Edit" @click="startItem(item)" />
                 <Button
                   variant="solid"
                   size="sm"
@@ -1111,7 +1043,7 @@ onMounted(() => {
           Dispatch an interactive Meta WhatsApp product card directly to a customer thread
         </p>
 
-        <div class="mt-3 grid gap-6 md:grid-cols-2">
+        <div class="mt-3 grid items-start gap-6 md:grid-cols-2">
           <!-- Configuration Form -->
           <div class="space-y-4">
             <!-- Recipient Selection -->
@@ -1149,14 +1081,14 @@ onMounted(() => {
               <input
                 v-model="customFooterText"
                 type="text"
-                class="mt-1 block w-full rounded-lg border border-outline-gray-2 bg-white px-3 py-1.5 text-xs text-ink-gray-9 focus:border-[#128C7E] focus:outline-none focus:ring-1 focus:ring-[#128C7E]"
+                class="mt-1 block h-9 w-full rounded-lg border border-outline-gray-2 bg-white px-3 text-sm text-ink-gray-9 focus:border-[#128C7E] focus:outline-none focus:ring-1 focus:ring-[#128C7E]"
                 placeholder="Tap below to view details"
               />
             </div>
           </div>
 
           <!-- Live WhatsApp Chat Bubble Preview -->
-          <div class="flex flex-col justify-center rounded-xl bg-[#efeae2]/40 p-4 ring-1 ring-black/5">
+          <div class="flex flex-col rounded-xl bg-[#efeae2]/40 p-4 ring-1 ring-black/5">
             <span class="mb-2 text-center text-[10px] font-semibold text-ink-gray-5 uppercase tracking-wider">
               Customer Chat Preview
             </span>

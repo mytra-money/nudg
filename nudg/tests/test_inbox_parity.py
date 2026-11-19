@@ -145,6 +145,19 @@ class TestInboxAndPresenceParity(unittest.TestCase):
 		self.assertEqual(res_stop["event"], "nudg_agent_typing")
 		self.assertFalse(res_stop["payload"]["active"])
 
+	def test_sync_todo_adds_without_clearing_other_assignees(self):
+		"""A new assignee gets a ToDo and people already assigned stay assigned."""
+		doc = frappe._dict(name="PROF-1", assignee="agent_a@example.com", priority="Medium", flags=frappe._dict())
+		with patch("nudg.services.assignments._has_open_todo", return_value=False), \
+			 patch("nudg.services.assignments._close_todos") as close, \
+			 patch("frappe.desk.form.assign_to.add") as add:
+			assignments._sync_todo(doc, user="agent_b@example.com")
+		close.assert_not_called()
+		add.assert_called_once()
+		self.assertEqual(add.call_args.args[0]["assign_to"], ["agent_b@example.com"])
+		self.assertEqual(add.call_args.args[0]["doctype"], "WA Profile")
+		self.assertNotIn("notify", add.call_args.args[0])
+
 	# -------------------------------------------------------------------------
 	# 4. Round-Robin Auto-Routing Tests
 	# -------------------------------------------------------------------------

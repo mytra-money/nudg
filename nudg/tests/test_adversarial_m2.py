@@ -7,7 +7,6 @@ Focus Areas:
 1. Campaign variable substitution with extreme inputs (missing keys, nested JSON, special characters, unicode, emoji, empty arrays, malformed JSON).
 2. Opt-out suppression boundaries (mixed case "sToP", whitespace "  STOP  ", punctuation "STOP!", un-optout "START", multiple contacts).
 3. Business hours schedule edge cases (midnight wraparound, leap years, invalid timezone fallbacks, multi-tenant throttle keys under concurrent callers).
-4. Keyword automations regex denial of service (ReDoS patterns, malicious regex strings, null/None inputs).
 5. Inbound cart order parser stress test (missing fields, zero prices, huge quantities, currency symbol injection).
 6. Shared inbox round-robin under empty agent pools, single agent, concurrent assignments.
 """
@@ -26,7 +25,7 @@ from unittest.mock import MagicMock, patch
 import frappe
 from frappe.utils import get_datetime, now_datetime
 
-from nudg.services import assignments, automation, campaigns, catalog, consent
+from nudg.services import assignments, campaigns, catalog, consent
 
 
 def _setup_thread_frappe():
@@ -335,95 +334,6 @@ class TestAdversarialOptOutSuppression(unittest.TestCase):
 			self.assertIn("+1111", called_recipients)
 			self.assertIn("+3333", called_recipients)
 			self.assertNotIn("+2222", called_recipients)
-
-
-class TestAdversarialKeywordRegex(unittest.TestCase):
-	"""4. Adversarial tests for Keyword Automations: ReDoS, malicious regex, and null inputs."""
-
-	def setUp(self):
-		super().setUp()
-		self._saved = {}
-		for name in ("flags", "session", "db", "site", "conf"):
-			self._saved[name] = getattr(frappe.local, name, None) if hasattr(frappe, "local") else None
-		frappe.local.flags = frappe._dict(mute_messages=True, in_test=True)
-		frappe.local.session = frappe._dict(user="Administrator", data=frappe._dict())
-		frappe.local.site = "test.local"
-		frappe.local.conf = frappe._dict(developer_mode=True)
-		frappe.local.db = MagicMock()
-
-	def tearDown(self):
-		for name in ("flags", "session", "db", "site", "conf"):
-			val = self._saved.get(name)
-			if val is not None:
-				setattr(frappe.local, name, val)
-			else:
-				try:
-					delattr(frappe.local, name)
-				except AttributeError:
-					pass
-		super().tearDown()
-
-	def test_null_none_and_empty_inputs(self):
-		"""All operator modes handle None, empty strings, and non-string types safely."""
-		self.assertFalse(automation.evaluate_keyword_match(None, "help", "Exact"))
-		self.assertFalse(automation.evaluate_keyword_match("help", None, "Exact"))
-		self.assertFalse(automation.evaluate_keyword_match(None, None, "Exact"))
-		self.assertFalse(automation.evaluate_keyword_match(None, "help", "Contains"))
-		self.assertFalse(automation.evaluate_keyword_match("help", None, "Contains"))
-		self.assertFalse(automation.evaluate_keyword_match(None, "help", "Starts With"))
-		self.assertFalse(automation.evaluate_keyword_match("text", "pattern", operator="UnknownOp"))
-
-	def test_invalid_and_malicious_regex_syntax(self):
-		"""Unterminated regex syntax does not raise unhandled exceptions."""
-		malicious_regexes = [
-			r"[unclosed_bracket",
-			r"(?P<unclosed_group",
-			r"*dangling_star",
-			r"+dangling_plus",
-			r"\k<invalid_backref>",
-			r"(?<=incomplete",
-		]
-		for bad_re in malicious_regexes:
-			result = automation.evaluate_keyword_match("Sample text to match", bad_re, "Regex")
-			self.assertFalse(result, f"Expected False for invalid regex: {bad_re}")
-
-	def test_regex_repetition_overflow_vulnerability(self):
-		"""Vulnerability check: extreme repetition numbers must not crash with uncaught OverflowError."""
-		extreme_repetition = r"a{99999999999999999999}"
-		try:
-			result = automation.evaluate_keyword_match("aaaa", extreme_repetition, "Regex")
-			self.assertFalse(result)
-		except OverflowError as exc:
-			# Empirical finding: evaluate_keyword_match only catches re.error; OverflowError crashes
-			self.fail(f"VULNERABILITY CONFIRMED: evaluate_keyword_match crashed with unhandled OverflowError: {exc}")
-
-	def test_catastrophic_backtracking_redos_resistance(self):
-		"""ReDoS pattern evaluation timing check."""
-		redos_pattern = r"^(a+)+$"
-		target_text = "a" * 22 + "!"
-
-		start_time = time.time()
-		result = automation.evaluate_keyword_match(target_text, redos_pattern, "Regex")
-		duration = time.time() - start_time
-
-		self.assertFalse(result)
-		# Bounded execution check (< 5.0 seconds)
-		self.assertLess(
-			duration,
-			5.0,
-			f"ReDoS pattern took {duration:.2f}s! Backtracking vulnerability detected."
-		)
-
-	def test_extreme_message_length(self):
-		"""100,000-character payload evaluated against keywords completes in sub-second time."""
-		huge_text = ("lorem ipsum " * 10000) + " ORDER12345 " + ("dolor sit " * 10000)
-
-		start_time = time.time()
-		matched = automation.evaluate_keyword_match(huge_text, "ORDER12345", "Contains")
-		duration = time.time() - start_time
-
-		self.assertTrue(matched)
-		self.assertLess(duration, 0.5, f"Large text search took too long ({duration:.3f}s)")
 
 
 class TestAdversarialCartOrderParser(unittest.TestCase):

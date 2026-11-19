@@ -57,11 +57,11 @@ Send an approved template to a list through **UTM Campaign**. Sent, delivered, r
 
 ### Catalogs
 
-Send one product, or a list of products, inside the chat. Add items in Nudg, or import them from ERPNext when that app is installed.
+Open **Catalogs** in the menu. Add a catalog, its products, and the Meta catalog id there, then send a product from a chat.
 
-### Automation
+### Chatbot
 
-A keyword can send a reply or move the conversation. New conversations can be assigned round-robin across the agents who are on.
+A keyword, a flow, or the default reply answers on the WhatsApp account that received the message. An agent transfer pauses the bot for that number. New conversations can still be assigned round-robin across the agents who are on.
 
 ---
 
@@ -75,9 +75,9 @@ Open **Settings** from the menu.
 | **Routing & Assignment** | How new conversations are handed to agents |
 | **Team & Agents** | Who has WhatsApp User or WhatsApp Manager |
 | **WABA Profile** | The WhatsApp business profile for the connected number |
-| **Integrations** | The number, catalogs, ERPNext, and logs |
+| **Integrations** | The number, ERPNext, and logs |
 
-Day-to-day replies happen in **Conversations**. Marketing, Automation, and Integrations are for WhatsApp Manager.
+Day-to-day replies happen in **Conversations**. Marketing and Integrations are for WhatsApp Manager.
 
 ---
 
@@ -94,7 +94,7 @@ When ERPNext is on the same site, Nudg can import **Item** records into a catalo
 | Role | Typical use |
 |------|-------------|
 | **WhatsApp User** | Day-to-day: conversations, replies, quick replies, internal notes |
-| **WhatsApp Manager** | Connect a number, campaigns, automations, catalogs |
+| **WhatsApp Manager** | Connect a number, campaigns, the chatbot, catalogs |
 | **System Manager** | Full access, including Desk and the WhatsApp account token |
 
 Day-to-day work happens in the Nudg app (`/nudg`), not in Desk.
