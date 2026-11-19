@@ -139,13 +139,14 @@ def is_account_manager(account: str, user: str | None = None) -> bool:
 
 
 def on_user_created(doc, method=None):
-	"""Leave new users alone.
+	"""Grant WhatsApp User when Facebook sign-in creates the account.
 
-	WhatsApp Manager is granted when someone creates a WA Account, and team
-	APIs set WhatsApp User or WhatsApp Manager explicitly. Auto-promoting every
-	ERPNext user would give the whole company the desk manager role.
+	Other new users stay as they are. WhatsApp Manager is still granted when
+	someone creates a WA Account, and team APIs set roles explicitly.
 	"""
-	return
+	from nudg.integrations.facebook_login import grant_new_facebook_user
+
+	grant_new_facebook_user(doc)
 
 
 def ensure_account_user_permission(account: str, user: str | None = None) -> bool:
@@ -246,6 +247,49 @@ def get_tenant_quick_reply_query(user: str | None = None) -> str:
 
 def get_tenant_catalog_query(user: str | None = None) -> str:
 	return _account_query_for("WA Catalog", "whatsapp_account", user)
+
+
+def _optional_account_query(doctype: str, user: str | None = None) -> str:
+	"""Account filter that still shows rows with no account, such as a shared recipient list."""
+	base = _account_query_for(doctype, "whatsapp_account", user)
+	if not base or base == "1=0":
+		return base
+	return (
+		f"({base} OR `tab{doctype}`.whatsapp_account IS NULL "
+		f"OR `tab{doctype}`.whatsapp_account = '')"
+	)
+
+
+def get_tenant_bulk_query(user: str | None = None) -> str:
+	return _account_query_for("WA Bulk Message", "whatsapp_account", user)
+
+
+def get_tenant_recipient_list_query(user: str | None = None) -> str:
+	return _optional_account_query("WA Recipient List", user)
+
+
+def get_tenant_chatbot_query(user: str | None = None) -> str:
+	return _account_query_for("WA Chatbot", "whatsapp_account", user)
+
+
+def get_tenant_keyword_query(user: str | None = None) -> str:
+	return _account_query_for("WA Keyword Reply", "whatsapp_account", user)
+
+
+def get_tenant_flow_query(user: str | None = None) -> str:
+	return _account_query_for("WA Chatbot Flow", "whatsapp_account", user)
+
+
+def get_tenant_ai_context_query(user: str | None = None) -> str:
+	return _account_query_for("WA AI Context", "whatsapp_account", user)
+
+
+def get_tenant_session_query(user: str | None = None) -> str:
+	return _account_query_for("WA Chatbot Session", "whatsapp_account", user)
+
+
+def get_tenant_transfer_query(user: str | None = None) -> str:
+	return _optional_account_query("WA Agent Transfer", user)
 
 
 # -----------------------------------------------------------------------------

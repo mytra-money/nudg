@@ -13,6 +13,17 @@ import frappe
 from frappe.utils import now_datetime
 
 
+def _saved_message_name(doc: Any, message_id: str | None) -> str | None:
+	"""Return the WA Message name if this delivery was already stored."""
+	name = getattr(doc, "name", None)
+	if isinstance(name, str) and name and frappe.db.exists("WA Message", name):
+		return name
+	if not message_id:
+		return None
+	existing = frappe.db.get_value("WA Message", {"message_id": message_id}, "name")
+	return existing if isinstance(existing, str) and existing else None
+
+
 class DeskMessageRepository:
 	"""Repository handling message persistence, deduplication, and status transitions."""
 
@@ -147,13 +158,20 @@ class DeskMessageRepository:
 			try:
 				doc.submit()
 			except Exception:
-				try:
-					doc.insert()
-				except Exception:
-					existing = frappe.db.get_value("WA Message", {"message_id": message_id}, "name")
-					record_name = existing or (message_id or "msg_unidentified")
+				# submit() already inserts. A later error must not insert again:
+				# a second insert clears the name and stores a duplicate message,
+				# which runs the automation rule a second time.
+				saved = _saved_message_name(doc, message_id)
+				if saved:
+					record_name = saved
 				else:
-					record_name = doc.name
+					try:
+						doc.insert()
+					except Exception:
+						existing = frappe.db.get_value("WA Message", {"message_id": message_id}, "name")
+						record_name = existing if isinstance(existing, str) and existing else (message_id or "msg_unidentified")
+					else:
+						record_name = doc.name
 			else:
 				record_name = doc.name
 

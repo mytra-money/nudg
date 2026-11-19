@@ -1,116 +1,159 @@
 # Copyright (c) 2026, Nudg and contributors
 # For license information, please see license.txt
 
-"""Chatbot and Agent Handoff integration for Nudg.
+"""Chatbot status and agent handoff for the Nudg inbox.
 
-Softly coupled with `frappe_whatsapp_chatbot`: if the chatbot app is installed,
-agent transfer and chatbot session handoffs are fully supported; if not,
-the service safely degrades without errors.
+The bot runs inside Nudg. It does not call frappe_whatsapp_chatbot.
 """
 
 from __future__ import annotations
 
 import frappe
 from frappe import _
-from nudg.utils.phone import normalize_mobile_no, phone_match_key
+
+from nudg.utils.phone import phone_match_key
 
 
 def is_chatbot_installed() -> bool:
-	"""Check if frappe_whatsapp_chatbot is installed on this site."""
+	"""True when the native chatbot DocType is on this site."""
 	try:
-		return "frappe_whatsapp_chatbot" in frappe.get_installed_apps()
+		return bool(frappe.db.exists("DocType", "WA Chatbot"))
+	except Exception:
+		return False
+
+
+def get_settings(account: str | None):
+	"""The chatbot document for one WhatsApp account, or None."""
+	if not account or not is_chatbot_installed():
+		return None
+	try:
+		name = account if frappe.db.exists("WA Chatbot", account) else None
+		if not name:
+			name = frappe.db.get_value("WA Chatbot", {"whatsapp_account": account}, "name")
+		return frappe.get_doc("WA Chatbot", name) if name else None
+	except Exception:
+		frappe.log_error(title="Chatbot settings could not be read")
+		return None
+
+
+def is_enabled(account: str | None = None) -> bool:
+	"""True when this account has an enabled chatbot. With no account, true if any are enabled."""
+	if not is_chatbot_installed():
+		return False
+	try:
+		if account:
+			return bool(frappe.db.get_value("WA Chatbot", {"whatsapp_account": account}, "enabled"))
+		return bool(frappe.db.get_value("WA Chatbot", {"enabled": 1}, "name"))
 	except Exception:
 		return False
 
 
 def get_bot_status(phone_number: str, account: str | None = None) -> dict:
-	"""Return active chatbot session and transfer status for a phone number."""
-	if not is_chatbot_installed() or not phone_number:
-		return {
-			"installed": False,
-			"has_bot_session": False,
-			"is_transferred": False,
-			"session": None,
-			"transfer": None,
-		}
-
-	normalized = normalize_mobile_no(phone_number)
+	"""Active session and agent transfer for a customer number."""
+	empty = {
+		"installed": is_chatbot_installed(),
+		"enabled": False,
+		"has_bot_session": False,
+		"is_transferred": False,
+		"session": None,
+		"transfer": None,
+	}
+	if not phone_number or not empty["installed"]:
+		return empty
+	empty["enabled"] = is_enabled(account)
 	key = phone_match_key(phone_number)
 
-	filters: dict = {"status": "Active"}
-	if account:
-		filters["whatsapp_account"] = account
+	transfer = _match_phone("WA Agent Transfer", key, account, [
+		"name", "phone_number", "whatsapp_account", "agent", "agent_name", "transferred_at", "notes",
+	])
+	session = _match_phone("WA Chatbot Session", key, account, [
+		"name", "phone_number", "whatsapp_account", "current_flow", "current_step", "started_at", "last_activity",
+	])
+	flow_title = None
+	if session and session.get("current_flow"):
+		flow_title = frappe.db.get_value("WA Chatbot Flow", session.current_flow, "flow_name") or session.current_flow
+	empty.update({
+		"has_bot_session": bool(session),
+		"is_transferred": bool(transfer),
+		"session": session,
+		"flow_title": flow_title,
+		"transfer": transfer,
+	})
+	return empty
 
-	# 1. Check active transfers
-	transfers = frappe.get_all(
-		"WhatsApp Agent Transfer",
+
+def transfer_to_agent(phone_number: str, account: str | None = None, agent: str | None = None, notes: str | None = None) -> dict:
+	"""Pause the bot and record the human handoff."""
+	if not is_chatbot_installed():
+		frappe.throw(_("The chatbot is not available on this site."), frappe.ValidationError)
+	from nudg.nudg.doctype.wa_agent_transfer.wa_agent_transfer import WAAgentTransfer
+
+	doc = WAAgentTransfer.transfer_to_agent(
+		phone_number=phone_number,
+		whatsapp_account=account,
+		agent=agent or frappe.session.user,
+		notes=notes,
+	)
+	return {"status": "transferred", "transfer": doc.name, "name": doc.name}
+
+
+@frappe.whitelist()
+def is_transferred(phone_number: str, whatsapp_account: str | None = None) -> dict:
+	"""Whether the bot is paused for this number."""
+	if not phone_number:
+		frappe.throw(_("Phone number is required."))
+	frappe.has_permission("WA Agent Transfer", "read", throw=True)
+	from nudg.nudg.doctype.wa_agent_transfer.wa_agent_transfer import WAAgentTransfer
+
+	name = WAAgentTransfer.is_transferred(phone_number, whatsapp_account)
+	if not name:
+		return {"is_transferred": False, "phone_number": phone_number}
+	transfer = frappe.get_doc("WA Agent Transfer", name)
+	return {
+		"is_transferred": True,
+		"phone_number": phone_number,
+		"transfer_name": transfer.name,
+		"agent": transfer.agent,
+		"agent_name": transfer.agent_name,
+		"transferred_at": transfer.transferred_at,
+	}
+
+
+@frappe.whitelist()
+def get_active_transfers(whatsapp_account: str | None = None, agent: str | None = None) -> list[dict]:
+	"""Active human handoffs."""
+	frappe.has_permission("WA Agent Transfer", "read", throw=True)
+	filters = {"status": "Active"}
+	if whatsapp_account:
+		filters["whatsapp_account"] = whatsapp_account
+	if agent:
+		filters["agent"] = agent
+	return frappe.get_all(
+		"WA Agent Transfer",
 		filters=filters,
 		fields=["name", "phone_number", "whatsapp_account", "agent", "agent_name", "transferred_at", "notes"],
 		order_by="transferred_at desc",
 	)
-	matched_transfer = None
-	for tr in transfers:
-		if phone_match_key(tr.phone_number) == key:
-			matched_transfer = tr
-			break
-
-	# 2. Check active chatbot sessions
-	sessions = frappe.get_all(
-		"WhatsApp Chatbot Session",
-		filters=filters,
-		fields=["name", "phone_number", "whatsapp_account", "current_flow", "current_step", "started_at", "last_activity"],
-		order_by="last_activity desc",
-	)
-	matched_session = None
-	for s in sessions:
-		if phone_match_key(s.phone_number) == key:
-			matched_session = s
-			break
-
-	flow_title = None
-	if matched_session and matched_session.get("current_flow"):
-		flow_title = frappe.db.get_value("WhatsApp Chatbot Flow", matched_session.current_flow, "flow_name") or matched_session.current_flow
-
-	return {
-		"installed": True,
-		"has_bot_session": bool(matched_session),
-		"is_transferred": bool(matched_transfer),
-		"session": matched_session,
-		"flow_title": flow_title,
-		"transfer": matched_transfer,
-	}
-
-
-def transfer_to_agent(phone_number: str, account: str | None = None, agent: str | None = None, notes: str | None = None) -> dict:
-	"""Hand off a customer from chatbot to a human agent."""
-	if not is_chatbot_installed():
-		frappe.throw(_("Chatbot app is not installed on this site."), frappe.ValidationError)
-
-	from frappe_whatsapp_chatbot.frappe_whatsapp_chatbot.doctype.whatsapp_agent_transfer.whatsapp_agent_transfer import (
-		WhatsAppAgentTransfer,
-	)
-
-	agent = agent or frappe.session.user
-	doc = WhatsAppAgentTransfer.transfer_to_agent(
-		phone_number=phone_number,
-		whatsapp_account=account,
-		agent=agent,
-		notes=notes,
-	)
-	return {"status": "transferred", "transfer": getattr(doc, "name", str(doc))}
 
 
 def resume_chatbot(phone_number: str, account: str | None = None) -> dict:
-	"""Resume automated chatbot for a conversation by resolving active agent transfers."""
+	"""Let the bot reply again."""
 	if not is_chatbot_installed():
-		frappe.throw(_("Chatbot app is not installed on this site."), frappe.ValidationError)
+		frappe.throw(_("The chatbot is not available on this site."), frappe.ValidationError)
+	from nudg.nudg.doctype.wa_agent_transfer.wa_agent_transfer import WAAgentTransfer
 
-	from frappe_whatsapp_chatbot.frappe_whatsapp_chatbot.doctype.whatsapp_agent_transfer.whatsapp_agent_transfer import (
-		WhatsAppAgentTransfer,
-	)
+	resumed = WAAgentTransfer.resume_chatbot(phone_number=phone_number, whatsapp_account=account)
+	return {"status": "resumed" if resumed else "not_found", "resumed": bool(resumed)}
 
-	WhatsAppAgentTransfer.resume_chatbot(
-		phone_number=phone_number,
-		whatsapp_account=account,
-	)
-	return {"status": "resumed"}
+
+def _match_phone(doctype: str, key: str, account: str | None, fields: list[str]):
+	if not frappe.db.exists("DocType", doctype):
+		return None
+	filters = {"status": "Active"}
+	if account:
+		filters["whatsapp_account"] = account
+	rows = frappe.get_all(doctype, filters=filters, fields=fields, order_by="modified desc", limit_page_length=50)
+	for row in rows:
+		if phone_match_key(row.phone_number) == key:
+			return row
+	return None

@@ -748,6 +748,18 @@ def _rendered_for(raw: list) -> list:
 
 def _fold(messages: list) -> list:
 	ordered = sorted(messages, key=lambda row: (row.get("creation") or "", row.get("name") or ""))
+	# A retried webhook can leave two WA Message rows for one WhatsApp id.
+	# Keep the earliest so the thread shows that message once.
+	seen_ids: set[str] = set()
+	deduped = []
+	for row in ordered:
+		message_id = row.get("message_id")
+		if message_id:
+			if message_id in seen_ids:
+				continue
+			seen_ids.add(message_id)
+		deduped.append(row)
+	ordered = deduped
 	by_id = {row.get("message_id"): row for row in ordered if row.get("message_id")}
 	by_name = {row.get("name"): row for row in ordered}
 	reactions: dict[str, dict[str, str]] = {}

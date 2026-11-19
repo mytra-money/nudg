@@ -1030,6 +1030,24 @@ def _template_language(requested: str | None) -> str:
 
 
 @frappe.whitelist()
+def get_facebook_login_settings() -> dict:
+	"""Facebook sign-in for the Nudg site. The app secret is never returned."""
+	_require_system_manager()
+	from nudg.integrations.facebook_login import public_config
+
+	return public_config()
+
+
+@frappe.whitelist()
+def save_facebook_login_settings(app_id: str, app_secret: str | None = None, enabled: int | None = 1) -> dict:
+	"""Turn Login with Facebook on or off. Google is not configured here."""
+	_require_system_manager()
+	from nudg.integrations.facebook_login import save_settings
+
+	return save_settings(app_id, app_secret, enabled)
+
+
+@frappe.whitelist()
 def get_embedded_signup_config() -> dict:
 	"""Public Embedded Signup values for the connect dialog. Never returns the app secret."""
 	_require_manager()

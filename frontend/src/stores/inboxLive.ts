@@ -28,8 +28,11 @@ export function applyThreadMessage(thread: Thread, event: InboxLiveEvent): Threa
   const incoming = event.message
   if (!incoming?.name || thread.profile.name !== event.profile) return thread
   const messages = thread.messages.slice()
-  const index = messages.findIndex((row) => row.name === incoming.name)
-  if (index >= 0) messages[index] = { ...messages[index], ...incoming }
+  let index = messages.findIndex((row) => row.name === incoming.name)
+  if (index < 0 && incoming.message_id) {
+    index = messages.findIndex((row) => row.message_id && row.message_id === incoming.message_id)
+  }
+  if (index >= 0) messages[index] = { ...messages[index], ...incoming, name: messages[index].name }
   else messages.push(incoming)
   messages.sort((a, b) => (a.creation || '').localeCompare(b.creation || '') || a.name.localeCompare(b.name))
   return {

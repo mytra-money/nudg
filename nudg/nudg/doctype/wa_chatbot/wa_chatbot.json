@@ -1,0 +1,238 @@
+{
+ "actions": [],
+ "creation": "2026-11-19 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "enabled",
+  "column_break_1",
+  "whatsapp_account",
+  "section_break_responses",
+  "default_response",
+  "section_break_business_hours",
+  "business_hours_only",
+  "out_of_hours_message",
+  "populate_hours_btn",
+  "business_hours",
+  "section_break_ai",
+  "enable_ai",
+  "ai_provider",
+  "ai_api_key",
+  "column_break_ai",
+  "ai_model",
+  "ai_max_tokens",
+  "ai_temperature",
+  "ai_include_history",
+  "ai_history_limit",
+  "ai_system_prompt",
+  "section_break_session",
+  "session_timeout_minutes",
+  "column_break_session",
+  "log_conversations",
+  "section_break_exclusions",
+  "excluded_numbers"
+ ],
+ "fields": [
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "default": "0",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "whatsapp_account",
+   "fieldtype": "Link",
+   "label": "WhatsApp Account",
+   "options": "WA Account",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "This chatbot answers only this account. Create one for each customer account."
+  },
+  {
+   "fieldname": "section_break_responses",
+   "fieldtype": "Section Break",
+   "label": "Responses"
+  },
+  {
+   "fieldname": "default_response",
+   "fieldtype": "Small Text",
+   "label": "Default Response"
+  },
+  {
+   "fieldname": "section_break_business_hours",
+   "fieldtype": "Section Break",
+   "label": "Business Hours"
+  },
+  {
+   "fieldname": "business_hours_only",
+   "fieldtype": "Check",
+   "label": "Business Hours Only"
+  },
+  {
+   "fieldname": "out_of_hours_message",
+   "fieldtype": "Small Text",
+   "label": "Out Of Hours Message"
+  },
+  {
+   "fieldname": "populate_hours_btn",
+   "fieldtype": "Button",
+   "label": "Populate Default Hours"
+  },
+  {
+   "fieldname": "business_hours",
+   "fieldtype": "Table",
+   "label": "Business Hours",
+   "options": "WA Business Hours"
+  },
+  {
+   "fieldname": "section_break_ai",
+   "fieldtype": "Section Break",
+   "label": "AI"
+  },
+  {
+   "fieldname": "enable_ai",
+   "fieldtype": "Check",
+   "label": "Enable AI"
+  },
+  {
+   "fieldname": "ai_provider",
+   "fieldtype": "Select",
+   "label": "AI Provider",
+   "options": "\nOpenAI\nAnthropic\nGoogle\nCustom"
+  },
+  {
+   "fieldname": "ai_api_key",
+   "fieldtype": "Password",
+   "label": "AI API Key"
+  },
+  {
+   "fieldname": "column_break_ai",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "ai_model",
+   "fieldtype": "Data",
+   "label": "AI Model",
+   "description": "Model name, or a URL when the provider is Custom"
+  },
+  {
+   "fieldname": "ai_max_tokens",
+   "fieldtype": "Int",
+   "label": "Max Tokens",
+   "default": "500"
+  },
+  {
+   "fieldname": "ai_temperature",
+   "fieldtype": "Float",
+   "label": "Temperature",
+   "default": "0.7"
+  },
+  {
+   "fieldname": "ai_include_history",
+   "fieldtype": "Check",
+   "label": "Include History"
+  },
+  {
+   "fieldname": "ai_history_limit",
+   "fieldtype": "Int",
+   "label": "History Limit",
+   "default": "4"
+  },
+  {
+   "fieldname": "ai_system_prompt",
+   "fieldtype": "Text",
+   "label": "System Prompt"
+  },
+  {
+   "fieldname": "section_break_session",
+   "fieldtype": "Section Break",
+   "label": "Session"
+  },
+  {
+   "fieldname": "session_timeout_minutes",
+   "fieldtype": "Int",
+   "label": "Session Timeout (minutes)",
+   "default": "30"
+  },
+  {
+   "fieldname": "column_break_session",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "log_conversations",
+   "fieldtype": "Check",
+   "label": "Log Conversations",
+   "default": "1"
+  },
+  {
+   "fieldname": "section_break_exclusions",
+   "fieldtype": "Section Break",
+   "label": "Excluded Numbers"
+  },
+  {
+   "fieldname": "excluded_numbers",
+   "fieldtype": "Table",
+   "label": "Excluded Numbers",
+   "options": "WA Excluded Number"
+  }
+ ],
+ "links": [],
+ "modified": "2026-11-19 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Nudg",
+ "name": "WA Chatbot",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "share": 1,
+   "print": 1,
+   "email": 1
+  },
+  {
+   "role": "WhatsApp Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "share": 1,
+   "print": 1,
+   "email": 1
+  },
+  {
+   "role": "WhatsApp User",
+   "read": 1,
+   "write": 0,
+   "create": 0,
+   "delete": 0,
+   "report": 1,
+   "export": 0,
+   "share": 0,
+   "print": 1,
+   "email": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1,
+ "autoname": "field:whatsapp_account",
+ "naming_rule": "By fieldname",
+ "title_field": "whatsapp_account",
+ "search_fields": "whatsapp_account"
+}

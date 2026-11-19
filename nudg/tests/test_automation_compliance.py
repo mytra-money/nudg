@@ -168,6 +168,63 @@ class TestAutomationCompliance(unittest.TestCase):
 		self.assertIsNone(evaluate_consent_keyword("Hello, when does the bus stop?")[0])
 		self.assertIsNone(evaluate_consent_keyword("Can you start my subscription?")[0])
 
+	def test_incoming_rule_sends_once_when_evaluated_twice(self):
+		"""A webhook retry and the message hook must not both send the reply."""
+		from nudg.services.automation import process_trigger
+
+		message = frappe._dict(
+			name="MSG-1",
+			message_id="wamid.HELLO",
+			message="hello",
+			direction="Incoming",
+			to="PROF-1",
+			whatsapp_account="ACC",
+			status="Sent",
+		)
+		rule = frappe._dict(
+			name="Welcome",
+			action="Send Text",
+			action_reference="Thank You For Reaching Us.!",
+			condition_json="",
+			whatsapp_account="ACC",
+			trigger="Incoming Message",
+		)
+		runs = []
+
+		def exists(doctype, name=None, filters=None, **kwargs):
+			if doctype == "DocType":
+				return True
+			if doctype == "WA Message":
+				return True
+			if doctype == "WA Automation Run":
+				return "RUN-1" if runs else None
+			return None
+
+		def get_doc(arg, name=None):
+			if arg == "WA Message":
+				return message
+			doc = MagicMock()
+			doc.insert.side_effect = lambda *args, **kwargs: runs.append(arg)
+			return doc
+
+		self.mock_db.exists.side_effect = exists
+		self.mock_db.get_value.return_value = "wamid.HELLO"
+		with patch("nudg.services.automation.frappe.get_all", return_value=[rule]):
+			with patch("nudg.services.automation.frappe.get_doc", side_effect=get_doc):
+				with patch("nudg.services.automation.adapter.send_message") as send:
+					process_trigger("Incoming Message", "PROF-1", "ACC", "MSG-1")
+					process_trigger("Incoming Message", "PROF-1", "ACC", "MSG-1")
+					send.assert_called_once_with(to="PROF-1", message="Thank You For Reaching Us.!")
+					self.assertEqual(len(runs), 1)
+
+	def test_duplicate_inbound_id_is_rejected(self):
+		from nudg.services.automation import guard_duplicate_inbound
+
+		doc = frappe._dict(direction="Incoming", message_id="wamid.HELLO", name=None)
+		self.mock_db.sql.return_value = (("MSG-1",),)
+		with self.assertRaises(frappe.DuplicateEntryError):
+			guard_duplicate_inbound(doc)
+
 	def test_handle_incoming_consent(self):
 		from nudg.services.consent import handle_incoming_consent
 

@@ -73,6 +73,32 @@ describe('inbox live patches', () => {
     expect(ticked.messages[1].status).toBe('Read')
   })
 
+  it('keeps one bubble when the same WhatsApp message arrives again', () => {
+    const open = thread([
+      {
+        name: 'm1',
+        to: 'prof',
+        direction: 'Incoming',
+        message: 'hello',
+        message_id: 'wamid.HELLO',
+        creation: '2026-11-18T09:00:00',
+      },
+    ])
+    const next = applyThreadMessage(open, {
+      profile: 'prof',
+      message: {
+        name: 'm1-copy',
+        to: 'prof',
+        direction: 'Incoming',
+        message: 'hello',
+        message_id: 'wamid.HELLO',
+        creation: '2026-11-18T09:00:01',
+      },
+    })
+    expect(next.messages).toHaveLength(1)
+    expect(next.messages[0].name).toBe('m1')
+  })
+
   it('plays the receive sound only for a new incoming message', () => {
     const previous = card('prof')
     expect(

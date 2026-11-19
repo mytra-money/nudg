@@ -80,6 +80,27 @@ def get_messages(references: str) -> list:
 	return official_get_messages(references)
 
 
+def profile_on_account(to: str, account: str | None) -> str:
+	"""Use the profile on this WhatsApp account.
+
+	The official send looks a phone number up on the site default account.
+	The same number can exist on another account, and that default is the
+	wrong sender.
+	"""
+	if not to or not account or not frappe.db.exists("DocType", "WA Profile"):
+		return to
+	if frappe.db.exists("WA Profile", to):
+		owner = frappe.db.get_value("WA Profile", to, "whatsapp_account")
+		if owner == account:
+			return to
+	name = frappe.db.get_value(
+		"WA Profile",
+		{"whatsapp_account": account, "phone_number": to},
+		"name",
+	)
+	return name or to
+
+
 def send_message(
 	to: str,
 	message: str = "",
@@ -88,12 +109,13 @@ def send_message(
 	reply_to: str | None = None,
 	reference_doctype: str | None = None,
 	reference_docname: str | None = None,
+	account: str | None = None,
 ) -> str:
 	"""Send via the official WhatsApp API. Returns the WA Message name."""
 	from whatsapp.whatsapp.api.messages import send_message as official_send_message
 
 	return official_send_message(
-		to=to,
+		to=profile_on_account(to, account),
 		message=message,
 		attach=attach,
 		content_type=content_type,
@@ -129,6 +151,7 @@ def send_template(
 	reference_docname: str | None = None,
 	components: list[dict[str, Any]] | None = None,
 	language_code: str | None = None,
+	account: str | None = None,
 ) -> str:
 	"""Send an approved template via the official WhatsApp API.
 
@@ -141,6 +164,7 @@ def send_template(
 	# must not replace en_US on the approved template.
 	_ = language_code
 
+	to = profile_on_account(to, account)
 	if components:
 		from whatsapp.whatsapp.api.messages import (
 			_resolve_to_profile,

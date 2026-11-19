@@ -329,6 +329,9 @@ def run_campaign(name: str, claimed: int = 0) -> dict:
 
 	pending = any(r.status == "Pending" for r in recipients)
 	final_status = "Failed" if (failed and not sent and not pending) else ("Scheduled" if pending else "Completed")
+	schedules = doc.get("whatsapp_schedules") or []
+	if schedules and any(not getattr(row, "bulk_message", None) for row in schedules) and final_status == "Completed":
+		final_status = "In Progress"
 	if hasattr(doc, "whatsapp_status"):
 		doc.whatsapp_status = final_status
 	if hasattr(doc, "status"):

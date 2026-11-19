@@ -35,15 +35,20 @@ logger = logging.getLogger("nudg.integrations.webhook")
 
 @frappe.whitelist(allow_guest=True, methods=["GET", "POST"])
 def handler() -> Response | str:
-	"""Entry point delegating to standard Frappe WhatsApp webhook handler."""
+	"""Entry point delegating to standard Frappe WhatsApp webhook handler.
+
+	The raw payload is kept for this request so the chatbot can read button
+	ids and WhatsApp Flow replies, which the official message row does not store.
+	"""
+	request = getattr(frappe.local, "request", None)
+	method = getattr(request, "method", "GET") if request else "GET"
+	if method == "GET":
+		return _handle_verification()
+	frappe.flags.nudg_webhook_payload = _peek_payload()
 	try:
 		from whatsapp.whatsapp.webhook import handler as wa_handler
 		return wa_handler()
 	except Exception:
-		request = getattr(frappe.local, "request", None)
-		method = getattr(request, "method", "GET") if request else "GET"
-		if method == "GET":
-			return _handle_verification()
 		return _handle_event()
 
 
@@ -81,6 +86,21 @@ def _handle_verification() -> Response:
 	logger.info("Webhook subscription verified successfully")
 	# Return raw challenge string as text/plain
 	return Response(str(challenge), status=200, mimetype="text/plain")
+
+
+def _peek_payload() -> dict:
+	"""Read the cached request body without consuming it for the official handler."""
+	request = getattr(frappe.local, "request", None)
+	raw = b""
+	if request and hasattr(request, "get_data"):
+		raw = request.get_data(cache=True, as_text=False) or b""
+	if not raw:
+		return {}
+	try:
+		parsed = json.loads(raw.decode("utf-8"))
+	except Exception:
+		return {}
+	return parsed if isinstance(parsed, dict) else {}
 
 
 def _handle_event() -> str:

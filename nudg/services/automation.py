@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import datetime
+import hashlib
 import json
 import logging
 import re
@@ -332,7 +333,52 @@ def _condition_matches(condition_json: str | None, doc: Any) -> bool:
 	return True
 
 
+def guard_duplicate_inbound(doc, method=None):
+	"""Ignore a second delivery of the same incoming WhatsApp message.
+
+	Meta retries webhooks, and the desk webhook can overlap that retry. Both
+	would otherwise insert a WA Message and each insert would run automations.
+	"""
+	if getattr(doc, "direction", None) != "Incoming":
+		return
+	message_id = (doc.get("message_id") or "").strip()
+	if not message_id:
+		return
+
+	lock_name = _lock_name("wa-in", message_id)
+	acquired = _acquire_db_lock(lock_name)
+	try:
+		existing = _message_name_for_id(message_id)
+		if existing and existing != doc.get("name"):
+			frappe.throw(
+				_("This WhatsApp message was already received."),
+				frappe.DuplicateEntryError,
+			)
+	except Exception:
+		if acquired:
+			_release_db_lock(lock_name)
+		raise
+	if acquired:
+		_hold_lock_until_commit(lock_name)
+
+
 def _execute_rule(rule: Any, profile: str | None, message_name: str | None):
+	"""Run one rule once for an inbound WhatsApp message.
+
+	The message hook and the webhook both call this. A retried webhook also
+	calls it again. The lock is held until commit so a second worker sees the
+	run row before it can send.
+	"""
+	lock_name = None
+	acquired = False
+	if message_name:
+		lock_name = _lock_name("auto", f"{rule.name}:{_automation_key(message_name)}")
+		acquired = _acquire_db_lock(lock_name)
+		if _automation_in_progress(rule.name, _handled_names(message_name)):
+			if acquired:
+				_release_db_lock(lock_name)
+			return
+
 	run = frappe.get_doc(
 		{
 			"doctype": "WA Automation Run",
@@ -346,14 +392,137 @@ def _execute_rule(rule: Any, profile: str | None, message_name: str | None):
 	run.insert(ignore_permissions=True)
 
 	try:
-		detail = _run_action(rule, profile)
-		run.status = "Success"
-		run.detail = detail
-	except Exception as exc:
-		run.status = "Failed"
-		run.detail = (str(exc) or type(exc).__name__)[:500]
-	run.finished_at = _safe_now()
-	run.save(ignore_permissions=True)
+		try:
+			detail = _run_action(rule, profile)
+			run.status = "Success"
+			run.detail = detail
+		except Exception as exc:
+			run.status = "Failed"
+			run.detail = (str(exc) or type(exc).__name__)[:500]
+		run.finished_at = _safe_now()
+		run.save(ignore_permissions=True)
+	finally:
+		if acquired and lock_name:
+			_hold_lock_until_commit(lock_name)
+
+
+def _automation_key(message_name: str) -> str:
+	message_id = frappe.db.get_value("WA Message", message_name, "message_id")
+	if isinstance(message_id, str) and message_id.strip():
+		return message_id.strip()
+	return message_name
+
+
+def _handled_names(message_name: str) -> list[str]:
+	names = [message_name]
+	message_id = frappe.db.get_value("WA Message", message_name, "message_id")
+	if not isinstance(message_id, str) or not message_id.strip():
+		return names
+	try:
+		siblings = frappe.get_all(
+			"WA Message",
+			filters={"message_id": message_id.strip()},
+			pluck="name",
+		)
+	except Exception:
+		siblings = []
+	if isinstance(siblings, (list, tuple)):
+		for name in siblings:
+			if isinstance(name, str) and name not in names:
+				names.append(name)
+	return names
+
+
+def _automation_in_progress(rule_name: str, names: list[str]) -> bool:
+	names = [name for name in names if isinstance(name, str) and name]
+	if not names:
+		return False
+	placeholders = ", ".join(["%s"] * len(names))
+	try:
+		row = frappe.db.sql(
+			f"""SELECT name FROM `tabWA Automation Run`
+				WHERE rule=%s AND reference_message IN ({placeholders})
+				  AND status IN ('Queued', 'Success')
+				LIMIT 1 FOR UPDATE""",
+			[rule_name, *names],
+		)
+	except Exception:
+		row = None
+	if _sql_name(row):
+		return True
+	existing = frappe.db.exists(
+		"WA Automation Run",
+		{
+			"rule": rule_name,
+			"reference_message": ["in", names],
+			"status": ["in", ["Queued", "Success"]],
+		},
+	)
+	return isinstance(existing, str) and bool(existing)
+
+
+def _message_name_for_id(message_id: str) -> str | None:
+	try:
+		row = frappe.db.sql(
+			"SELECT name FROM `tabWA Message` WHERE message_id=%s LIMIT 1 FOR UPDATE",
+			message_id,
+		)
+	except Exception:
+		row = None
+	found = _sql_name(row)
+	if found:
+		return found
+	existing = frappe.db.get_value("WA Message", {"message_id": message_id}, "name")
+	return existing if isinstance(existing, str) and existing else None
+
+
+def _sql_name(row: Any) -> str | None:
+	if not isinstance(row, (list, tuple)) or not row:
+		return None
+	cell = row[0]
+	if isinstance(cell, dict):
+		name = cell.get("name")
+		return name if isinstance(name, str) and name else None
+	if isinstance(cell, (list, tuple)) and cell and isinstance(cell[0], str) and cell[0]:
+		return cell[0]
+	return None
+
+
+def _lock_name(prefix: str, key: str) -> str:
+	digest = hashlib.sha1(key.encode("utf-8")).hexdigest()
+	return f"nudg:{prefix}:{digest}"[:64]
+
+
+def _acquire_db_lock(name: str) -> bool:
+	try:
+		row = frappe.db.sql("SELECT GET_LOCK(%s, 15)", (name,))
+	except Exception:
+		return False
+	if not isinstance(row, (list, tuple)) or not row:
+		return False
+	cell = row[0][0] if isinstance(row[0], (list, tuple)) and row[0] else None
+	return cell == 1 or cell is True
+
+
+def _release_db_lock(name: str) -> None:
+	try:
+		frappe.db.sql("SELECT RELEASE_LOCK(%s)", (name,))
+	except Exception:
+		pass
+
+
+def _hold_lock_until_commit(name: str) -> None:
+	def _release(lock_name: str = name) -> None:
+		_release_db_lock(lock_name)
+
+	after_commit = getattr(frappe.db, "after_commit", None)
+	after_rollback = getattr(frappe.db, "after_rollback", None)
+	if after_commit is not None and hasattr(after_commit, "add"):
+		after_commit.add(_release)
+		if after_rollback is not None and hasattr(after_rollback, "add"):
+			after_rollback.add(_release)
+		return
+	_release()
 
 
 def _run_action(rule: Any, profile: str | None) -> str:

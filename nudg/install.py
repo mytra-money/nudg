@@ -23,6 +23,9 @@ DESK_GRANTS = {
 	"UTM Campaign": ("read", "report", "print"),
 	"WA Automation Rule": ("read", "report", "print"),
 	"WA Automation Run": ("read", "report", "print"),
+	"WA Chatbot Session": ("read", "report", "print"),
+	"WA Agent Transfer": ("read", "write", "create", "report", "print"),
+	"WA Bulk Message": ("read", "report", "print"),
 }
 
 # Broadcasts, automation, and catalogs are manager work. Agents keep the inbox.
@@ -31,6 +34,12 @@ AGENT_LOCKED = (
 	"WA Automation Rule",
 	"WA Catalog",
 	"WA Catalog Item",
+	"WA Bulk Message",
+	"WA Recipient List",
+	"WA Chatbot",
+	"WA Keyword Reply",
+	"WA Chatbot Flow",
+	"WA AI Context",
 )
 
 MANAGER_GRANTS = {
@@ -41,6 +50,14 @@ MANAGER_GRANTS = {
 	"WA Quick Reply": ("read", "write", "create", "delete", "report", "print"),
 	"WA Catalog": ("read", "write", "create", "delete", "report", "print"),
 	"WA Catalog Item": ("read", "write", "create", "delete", "report", "print"),
+	"WA Bulk Message": ("read", "write", "create", "delete", "submit", "cancel", "report", "print"),
+	"WA Recipient List": ("read", "write", "create", "delete", "report", "print"),
+	"WA Chatbot": ("read", "write", "create", "report", "print"),
+	"WA Keyword Reply": ("read", "write", "create", "delete", "report", "print"),
+	"WA Chatbot Flow": ("read", "write", "create", "delete", "report", "print"),
+	"WA Chatbot Session": ("read", "write", "delete", "report", "print"),
+	"WA Agent Transfer": ("read", "write", "create", "delete", "report", "print"),
+	"WA AI Context": ("read", "write", "create", "delete", "report", "print"),
 }
 
 
@@ -63,6 +80,7 @@ def after_install():
 	ensure_role()
 	setup_standard_custom_fields()
 	_ensure_desk_modules()
+	_ensure_facebook_login()
 
 
 def after_migrate():
@@ -70,6 +88,13 @@ def after_migrate():
 	ensure_role()
 	setup_standard_custom_fields()
 	_ensure_desk_modules()
+	_ensure_facebook_login()
+
+
+def _ensure_facebook_login():
+	from nudg.integrations.facebook_login import ensure_facebook_login
+
+	ensure_facebook_login(seed=True)
 
 
 def _ensure_desk_modules():
@@ -344,6 +369,33 @@ def setup_standard_custom_fields():
 				"options": "WA Campaign Recipient",
 				"insert_after": "whatsapp_recipients_section",
 			},
+			{
+				"fieldname": "whatsapp_schedules_section",
+				"label": "WhatsApp Campaign Schedules",
+				"fieldtype": "Section Break",
+				"insert_after": "whatsapp_recipients",
+				"description": "Same timing as an Email Campaign: each row waits Send After days from the start date, uses a WhatsApp template, and creates a Bulk WhatsApp Message.",
+			},
+			{
+				"fieldname": "whatsapp_start_date",
+				"label": "Start Date",
+				"fieldtype": "Date",
+				"insert_after": "whatsapp_schedules_section",
+			},
+			{
+				"fieldname": "whatsapp_recipient_list",
+				"label": "Default Recipient List",
+				"fieldtype": "Link",
+				"options": "WA Recipient List",
+				"insert_after": "whatsapp_start_date",
+			},
+			{
+				"fieldname": "whatsapp_schedules",
+				"label": "Schedules",
+				"fieldtype": "Table",
+				"options": "WA Campaign Schedule",
+				"insert_after": "whatsapp_recipient_list",
+			},
 		]
 
 	if frappe.db.exists("DocType", "WA Account"):
@@ -357,6 +409,27 @@ def setup_standard_custom_fields():
 				"description": "Cloud API registration PIN from Embedded Signup. Not shown in the desk.",
 			},
 			*account_site_fields(),
+		]
+
+	if frappe.db.exists("DocType", "WA Message"):
+		custom_fields["WA Message"] = [
+			{
+				"fieldname": "bulk_message",
+				"label": "Bulk Message",
+				"fieldtype": "Link",
+				"options": "WA Bulk Message",
+				"insert_after": "reference_docname",
+				"read_only": 1,
+			},
+			{
+				"fieldname": "nudg_flow_response",
+				"label": "Flow Response",
+				"fieldtype": "Code",
+				"options": "JSON",
+				"insert_after": "bulk_message",
+				"hidden": 1,
+				"read_only": 1,
+			},
 		]
 
 	if frappe.db.exists("DocType", "WA Profile"):
