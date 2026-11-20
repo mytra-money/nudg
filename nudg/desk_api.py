@@ -981,6 +981,34 @@ def _template_language(requested: str | None) -> str:
 
 
 @frappe.whitelist()
+def list_whatsapp_languages() -> list[dict]:
+	"""Return WA Language rows for template editors (code + display name)."""
+	if not frappe.db.exists("DocType", "WA Language"):
+		return []
+	rows = frappe.get_all(
+		"WA Language",
+		fields=["name", "language_code", "language_name"],
+		order_by="language_name asc",
+		limit_page_length=500,
+	)
+	out: list[dict] = []
+	for row in rows:
+		code = (row.get("language_code") or row.get("name") or "").strip()
+		if not code:
+			continue
+		title = (row.get("language_name") or "").strip()
+		out.append(
+			{
+				"value": code,
+				"label": f"{title} — {code}" if title and title != code else code,
+				"language_code": code,
+				"language_name": title or code,
+			}
+		)
+	return out
+
+
+@frappe.whitelist()
 def get_embedded_signup_config() -> dict:
 	"""Public Embedded Signup values for the connect dialog. Never returns the app secret."""
 	_require_manager()

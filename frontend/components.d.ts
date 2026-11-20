@@ -29,6 +29,7 @@ declare module 'vue' {
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     StatusBadge: typeof import('./src/components/StatusBadge.vue')['default']
+    TemplateButtonFields: typeof import('./src/components/templates/TemplateButtonFields.vue')['default']
     TemplateButtonsPreview: typeof import('./src/components/templates/TemplateButtonsPreview.vue')['default']
     TemplateHeaderPreview: typeof import('./src/components/templates/TemplateHeaderPreview.vue')['default']
     TemplateMessageBubble: typeof import('./src/components/templates/TemplateMessageBubble.vue')['default']

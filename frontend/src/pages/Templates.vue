@@ -1,11 +1,18 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
-import { Badge, Button, Dialog, Select, TextInput, toast } from 'frappe-ui'
+import { Badge, Button, Dialog, FormControl, Select, TextInput, toast } from 'frappe-ui'
 import DeskTemplatePreview from '@/components/DeskTemplatePreview.vue'
 import EmptyState from '@/components/EmptyState.vue'
+import TemplateButtonFields from '@/components/templates/TemplateButtonFields.vue'
 import { errorText, initials } from '@/utils/format'
-import { deleteWhatsappTemplate, getWhatsappTemplate, saveWhatsappTemplate, syncWhatsappTemplates } from '@/services/catalogApi'
+import {
+  deleteWhatsappTemplate,
+  getWhatsappTemplate,
+  listWhatsappLanguages,
+  saveWhatsappTemplate,
+  syncWhatsappTemplates,
+} from '@/services/catalogApi'
 import { isManager, useDesk } from '@/stores/desk'
 import type { Template } from '@/types'
 
@@ -44,16 +51,43 @@ const countUtility = computed(() => templates.value.filter((t) => t.template_typ
 const countMarketing = computed(() => templates.value.filter((t) => t.template_type === 'Marketing').length)
 const countAuthentication = computed(() => templates.value.filter((t) => t.template_type === 'Authentication').length)
 
-const languageOptionsBase = [
-  { label: 'English (US) — en_US', value: 'en_US' },
-  { label: 'English — en', value: 'en' },
-  { label: 'Hindi — hi', value: 'hi' },
-  { label: 'Spanish — es', value: 'es' },
-  { label: 'Portuguese (BR) — pt_BR', value: 'pt_BR' },
-  { label: 'Arabic — ar', value: 'ar' },
-  { label: 'French — fr', value: 'fr' },
-  { label: 'German — de', value: 'de' },
-]
+const languageRows = ref<Array<{ value: string; label: string }>>([])
+const languagesLoading = ref(false)
+
+function defaultLanguageCode() {
+  const rows = languageRows.value
+  for (const code of ['en_US', 'en']) {
+    if (rows.some((row) => row.value === code)) return code
+  }
+  return rows[0]?.value || ''
+}
+
+async function loadLanguages() {
+  if (!live) {
+    languageRows.value = []
+    return
+  }
+  if (languagesLoading.value) return
+  languagesLoading.value = true
+  try {
+    const rows = await listWhatsappLanguages()
+    languageRows.value = Array.isArray(rows)
+      ? rows.map((row) => ({
+          value: row.value || row.language_code || '',
+          label: row.label || row.language_name || row.value || row.language_code || '',
+        })).filter((row) => row.value)
+      : []
+  } catch (caught) {
+    languageRows.value = []
+    toast.error(errorText(caught))
+  } finally {
+    languagesLoading.value = false
+  }
+}
+
+onMounted(() => {
+  void loadLanguages()
+})
 
 function applyKpiFilter(kind: 'Approved' | 'Pending' | 'Utility' | 'Marketing' | 'Authentication') {
   if (kind === 'Approved' || kind === 'Pending') {
@@ -72,6 +106,20 @@ const categoryOptions = computed(() => [
   { label: `Auth (${countAuthentication.value})`, value: 'Authentication' },
 ])
 
+const templateTypeOptions = [
+  { label: 'Marketing', value: 'Marketing' },
+  { label: 'Utility', value: 'Utility' },
+  { label: 'Authentication', value: 'Authentication' },
+]
+
+const headerTypeOptions = [
+  { label: 'Text', value: 'Text' },
+  { label: 'Image', value: 'Image' },
+  { label: 'Document', value: 'Document' },
+  { label: 'GIF', value: 'GIF' },
+  { label: 'Video', value: 'Video' },
+]
+
 // Account options
 const accountOptions = computed(() => {
   const accs = desk.inbox.value?.accounts || []
@@ -80,6 +128,13 @@ const accountOptions = computed(() => {
     ...accs.map((a) => ({ label: a.account_name || a.name, value: a.name })),
   ]
 })
+
+const editorAccountOptions = computed(() =>
+  (desk.inbox.value?.accounts || []).map((a) => ({
+    label: a.account_name || a.name,
+    value: a.name,
+  })),
+)
 
 // Filtered templates list
 const visible = computed(() =>
@@ -173,11 +228,12 @@ const syncingTemplates = ref(false)
 const buttonsReady = ref(true)
 
 const languageOptions = computed(() => {
+  const rows = [...languageRows.value]
   const current = templateForm.value.language
-  if (current && !languageOptionsBase.some((row) => row.value === current)) {
-    return [{ label: current, value: current }, ...languageOptionsBase]
+  if (current && !rows.some((row) => row.value === current)) {
+    rows.unshift({ label: current, value: current })
   }
-  return languageOptionsBase
+  return rows
 })
 
 const editorPreview = computed<Template>(() => ({
@@ -226,6 +282,7 @@ function validateTemplateForm(forMeta: boolean): string | null {
 }
 
 async function openTemplateEditor(template?: Template) {
+  if (live && !languageRows.value.length) await loadLanguages()
   const accounts = desk.inbox.value?.accounts || []
   templateForm.value = {
     name: template?.name && template.name !== 'new' ? template.name : '',
@@ -235,7 +292,7 @@ async function openTemplateEditor(template?: Template) {
     footer: template?.footer || '',
     header_text: template?.header_text || '',
     header_type: template?.header_type || 'Text',
-    language: template?.language || 'en_US',
+    language: template?.language || defaultLanguageCode(),
     whatsapp_account: template?.whatsapp_account || accounts[0]?.name || '',
     status: template?.status || '',
     whatsapp_template_id: '',
@@ -753,34 +810,35 @@ function clearFilters() {
           </p>
         </div>
 
-        <!-- Recipient Search & Selector -->
-        <div>
-          <label class="block text-xs font-semibold text-ink-gray-7 mb-1">Select Customer Recipient *</label>
+        <!-- Recipient Search & Selector (custom list — no frappe-ui picker with avatar + phone rows) -->
+        <div class="space-y-2">
           <TextInput
             v-model="recipientSearch"
+            label="Select customer recipient"
             placeholder="Search customer by name or phone…"
-            class="w-full mb-2"
+            class="w-full"
+            required
           />
 
-          <div class="max-h-48 overflow-y-auto divide-y divide-outline-gray-1 border border-outline-gray-2 rounded-lg bg-white">
+          <div class="max-h-48 overflow-y-auto divide-y divide-outline-gray-1 rounded-lg border border-outline-gray-2 bg-white">
             <button
               v-for="r in filteredRecipients"
               :key="r.value"
               type="button"
-              class="flex items-center justify-between w-full p-2.5 text-left transition-colors hover:bg-surface-gray-1"
-              :class="recipient === r.value ? 'bg-teal-50/70 text-[#075E54] font-semibold' : 'text-ink-gray-8'"
+              class="flex w-full items-center justify-between p-2.5 text-left transition-colors hover:bg-surface-gray-1"
+              :class="recipient === r.value ? 'bg-teal-50/70 font-semibold text-[#075E54]' : 'text-ink-gray-8'"
               @click="recipient = r.value"
             >
-              <div class="flex items-center gap-2 min-w-0">
+              <div class="flex min-w-0 items-center gap-2">
                 <span class="grid size-7 shrink-0 place-items-center rounded-full bg-teal-100 text-[10px] font-bold text-[#075E54]">
                   {{ initials(r.name) }}
                 </span>
                 <div class="min-w-0">
                   <p class="truncate text-xs">{{ r.name }}</p>
-                  <p class="text-[11px] font-mono text-ink-gray-5">{{ r.phone }}</p>
+                  <p class="font-mono text-[11px] text-ink-gray-5">{{ r.phone }}</p>
                 </div>
               </div>
-              <span v-if="recipient === r.value" class="lucide-check size-4 text-[#075E54] shrink-0" />
+              <span v-if="recipient === r.value" class="lucide-check size-4 shrink-0 text-[#075E54]" />
             </button>
           </div>
         </div>
@@ -833,148 +891,88 @@ function clearFilters() {
             Save a local draft first, then submit to Meta when the content is ready for review.
           </p>
 
-          <label class="block">
-            <span class="font-semibold text-ink-gray-7">Label</span>
-            <input
-              v-model="templateForm.template_label"
-              class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2"
+          <FormControl
+            v-model="templateForm.template_label"
+            type="text"
+            label="Label"
+            required
+            :disabled="editorLocked"
+          />
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <FormControl
+              v-model="templateForm.template_type"
+              type="select"
+              label="Type"
+              :options="templateTypeOptions"
+              :disabled="editorLocked || editorOnMeta"
+            />
+            <FormControl
+              v-model="templateForm.whatsapp_account"
+              type="select"
+              label="WhatsApp account"
+              :options="editorAccountOptions"
+              :disabled="editorLocked || editorOnMeta"
+            />
+          </div>
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <FormControl
+              v-model="templateForm.language"
+              type="select"
+              label="Language"
+              :options="languageOptions"
+              :disabled="editorLocked || editorOnMeta || languagesLoading"
+              :description="languagesLoading ? 'Loading languages…' : languageOptions.length ? undefined : 'No WA Language records on this site'"
+            />
+            <FormControl
+              v-model="templateForm.header_type"
+              type="select"
+              label="Header type"
+              :options="headerTypeOptions"
               :disabled="editorLocked"
             />
-          </label>
-          <div class="grid grid-cols-2 gap-3">
-            <label class="block">
-              <span class="font-semibold text-ink-gray-7">Type</span>
-              <select
-                v-model="templateForm.template_type"
-                class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2"
-                :disabled="editorLocked || editorOnMeta"
-              >
-                <option>Marketing</option>
-                <option>Utility</option>
-                <option>Authentication</option>
-              </select>
-            </label>
-            <label class="block">
-              <span class="font-semibold text-ink-gray-7">WhatsApp account</span>
-              <select
-                v-model="templateForm.whatsapp_account"
-                class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2"
-                :disabled="editorLocked || editorOnMeta"
-              >
-                <option v-for="account in desk.inbox.value?.accounts || []" :key="account.name" :value="account.name">
-                  {{ account.account_name || account.name }}
-                </option>
-              </select>
-            </label>
           </div>
-          <div class="grid grid-cols-2 gap-3">
-            <label class="block">
-              <span class="font-semibold text-ink-gray-7">Language</span>
-              <select
-                v-model="templateForm.language"
-                class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2"
-                :disabled="editorLocked || editorOnMeta"
-              >
-                <option
-                  v-for="row in languageOptions"
-                  :key="row.value"
-                  :value="row.value"
-                >
-                  {{ row.label }}
-                </option>
-              </select>
-            </label>
-            <label class="block">
-              <span class="font-semibold text-ink-gray-7">Header type</span>
-              <select
-                v-model="templateForm.header_type"
-                class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2"
-                :disabled="editorLocked"
-              >
-                <option>Text</option>
-                <option>Image</option>
-                <option>Document</option>
-                <option>GIF</option>
-                <option>Video</option>
-              </select>
-            </label>
-          </div>
-          <label v-if="templateForm.header_type === 'Text'" class="block">
-            <span class="font-semibold text-ink-gray-7">Header text</span>
-            <input
-              v-model="templateForm.header_text"
-              class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2"
-              :disabled="editorLocked"
-            />
-          </label>
+          <FormControl
+            v-if="templateForm.header_type === 'Text'"
+            v-model="templateForm.header_text"
+            type="text"
+            label="Header text"
+            :disabled="editorLocked"
+          />
           <p v-else class="rounded-lg border border-outline-gray-2 bg-surface-gray-1 px-3 py-2 text-ink-gray-6">
             Header media upload for {{ templateForm.header_type }} samples is coming next. You can still draft body and buttons.
           </p>
-          <label class="block">
-            <span class="font-semibold text-ink-gray-7">Message</span>
-            <textarea
-              v-model="templateForm.message"
-              rows="4"
-              class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2"
-              :disabled="editorLocked"
-            />
-          </label>
-          <label class="block">
-            <span class="font-semibold text-ink-gray-7">Footer</span>
-            <input
-              v-model="templateForm.footer"
-              class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2"
-              :disabled="editorLocked"
-            />
-          </label>
+          <FormControl
+            v-model="templateForm.message"
+            type="textarea"
+            label="Message"
+            required
+            :rows="4"
+            :disabled="editorLocked"
+          />
+          <FormControl
+            v-model="templateForm.footer"
+            type="text"
+            label="Footer"
+            :disabled="editorLocked"
+          />
           <div class="space-y-2">
-            <div class="flex items-center justify-between">
-              <span class="font-semibold text-ink-gray-7">Buttons (max 3)</span>
-              <button
-                type="button"
-                class="text-[#075E54] disabled:opacity-40"
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-xs font-semibold text-ink-gray-7">Buttons (max 3)</span>
+              <Button
+                size="sm"
+                variant="subtle"
+                label="Add button"
                 :disabled="editorLocked || templateForm.buttons.length >= 3"
                 @click="templateForm.buttons.push(blankButton())"
-              >
-                Add button
-              </button>
-            </div>
-            <div
-              v-for="(button, index) in templateForm.buttons"
-              :key="index"
-              class="grid grid-cols-2 gap-2 rounded-lg border border-outline-gray-2 p-2"
-            >
-              <select v-model="button.button_type" class="rounded-lg border border-outline-gray-2 px-2 py-1.5" :disabled="editorLocked">
-                <option>Quick Reply</option>
-                <option>URL</option>
-                <option>Phone Number</option>
-                <option>Copy Code</option>
-                <option>Voice Call</option>
-              </select>
-              <input v-model="button.button_text" class="rounded-lg border border-outline-gray-2 px-2 py-1.5" placeholder="Button label" :disabled="editorLocked" />
-              <input
-                v-if="button.button_type === 'URL'"
-                v-model="button.url"
-                class="col-span-2 rounded-lg border border-outline-gray-2 px-2 py-1.5"
-                placeholder="https://"
-                :disabled="editorLocked"
               />
-              <input
-                v-if="button.button_type === 'Phone Number'"
-                v-model="button.phone_number"
-                class="col-span-2 rounded-lg border border-outline-gray-2 px-2 py-1.5"
-                placeholder="Phone number"
-                :disabled="editorLocked"
-              />
-              <button
-                type="button"
-                class="col-span-2 text-left text-ink-gray-5 disabled:opacity-40"
-                :disabled="editorLocked"
-                @click="templateForm.buttons.splice(index, 1)"
-              >
-                Remove
-              </button>
             </div>
+            <TemplateButtonFields
+              v-for="(row, rowIndex) in templateForm.buttons"
+              :key="rowIndex"
+              v-model="templateForm.buttons[rowIndex]"
+              :disabled="editorLocked"
+              @remove="templateForm.buttons.splice(rowIndex, 1)"
+            />
           </div>
         </div>
 

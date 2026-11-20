@@ -219,6 +219,12 @@ export async function syncWhatsappTemplates(account?: string) {
   return call<any>('nudg.desk_api.sync_whatsapp_templates', { account })
 }
 
+export async function listWhatsappLanguages() {
+  return call<Array<{ value: string; label: string; language_code?: string; language_name?: string }>>(
+    'nudg.desk_api.list_whatsapp_languages',
+  )
+}
+
 export async function getChatbot(account: string) {
   return call<any>('nudg.desk_api.get_chatbot', { account })
 }
