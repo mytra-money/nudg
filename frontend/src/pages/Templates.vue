@@ -42,6 +42,35 @@ const countApproved = computed(() => templates.value.filter((t) => t.status === 
 const countPending = computed(() => templates.value.filter((t) => t.status === 'Pending').length)
 const countUtility = computed(() => templates.value.filter((t) => t.template_type === 'Utility').length)
 const countMarketing = computed(() => templates.value.filter((t) => t.template_type === 'Marketing').length)
+const countAuthentication = computed(() => templates.value.filter((t) => t.template_type === 'Authentication').length)
+
+const languageOptionsBase = [
+  { label: 'English (US) — en_US', value: 'en_US' },
+  { label: 'English — en', value: 'en' },
+  { label: 'Hindi — hi', value: 'hi' },
+  { label: 'Spanish — es', value: 'es' },
+  { label: 'Portuguese (BR) — pt_BR', value: 'pt_BR' },
+  { label: 'Arabic — ar', value: 'ar' },
+  { label: 'French — fr', value: 'fr' },
+  { label: 'German — de', value: 'de' },
+]
+
+function applyKpiFilter(kind: 'Approved' | 'Pending' | 'Utility' | 'Marketing' | 'Authentication') {
+  if (kind === 'Approved' || kind === 'Pending') {
+    selectedStatus.value = kind
+    selectedCategory.value = 'all'
+    return
+  }
+  selectedCategory.value = kind
+  selectedStatus.value = 'All'
+}
+
+const categoryOptions = computed(() => [
+  { label: 'All Categories', value: 'all' },
+  { label: `Utility (${countUtility.value})`, value: 'Utility' },
+  { label: `Marketing (${countMarketing.value})`, value: 'Marketing' },
+  { label: `Auth (${countAuthentication.value})`, value: 'Authentication' },
+])
 
 // Account options
 const accountOptions = computed(() => {
@@ -124,6 +153,7 @@ function selectTemplate(t: Template) {
 }
 
 const templateEditorOpen = ref(false)
+const templateDeleteOpen = ref(false)
 const templateSaving = ref(false)
 const templateForm = ref({
   name: '',
@@ -133,15 +163,66 @@ const templateForm = ref({
   footer: '',
   header_text: '',
   header_type: 'Text',
-  language: 'en',
+  language: 'en_US',
   whatsapp_account: '',
+  status: '',
+  whatsapp_template_id: '',
   buttons: [] as Array<{ button_type: string; button_text: string; url: string; phone_number: string }>,
 })
 const syncingTemplates = ref(false)
 const buttonsReady = ref(true)
 
+const languageOptions = computed(() => {
+  const current = templateForm.value.language
+  if (current && !languageOptionsBase.some((row) => row.value === current)) {
+    return [{ label: current, value: current }, ...languageOptionsBase]
+  }
+  return languageOptionsBase
+})
+
+const editorPreview = computed<Template>(() => ({
+  name: templateForm.value.name || 'draft',
+  template_label: templateForm.value.template_label || 'Untitled template',
+  template_type: templateForm.value.template_type,
+  language: templateForm.value.language || 'en_US',
+  status: templateForm.value.status || (templateForm.value.whatsapp_template_id ? 'Pending' : 'Draft'),
+  header_type: templateForm.value.header_type,
+  header_text: templateForm.value.header_text,
+  message: templateForm.value.message || 'Message body will appear here…',
+  footer: templateForm.value.footer,
+  whatsapp_account: templateForm.value.whatsapp_account,
+  buttons: templateForm.value.buttons.filter((row) => row.button_text.trim()),
+}))
+
+const editorOnMeta = computed(() => Boolean(templateForm.value.whatsapp_template_id))
+const editorPendingReview = computed(() => templateForm.value.status === 'Pending' && editorOnMeta.value)
+const editorLocked = computed(() => editorPendingReview.value)
+
 function blankButton() {
   return { button_type: 'Quick Reply', button_text: '', url: '', phone_number: '' }
+}
+
+function validateTemplateForm(forMeta: boolean): string | null {
+  if (!templateForm.value.template_label.trim() || !templateForm.value.message.trim()) {
+    return 'Label and message are required.'
+  }
+  if (!templateForm.value.whatsapp_account) {
+    return 'Choose a WhatsApp account.'
+  }
+  const buttons = templateForm.value.buttons.filter((row) => row.button_text.trim())
+  if (buttons.length > 3) {
+    return 'Meta allows at most 3 buttons on a template.'
+  }
+  if (!forMeta) return null
+  for (const button of buttons) {
+    if (button.button_type === 'URL' && !button.url.trim()) {
+      return `URL button “${button.button_text}” needs a link.`
+    }
+    if (button.button_type === 'Phone Number' && !button.phone_number.trim()) {
+      return `Phone button “${button.button_text}” needs a number.`
+    }
+  }
+  return null
 }
 
 async function openTemplateEditor(template?: Template) {
@@ -154,8 +235,10 @@ async function openTemplateEditor(template?: Template) {
     footer: template?.footer || '',
     header_text: template?.header_text || '',
     header_type: template?.header_type || 'Text',
-    language: template?.language || 'en',
+    language: template?.language || 'en_US',
     whatsapp_account: template?.whatsapp_account || accounts[0]?.name || '',
+    status: template?.status || '',
+    whatsapp_template_id: '',
     buttons: (template?.buttons || []).map((row) => ({
       button_type: row.button_type || 'Quick Reply',
       button_text: row.button_text || '',
@@ -174,6 +257,9 @@ async function openTemplateEditor(template?: Template) {
     templateForm.value.header_text = full.header_text || ''
     templateForm.value.message = full.message || templateForm.value.message
     templateForm.value.footer = full.footer || ''
+    templateForm.value.status = full.status || templateForm.value.status
+    templateForm.value.whatsapp_template_id = full.whatsapp_template_id || ''
+    templateForm.value.template_type = full.template_type || templateForm.value.template_type
     templateForm.value.buttons = (full.buttons || []).map((row: any) => ({
       button_type: row.button_type || 'Quick Reply',
       button_text: row.button_text || '',
@@ -186,18 +272,19 @@ async function openTemplateEditor(template?: Template) {
   }
 }
 
-async function saveTemplate() {
-  if (!templateForm.value.template_label.trim() || !templateForm.value.message.trim()) {
-    toast.error('Label and message are required.')
-    return
-  }
-  if (!templateForm.value.whatsapp_account) {
-    toast.error('Choose a WhatsApp account.')
+async function persistTemplate(submitToMeta: boolean) {
+  const issue = validateTemplateForm(submitToMeta)
+  if (issue) {
+    toast.error(issue)
     return
   }
   if (!live) {
-    toast.success('Template saved in the sample.')
+    toast.success(submitToMeta ? 'Template submitted in the sample.' : 'Template saved in the sample.')
     templateEditorOpen.value = false
+    return
+  }
+  if (submitToMeta && editorLocked.value) {
+    toast.error('This template is pending Meta review. Wait for approval or rejection before resubmitting.')
     return
   }
   templateSaving.value = true
@@ -208,14 +295,21 @@ async function saveTemplate() {
       message: templateForm.value.message.trim(),
       whatsapp_account: templateForm.value.whatsapp_account,
       template_type: templateForm.value.template_type,
-      language: templateForm.value.language.trim() || 'en',
+      language: templateForm.value.language.trim() || 'en_US',
       footer: templateForm.value.footer.trim() || undefined,
       header_text: templateForm.value.header_text.trim() || undefined,
       header_type: templateForm.value.header_type,
       buttons: buttonsReady.value ? templateForm.value.buttons.filter((row) => row.button_text.trim()) : undefined,
+      submit_to_meta: submitToMeta,
     })
     templateEditorOpen.value = false
-    toast.success('Template saved and sent to Meta.')
+    toast.success(
+      submitToMeta
+        ? editorOnMeta.value
+          ? 'Template update sent to Meta.'
+          : 'Template submitted to Meta for review.'
+        : 'Template saved in Nudg (not submitted to Meta).',
+    )
     if (saved?.name) selected.value = saved.name
     await desk.refresh()
   } catch (caught) {
@@ -229,6 +323,9 @@ async function syncTemplates() {
   if (!live) {
     toast.success('Sample templates are already loaded.')
     return
+  }
+  if (selectedAccount.value === 'all') {
+    toast.success('Syncing templates for every WhatsApp account you can manage…')
   }
   syncingTemplates.value = true
   try {
@@ -246,11 +343,11 @@ async function syncTemplates() {
 
 async function removeTemplate() {
   if (!templateForm.value.name) return
-  if (!window.confirm(`Delete template “${templateForm.value.template_label || templateForm.value.name}” from Nudg?`)) return
   templateSaving.value = true
   try {
     if (live) await deleteWhatsappTemplate(templateForm.value.name)
     if (selected.value === templateForm.value.name) selected.value = null
+    templateDeleteOpen.value = false
     templateEditorOpen.value = false
     toast.success('Template removed from Nudg.')
     if (live) await desk.refresh()
@@ -307,41 +404,53 @@ function clearFilters() {
     <!-- Top KPI Performance Bar -->
     <section class="border-b border-outline-gray-2 bg-white px-4 py-3 shrink-0">
       <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <!-- Approved -->
-        <div class="rounded-lg border border-outline-gray-2 bg-surface-gray-1/50 p-2.5">
+        <button
+          type="button"
+          class="rounded-lg border border-outline-gray-2 bg-surface-gray-1/50 p-2.5 text-left transition-colors hover:border-[#128C7E]"
+          @click="applyKpiFilter('Approved')"
+        >
           <span class="text-[11px] font-medium uppercase tracking-wider text-ink-gray-5">Approved Templates</span>
           <div class="mt-1 flex items-baseline gap-1.5">
             <span class="text-xl font-bold text-emerald-700">{{ countApproved }}</span>
             <span class="text-[11px] text-ink-gray-5">/ {{ countTotal }} total</span>
           </div>
-        </div>
+        </button>
 
-        <!-- Pending Meta Review -->
-        <div class="rounded-lg border border-outline-gray-2 bg-surface-gray-1/50 p-2.5">
+        <button
+          type="button"
+          class="rounded-lg border border-outline-gray-2 bg-surface-gray-1/50 p-2.5 text-left transition-colors hover:border-[#128C7E]"
+          @click="applyKpiFilter('Pending')"
+        >
           <span class="text-[11px] font-medium uppercase tracking-wider text-ink-gray-5">Pending Review</span>
           <div class="mt-1 flex items-baseline gap-1.5">
             <span class="text-xl font-bold text-amber-700">{{ countPending }}</span>
-            <span class="text-[11px] text-amber-600 font-medium">with Meta</span>
+            <span class="text-[11px] font-medium text-amber-600">with Meta</span>
           </div>
-        </div>
+        </button>
 
-        <!-- Utility -->
-        <div class="rounded-lg border border-outline-gray-2 bg-surface-gray-1/50 p-2.5">
+        <button
+          type="button"
+          class="rounded-lg border border-outline-gray-2 bg-surface-gray-1/50 p-2.5 text-left transition-colors hover:border-[#128C7E]"
+          @click="applyKpiFilter('Utility')"
+        >
           <span class="text-[11px] font-medium uppercase tracking-wider text-ink-gray-5">Utility Alerts</span>
           <div class="mt-1 flex items-baseline gap-1.5">
             <span class="text-xl font-bold text-[#075E54]">{{ countUtility }}</span>
             <span class="text-[11px] text-ink-gray-5">operational</span>
           </div>
-        </div>
+        </button>
 
-        <!-- Marketing -->
-        <div class="rounded-lg border border-outline-gray-2 bg-surface-gray-1/50 p-2.5">
+        <button
+          type="button"
+          class="rounded-lg border border-outline-gray-2 bg-surface-gray-1/50 p-2.5 text-left transition-colors hover:border-[#128C7E]"
+          @click="applyKpiFilter('Marketing')"
+        >
           <span class="text-[11px] font-medium uppercase tracking-wider text-ink-gray-5">Marketing Broadcasts</span>
           <div class="mt-1 flex items-baseline gap-1.5">
             <span class="text-xl font-bold text-purple-700">{{ countMarketing }}</span>
             <span class="text-[11px] text-ink-gray-5">promotional</span>
           </div>
-        </div>
+        </button>
       </div>
     </section>
 
@@ -366,35 +475,13 @@ function clearFilters() {
         </div>
 
         <div class="flex flex-wrap items-center gap-2">
-          <!-- Category Tabs -->
-          <div class="flex flex-wrap items-center gap-1 rounded-lg bg-surface-gray-2 p-0.5 text-xs">
-            <button
-              type="button"
-              class="rounded-md px-2.5 py-1 font-medium transition-colors"
-              :class="selectedCategory === 'all' ? 'bg-white text-ink-gray-9 shadow-xs' : 'text-ink-gray-6 hover:text-ink-gray-9'"
-              @click="selectedCategory = 'all'"
-            >
-              All Categories
-            </button>
-            <button
-              type="button"
-              class="rounded-md px-2.5 py-1 font-medium transition-colors"
-              :class="selectedCategory === 'Utility' ? 'bg-white text-[#075E54] shadow-xs' : 'text-ink-gray-6 hover:text-ink-gray-9'"
-              @click="selectedCategory = 'Utility'"
-            >
-              Utility ({{ countUtility }})
-            </button>
-            <button
-              type="button"
-              class="rounded-md px-2.5 py-1 font-medium transition-colors"
-              :class="selectedCategory === 'Marketing' ? 'bg-white text-purple-700 shadow-xs' : 'text-ink-gray-6 hover:text-ink-gray-9'"
-              @click="selectedCategory = 'Marketing'"
-            >
-              Marketing ({{ countMarketing }})
-            </button>
-          </div>
+          <Select
+            class="w-40 text-xs"
+            :model-value="selectedCategory"
+            :options="categoryOptions"
+            @update:model-value="(val) => (selectedCategory = (String(val || 'all') as typeof selectedCategory))"
+          />
 
-          <!-- Status Select -->
           <Select
             class="w-32 text-xs"
             :model-value="selectedStatus"
@@ -402,7 +489,6 @@ function clearFilters() {
             @update:model-value="(val) => (selectedStatus = String(val || 'All'))"
           />
 
-          <!-- Account Select -->
           <Select
             class="w-36 text-xs"
             :model-value="selectedAccount"
@@ -723,94 +809,226 @@ function clearFilters() {
       </template>
     </Dialog>
 
-    <Dialog v-model="templateEditorOpen" :title="templateForm.name ? 'Edit template' : 'New template'">
-      <div class="space-y-3 py-1 text-xs">
-        <p class="text-ink-gray-6">Saving sends this template to Meta for review. Approved templates can be used in campaigns and chats.</p>
-        <label class="block">
-          <span class="font-semibold text-ink-gray-7">Label</span>
-          <input v-model="templateForm.template_label" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2" />
-        </label>
-        <div class="grid grid-cols-2 gap-3">
-          <label class="block">
-            <span class="font-semibold text-ink-gray-7">Type</span>
-            <select v-model="templateForm.template_type" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2">
-              <option>Marketing</option>
-              <option>Utility</option>
-              <option>Authentication</option>
-            </select>
-          </label>
-          <label class="block">
-            <span class="font-semibold text-ink-gray-7">WhatsApp account</span>
-            <select v-model="templateForm.whatsapp_account" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2">
-              <option v-for="account in desk.inbox.value?.accounts || []" :key="account.name" :value="account.name">
-                {{ account.account_name || account.name }}
-              </option>
-            </select>
-          </label>
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-          <label class="block">
-            <span class="font-semibold text-ink-gray-7">Language</span>
-            <input v-model="templateForm.language" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2" placeholder="en" />
-          </label>
-          <label class="block">
-            <span class="font-semibold text-ink-gray-7">Header type</span>
-            <select v-model="templateForm.header_type" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2">
-              <option>Text</option>
-              <option>Image</option>
-              <option>Document</option>
-              <option>GIF</option>
-              <option>Video</option>
-            </select>
-          </label>
-        </div>
-        <label class="block">
-          <span class="font-semibold text-ink-gray-7">Header</span>
-          <input v-model="templateForm.header_text" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2" />
-        </label>
-        <label class="block">
-          <span class="font-semibold text-ink-gray-7">Message</span>
-          <textarea v-model="templateForm.message" rows="4" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2" />
-        </label>
-        <label class="block">
-          <span class="font-semibold text-ink-gray-7">Footer</span>
-          <input v-model="templateForm.footer" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2" />
-        </label>
-        <div class="space-y-2">
-          <div class="flex items-center justify-between">
-            <span class="font-semibold text-ink-gray-7">Buttons</span>
-            <button type="button" class="text-[#075E54]" @click="templateForm.buttons.push(blankButton())">Add button</button>
+    <Dialog
+      v-model="templateEditorOpen"
+      :title="templateForm.name ? 'Edit template' : 'New template'"
+      size="7xl"
+    >
+      <div class="grid max-h-[min(70vh,40rem)] min-h-0 grid-cols-1 gap-4 md:grid-cols-2">
+        <div class="min-h-0 space-y-3 overflow-y-auto py-1 text-xs pr-1">
+          <div
+            v-if="editorPendingReview"
+            class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900"
+          >
+            Pending Meta review. Local draft saves are allowed; submitting again is blocked until Meta responds.
           </div>
-          <div v-for="(button, index) in templateForm.buttons" :key="index" class="grid grid-cols-2 gap-2 rounded-lg border border-outline-gray-2 p-2">
-            <select v-model="button.button_type" class="rounded-lg border border-outline-gray-2 px-2 py-1.5">
-              <option>Quick Reply</option>
-              <option>URL</option>
-              <option>Phone Number</option>
-              <option>Copy Code</option>
-              <option>Voice Call</option>
-            </select>
-            <input v-model="button.button_text" class="rounded-lg border border-outline-gray-2 px-2 py-1.5" placeholder="Button label" />
-            <input v-if="button.button_type === 'URL'" v-model="button.url" class="col-span-2 rounded-lg border border-outline-gray-2 px-2 py-1.5" placeholder="https://" />
-            <input v-if="button.button_type === 'Phone Number'" v-model="button.phone_number" class="col-span-2 rounded-lg border border-outline-gray-2 px-2 py-1.5" placeholder="Phone number" />
-            <button type="button" class="col-span-2 text-left text-ink-gray-5" @click="templateForm.buttons.splice(index, 1)">Remove</button>
+          <div
+            v-else-if="editorOnMeta"
+            class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-900"
+          >
+            Linked to Meta template ID <span class="font-mono">{{ templateForm.whatsapp_template_id }}</span>.
+            Save draft keeps Nudg only; Submit updates Meta.
           </div>
+          <p v-else class="text-ink-gray-6">
+            Save a local draft first, then submit to Meta when the content is ready for review.
+          </p>
+
+          <label class="block">
+            <span class="font-semibold text-ink-gray-7">Label</span>
+            <input
+              v-model="templateForm.template_label"
+              class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2"
+              :disabled="editorLocked"
+            />
+          </label>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="block">
+              <span class="font-semibold text-ink-gray-7">Type</span>
+              <select
+                v-model="templateForm.template_type"
+                class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2"
+                :disabled="editorLocked || editorOnMeta"
+              >
+                <option>Marketing</option>
+                <option>Utility</option>
+                <option>Authentication</option>
+              </select>
+            </label>
+            <label class="block">
+              <span class="font-semibold text-ink-gray-7">WhatsApp account</span>
+              <select
+                v-model="templateForm.whatsapp_account"
+                class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2"
+                :disabled="editorLocked || editorOnMeta"
+              >
+                <option v-for="account in desk.inbox.value?.accounts || []" :key="account.name" :value="account.name">
+                  {{ account.account_name || account.name }}
+                </option>
+              </select>
+            </label>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="block">
+              <span class="font-semibold text-ink-gray-7">Language</span>
+              <select
+                v-model="templateForm.language"
+                class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2"
+                :disabled="editorLocked || editorOnMeta"
+              >
+                <option
+                  v-for="row in languageOptions"
+                  :key="row.value"
+                  :value="row.value"
+                >
+                  {{ row.label }}
+                </option>
+              </select>
+            </label>
+            <label class="block">
+              <span class="font-semibold text-ink-gray-7">Header type</span>
+              <select
+                v-model="templateForm.header_type"
+                class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2"
+                :disabled="editorLocked"
+              >
+                <option>Text</option>
+                <option>Image</option>
+                <option>Document</option>
+                <option>GIF</option>
+                <option>Video</option>
+              </select>
+            </label>
+          </div>
+          <label v-if="templateForm.header_type === 'Text'" class="block">
+            <span class="font-semibold text-ink-gray-7">Header text</span>
+            <input
+              v-model="templateForm.header_text"
+              class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2"
+              :disabled="editorLocked"
+            />
+          </label>
+          <p v-else class="rounded-lg border border-outline-gray-2 bg-surface-gray-1 px-3 py-2 text-ink-gray-6">
+            Header media upload for {{ templateForm.header_type }} samples is coming next. You can still draft body and buttons.
+          </p>
+          <label class="block">
+            <span class="font-semibold text-ink-gray-7">Message</span>
+            <textarea
+              v-model="templateForm.message"
+              rows="4"
+              class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2"
+              :disabled="editorLocked"
+            />
+          </label>
+          <label class="block">
+            <span class="font-semibold text-ink-gray-7">Footer</span>
+            <input
+              v-model="templateForm.footer"
+              class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2"
+              :disabled="editorLocked"
+            />
+          </label>
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="font-semibold text-ink-gray-7">Buttons (max 3)</span>
+              <button
+                type="button"
+                class="text-[#075E54] disabled:opacity-40"
+                :disabled="editorLocked || templateForm.buttons.length >= 3"
+                @click="templateForm.buttons.push(blankButton())"
+              >
+                Add button
+              </button>
+            </div>
+            <div
+              v-for="(button, index) in templateForm.buttons"
+              :key="index"
+              class="grid grid-cols-2 gap-2 rounded-lg border border-outline-gray-2 p-2"
+            >
+              <select v-model="button.button_type" class="rounded-lg border border-outline-gray-2 px-2 py-1.5" :disabled="editorLocked">
+                <option>Quick Reply</option>
+                <option>URL</option>
+                <option>Phone Number</option>
+                <option>Copy Code</option>
+                <option>Voice Call</option>
+              </select>
+              <input v-model="button.button_text" class="rounded-lg border border-outline-gray-2 px-2 py-1.5" placeholder="Button label" :disabled="editorLocked" />
+              <input
+                v-if="button.button_type === 'URL'"
+                v-model="button.url"
+                class="col-span-2 rounded-lg border border-outline-gray-2 px-2 py-1.5"
+                placeholder="https://"
+                :disabled="editorLocked"
+              />
+              <input
+                v-if="button.button_type === 'Phone Number'"
+                v-model="button.phone_number"
+                class="col-span-2 rounded-lg border border-outline-gray-2 px-2 py-1.5"
+                placeholder="Phone number"
+                :disabled="editorLocked"
+              />
+              <button
+                type="button"
+                class="col-span-2 text-left text-ink-gray-5 disabled:opacity-40"
+                :disabled="editorLocked"
+                @click="templateForm.buttons.splice(index, 1)"
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="min-h-0 overflow-y-auto rounded-xl border border-outline-gray-2 bg-[#efeae2]/40 p-4">
+          <p class="mb-3 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-ink-gray-5">
+            <span class="lucide-smartphone size-3.5 text-[#075E54]" />
+            Live WhatsApp Preview
+          </p>
+          <DeskTemplatePreview :template="editorPreview" mode="preview" :editable="false" large />
         </div>
       </div>
+
       <template #actions>
-        <div class="flex w-full items-center justify-between gap-2">
-          <Button v-if="templateForm.name" variant="subtle" label="Delete" :loading="templateSaving" @click="removeTemplate" />
+        <div class="flex w-full flex-wrap items-center justify-between gap-2">
+          <Button
+            v-if="templateForm.name"
+            variant="subtle"
+            label="Delete"
+            :loading="templateSaving"
+            @click="templateDeleteOpen = true"
+          />
           <span v-else />
-          <div class="flex gap-2">
+          <div class="flex flex-wrap gap-2">
             <Button variant="subtle" label="Cancel" @click="templateEditorOpen = false" />
+            <Button
+              variant="subtle"
+              label="Save draft"
+              :loading="templateSaving || Boolean(templateForm.name && !buttonsReady)"
+              :disabled="Boolean(templateForm.name && !buttonsReady)"
+              @click="persistTemplate(false)"
+            />
             <Button
               variant="solid"
               class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-            label="Save"
-            :loading="templateSaving || Boolean(templateForm.name && !buttonsReady)"
-            :disabled="Boolean(templateForm.name && !buttonsReady)"
-            @click="saveTemplate"
+              :label="editorOnMeta ? 'Update on Meta' : 'Submit to Meta'"
+              :loading="templateSaving || Boolean(templateForm.name && !buttonsReady)"
+              :disabled="Boolean(templateForm.name && !buttonsReady) || editorLocked"
+              @click="persistTemplate(true)"
             />
           </div>
+        </div>
+      </template>
+    </Dialog>
+
+    <Dialog v-model="templateDeleteOpen" title="Delete template">
+      <p class="text-sm text-ink-gray-7">
+        Remove
+        <strong>{{ templateForm.template_label || templateForm.name }}</strong>
+        from Nudg? Meta is unchanged until the next sync.
+      </p>
+      <template #actions>
+        <div class="flex w-full justify-end gap-2">
+          <Button variant="subtle" label="Cancel" @click="templateDeleteOpen = false" />
+          <Button variant="solid" theme="red" label="Delete" :loading="templateSaving" @click="removeTemplate" />
         </div>
       </template>
     </Dialog>

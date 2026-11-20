@@ -795,8 +795,13 @@ def save_whatsapp_template(
 	header_type: str | None = None,
 	buttons: str | list | None = None,
 	name: str | None = None,
+	submit_to_meta: int | str | bool | None = 1,
 ) -> dict:
-	"""Create or update a WA Template. Saving submits it to Meta."""
+	"""Create or update a WA Template.
+
+	When ``submit_to_meta`` is truthy (default), the official WA Template save path
+	pushes/updates on Meta. Pass ``0`` to keep a local draft without calling Meta.
+	"""
 	_require_manager()
 	label = (template_label or "").strip()
 	body = (message or "").strip()
@@ -809,6 +814,9 @@ def save_whatsapp_template(
 		frappe.throw(_("Choose a WhatsApp account."))
 	_assert_account_access(account)
 	kind = template_type if template_type in ("Utility", "Marketing", "Authentication") else "Marketing"
+	publish = True
+	if submit_to_meta is not None and str(submit_to_meta).strip() != "":
+		publish = bool(frappe.utils.cint(submit_to_meta))
 	target = (name or "").strip()
 	if target and frappe.db.exists("WA Template", target):
 		doc = frappe.get_doc("WA Template", target)
@@ -826,6 +834,9 @@ def save_whatsapp_template(
 	doc.header_type = header_type if header_type in header_kinds else (doc.header_type or "Text")
 	doc.header_text = (header_text or "").strip()
 	_apply_template_buttons(doc, buttons)
+	# WA Template.before_save skips Meta when from_sync is set (also used by Meta sync).
+	if not publish:
+		doc.flags.from_sync = True
 	if doc.is_new():
 		doc.insert(ignore_permissions=True)
 	else:
@@ -836,6 +847,8 @@ def save_whatsapp_template(
 		"template_name": doc.template_name,
 		"status": doc.status,
 		"whatsapp_account": doc.whatsapp_account,
+		"whatsapp_template_id": doc.whatsapp_template_id,
+		"submitted_to_meta": publish,
 	}
 
 
@@ -891,6 +904,7 @@ def get_whatsapp_template(name: str) -> dict:
 		"message": doc.message,
 		"footer": doc.footer,
 		"whatsapp_account": doc.whatsapp_account,
+		"whatsapp_template_id": doc.whatsapp_template_id,
 		"buttons": [
 			{
 				"button_type": row.button_type,

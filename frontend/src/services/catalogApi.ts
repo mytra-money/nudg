@@ -198,8 +198,13 @@ export async function saveWhatsappTemplate(payload: {
   header_type?: string
   buttons?: Array<{ button_type: string; button_text: string; url?: string; phone_number?: string }>
   name?: string
+  /** When false, keep a local draft and skip the Meta create/update call. */
+  submit_to_meta?: boolean | 0 | 1
 }) {
-  return call<any>('nudg.desk_api.save_whatsapp_template', payload)
+  return call<any>('nudg.desk_api.save_whatsapp_template', {
+    ...payload,
+    submit_to_meta: payload.submit_to_meta === false || payload.submit_to_meta === 0 ? 0 : 1,
+  })
 }
 
 export async function getWhatsappTemplate(name: string) {
