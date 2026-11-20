@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { Button, Combobox, Password, Select, TextInput, call, Dialog, toast } from 'frappe-ui'
+import EmptyState from '@/components/EmptyState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 import LoadingState from '@/components/LoadingState.vue'
 import WhatsAppTemplatePreview from '@/components/templates/WhatsAppTemplatePreview.vue'
@@ -507,6 +508,11 @@ onMounted(load)
 
         <LoadingState v-if="loading" />
         <ErrorState v-else-if="error" :message="error" allow-retry @retry="load" />
+        <EmptyState
+          v-else-if="!visibleSites.length && !live"
+          title="No ERPNext sites connected"
+          description="Open Nudg on a signed-in site to connect ERPNext."
+        />
         <section v-else class="rounded-xl border border-outline-gray-2 bg-white p-4">
           <h2 class="text-sm font-semibold text-ink-gray-9">Connect a site</h2>
           <p v-if="!live" class="mt-2 text-sm text-ink-gray-6">Open Nudg on a signed-in site to connect ERPNext.</p>
@@ -528,15 +534,16 @@ onMounted(load)
               <Button variant="solid" :loading="busy" type="submit" label="Connect" />
             </div>
           </form>
+          <p v-if="live && !sites.length" class="mt-4 text-sm text-ink-gray-6">No ERPNext sites connected yet.</p>
           <ul class="mt-4 divide-y divide-outline-gray-2">
             <li v-for="site in visibleSites" :key="site.name" class="py-3 text-sm">
-              <div class="flex items-center justify-between gap-3">
-                <div>
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div class="min-w-0">
                   <div class="font-medium text-ink-gray-9">{{ siteTitle(site) }}</div>
-                  <div class="text-ink-gray-6">{{ siteDetail(site) }}</div>
+                  <div class="break-words text-ink-gray-6">{{ siteDetail(site) }}</div>
                   <div v-if="site.last_error" class="text-red-600">{{ userFacingError(site.last_error, 'This site could not connect.') }}</div>
                 </div>
-                <div class="flex shrink-0 gap-2">
+                <div class="flex flex-wrap gap-2">
                   <Button v-if="site.status === 'Connected'" variant="solid" class="bg-[#075E54] text-white hover:bg-[#128C7E]" @click="openAlert(site)">Add alert</Button>
                   <Button variant="subtle" :loading="busy" @click="toggleSite(site)">{{ site.status === 'Connected' ? 'Disable' : 'Enable' }}</Button>
                 </div>
@@ -544,12 +551,12 @@ onMounted(load)
               <p v-if="alertsLoading[site.name]" class="mt-2 text-ink-gray-5">Loading alerts…</p>
               <p v-else-if="alertErrors[site.name]" class="mt-2 text-red-600">{{ alertErrors[site.name] }}</p>
               <ul v-else-if="alerts[site.name]?.length" class="mt-2 divide-y divide-outline-gray-1 rounded-lg border border-outline-gray-2">
-                <li v-for="alert in visibleAlerts(site)" :key="alert.name" class="flex items-center justify-between gap-3 px-3 py-2">
-                  <div>
+                <li v-for="alert in visibleAlerts(site)" :key="alert.name" class="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div class="min-w-0">
                     <div class="font-medium text-ink-gray-9">{{ alert.doctype }} · {{ eventLabel(alert.event) }}</div>
-                    <div class="text-ink-gray-6">{{ alert.template }} · {{ alert.phone_field }} · {{ alert.enabled ? 'On' : 'Off' }}</div>
+                    <div class="break-words text-ink-gray-6">{{ alert.template }} · {{ alert.phone_field }} · {{ alert.enabled ? 'On' : 'Off' }}</div>
                   </div>
-                  <div class="flex shrink-0 gap-2">
+                  <div class="flex flex-wrap gap-2">
                     <Button variant="subtle" :loading="busy" @click="openEdit(site, alert)">Edit</Button>
                     <Button variant="subtle" :loading="busy" @click="toggleAlert(site, alert)">{{ alert.enabled ? 'Turn off' : 'Turn on' }}</Button>
                     <Button variant="subtle" :loading="busy" @click="removeAlert(site, alert)">{{ confirmDelete === alert.name ? 'Confirm delete' : 'Delete' }}</Button>

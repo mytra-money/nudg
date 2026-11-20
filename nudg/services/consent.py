@@ -103,10 +103,9 @@ def is_contact_opted_out(contact_id: str) -> bool:
 		return False
 
 	if frappe.db.exists("DocType", "WA Profile") and frappe.db.exists("WA Profile", contact_id):
-		if frappe.db.has_column("WA Profile", "consent_status"):
-			status = frappe.db.get_value("WA Profile", contact_id, "consent_status")
-			if str(status).lower() in ("opted-out", "opt-out", "unsubscribed", "blocked"):
-				return True
+		status = frappe.db.get_value("WA Profile", contact_id, "status")
+		if str(status or "").lower() in ("blocked", "opted-out", "opt-out", "unsubscribed"):
+			return True
 
 	return False
 

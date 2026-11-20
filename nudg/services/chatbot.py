@@ -82,6 +82,105 @@ def get_bot_status(phone_number: str, account: str | None = None) -> dict:
 	return empty
 
 
+def bot_status_for_profiles(profiles) -> dict[str, dict]:
+	"""Bot flags for an inbox page, loaded in two queries instead of one pair per chat."""
+	empty = {
+		"installed": is_chatbot_installed(),
+		"enabled": False,
+		"has_bot_session": False,
+		"is_transferred": False,
+		"session": None,
+		"transfer": None,
+	}
+	result: dict[str, dict] = {}
+	for profile in profiles or []:
+		name = profile.get("name") if isinstance(profile, dict) else getattr(profile, "name", None)
+		if name:
+			result[name] = dict(empty)
+	if not result or not empty["installed"]:
+		return result
+	try:
+		batched = _bot_status_batch(profiles, empty)
+	except Exception:
+		batched = None
+	if isinstance(batched, dict):
+		return batched
+	for profile in profiles or []:
+		name = profile.get("name") if isinstance(profile, dict) else getattr(profile, "name", None)
+		phone = profile.get("phone_number") if isinstance(profile, dict) else getattr(profile, "phone_number", None)
+		account = profile.get("whatsapp_account") if isinstance(profile, dict) else getattr(profile, "whatsapp_account", None)
+		if name:
+			result[name] = get_bot_status(phone, account)
+	return result
+
+
+def _bot_status_batch(profiles, empty: dict) -> dict[str, dict]:
+	accounts: list[str] = []
+	for profile in profiles or []:
+		account = profile.get("whatsapp_account") if isinstance(profile, dict) else getattr(profile, "whatsapp_account", None)
+		if account and account not in accounts:
+			accounts.append(account)
+	enabled = {account: is_enabled(account) for account in accounts}
+	session_filters: dict = {"status": "Active"}
+	transfer_filters: dict = {"status": "Active"}
+	if len(accounts) == 1:
+		session_filters["whatsapp_account"] = accounts[0]
+		transfer_filters["whatsapp_account"] = accounts[0]
+	elif accounts:
+		session_filters["whatsapp_account"] = ["in", accounts]
+		transfer_filters["whatsapp_account"] = ["in", accounts]
+	sessions = frappe.get_all(
+		"WA Chatbot Session",
+		filters=session_filters,
+		fields=["name", "phone_number", "whatsapp_account", "current_flow", "current_step", "started_at", "last_activity"],
+		limit_page_length=500,
+	)
+	transfers = frappe.get_all(
+		"WA Agent Transfer",
+		filters=transfer_filters,
+		fields=["name", "phone_number", "whatsapp_account", "agent", "agent_name", "transferred_at", "notes"],
+		limit_page_length=500,
+	)
+	if not isinstance(sessions, list) or not isinstance(transfers, list):
+		raise TypeError("Chatbot status queries did not return rows")
+
+	def _index(rows):
+		indexed: dict[tuple[str, str], dict] = {}
+		for row in rows:
+			key = phone_match_key(row.get("phone_number"))
+			account = row.get("whatsapp_account") or ""
+			if key:
+				indexed[(account, key)] = row
+		return indexed
+
+	session_index = _index(sessions)
+	transfer_index = _index(transfers)
+	result: dict[str, dict] = {}
+	for profile in profiles or []:
+		name = profile.get("name") if isinstance(profile, dict) else getattr(profile, "name", None)
+		phone = profile.get("phone_number") if isinstance(profile, dict) else getattr(profile, "phone_number", None)
+		account = profile.get("whatsapp_account") if isinstance(profile, dict) else getattr(profile, "whatsapp_account", None)
+		if not name:
+			continue
+		info = dict(empty)
+		info["enabled"] = bool(enabled.get(account))
+		key = phone_match_key(phone)
+		session = session_index.get((account or "", key)) if key else None
+		transfer = transfer_index.get((account or "", key)) if key else None
+		flow_title = None
+		if session and session.get("current_flow"):
+			flow_title = frappe.db.get_value("WA Chatbot Flow", session.current_flow, "flow_name") or session.current_flow
+		info.update({
+			"has_bot_session": bool(session),
+			"is_transferred": bool(transfer),
+			"session": session,
+			"flow_title": flow_title,
+			"transfer": transfer,
+		})
+		result[name] = info
+	return result
+
+
 def transfer_to_agent(phone_number: str, account: str | None = None, agent: str | None = None, notes: str | None = None) -> dict:
 	"""Pause the bot and record the human handoff."""
 	if not is_chatbot_installed():
@@ -123,16 +222,23 @@ def is_transferred(phone_number: str, whatsapp_account: str | None = None) -> di
 def get_active_transfers(whatsapp_account: str | None = None, agent: str | None = None) -> list[dict]:
 	"""Active human handoffs."""
 	frappe.has_permission("WA Agent Transfer", "read", throw=True)
+	if whatsapp_account:
+		from nudg.api import _assert_account_allowed
+
+		_assert_account_allowed(whatsapp_account)
 	filters = {"status": "Active"}
 	if whatsapp_account:
 		filters["whatsapp_account"] = whatsapp_account
 	if agent:
 		filters["agent"] = agent
+	from nudg.paging import page_limit
+
 	return frappe.get_all(
 		"WA Agent Transfer",
 		filters=filters,
 		fields=["name", "phone_number", "whatsapp_account", "agent", "agent_name", "transferred_at", "notes"],
 		order_by="transferred_at desc",
+		limit_page_length=page_limit(None, default=50, maximum=50),
 	)
 
 

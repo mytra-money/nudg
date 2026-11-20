@@ -37,3 +37,16 @@ export function initSocket(): Socket {
 export function getSocket(): Socket | null {
   return socket
 }
+
+/** Prefer Frappe's realtime bus. The local socket.io client covers the Nudg page boot. */
+export function onDeskEvent(event: string, handler: (data: unknown) => void): boolean {
+  const realtime = window.frappe?.realtime
+  if (typeof realtime?.on === 'function') {
+    realtime.on(event, handler)
+    return true
+  }
+  const current = getSocket()
+  if (!current) return false
+  current.on(event, handler)
+  return true
+}

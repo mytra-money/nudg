@@ -24,9 +24,26 @@ export function applyConversation(conversations: Conversation[], event: InboxLiv
   return next
 }
 
+export function eventTargets(openProfile: string | null | undefined, event: InboxLiveEvent): boolean {
+  if (!openProfile) return false
+  return [event.profile, event.conversation?.profile?.name, event.message?.to, event.conversation?.preview?.to].includes(
+    openProfile,
+  )
+}
+
+/** Insert the socket message into the open thread. The list card's preview is the same message when the payload omits it. */
+export function mergeLiveThread(thread: Thread, openProfile: string, event: InboxLiveEvent): Thread {
+  if (thread.profile.name !== openProfile || !eventTargets(openProfile, event)) return thread
+  let next = applyThreadMessage(thread, { ...event, profile: openProfile })
+  const preview = event.conversation?.preview
+  if (!preview?.name || next.messages.some((row) => row.name === preview.name)) return next
+  return applyThreadMessage(next, { profile: openProfile, message: preview })
+}
+
 export function applyThreadMessage(thread: Thread, event: InboxLiveEvent): Thread {
   const incoming = event.message
-  if (!incoming?.name || thread.profile.name !== event.profile) return thread
+  const target = event.profile || incoming?.to
+  if (!incoming?.name || thread.profile.name !== target) return thread
   const messages = thread.messages.slice()
   let index = messages.findIndex((row) => row.name === incoming.name)
   if (index < 0 && incoming.message_id) {
@@ -35,9 +52,10 @@ export function applyThreadMessage(thread: Thread, event: InboxLiveEvent): Threa
   if (index >= 0) messages[index] = { ...messages[index], ...incoming, name: messages[index].name }
   else messages.push(incoming)
   messages.sort((a, b) => (a.creation || '').localeCompare(b.creation || '') || a.name.localeCompare(b.name))
+  const incomingProfile = event.conversation?.profile
   return {
     ...thread,
-    profile: event.conversation?.profile || thread.profile,
+    profile: incomingProfile?.whatsapp_account ? incomingProfile : thread.profile,
     window: event.conversation?.window || thread.window,
     messages,
   }

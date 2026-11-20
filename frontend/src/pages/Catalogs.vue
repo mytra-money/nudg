@@ -4,6 +4,7 @@ import { Badge, Button, Dialog, toast } from 'frappe-ui'
 import EmptyState from '@/components/EmptyState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 import LoadingState from '@/components/LoadingState.vue'
+import StatusBadge from '@/components/StatusBadge.vue'
 import { errorText } from '@/utils/format'
 import { useDesk } from '@/stores/desk'
 import {
@@ -706,8 +707,8 @@ onMounted(() => {
       <ErrorState v-else-if="error" :message="error" allow-retry @retry="load" />
       <EmptyState
         v-else-if="!catalogs.length"
-        title="No Catalogs Configured"
-        description="Create a catalog on this site. You can send its products in a conversation. Meta catalog import is not available yet."
+        title="No catalogs yet"
+        description="Create a catalog on this site, then send its products from a conversation."
       />
 
       <!-- Master-Detail Layout -->
@@ -748,18 +749,7 @@ onMounted(() => {
             >
               <div class="flex items-center justify-between gap-2">
                 <span class="min-w-0 truncate text-sm font-semibold text-ink-gray-9">{{ cat.catalog_name }}</span>
-                <span
-                  class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium"
-                  :class="
-                    cat.sync_status === 'Synced'
-                      ? 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20'
-                      : cat.sync_status === 'Error'
-                      ? 'bg-red-50 text-red-700'
-                      : 'bg-amber-50 text-amber-700'
-                  "
-                >
-                  {{ cat.sync_status || 'Pending' }}
-                </span>
+                <StatusBadge :label="cat.sync_status || 'Pending'" />
               </div>
               <p class="line-clamp-2 text-xs leading-5 text-ink-gray-6">{{ cat.description || 'No catalog description provided.' }}</p>
               <div class="flex items-center justify-between gap-3 text-[11px] text-ink-gray-5">
@@ -774,12 +764,7 @@ onMounted(() => {
         <div v-if="selectedCatalog" class="flex min-w-0 flex-col rounded-xl border border-outline-gray-2 bg-white p-4 shadow-2xs sm:p-5">
           <div class="flex flex-wrap items-center gap-2">
             <h2 class="min-w-0 truncate text-lg font-bold text-ink-gray-9">{{ selectedCatalog.catalog_name }}</h2>
-            <span
-              class="inline-flex h-6 shrink-0 items-center rounded-full px-2.5 text-xs font-medium"
-              :class="selectedCatalog.status === 'Active' ? 'bg-emerald-50 text-emerald-700' : 'bg-surface-gray-2 text-ink-gray-6'"
-            >
-              {{ selectedCatalog.status }}
-            </span>
+            <StatusBadge :label="selectedCatalog.status || 'Inactive'" />
           </div>
           <p class="mt-1 text-xs leading-5 text-ink-gray-6">{{ selectedCatalog.description || 'No description' }}</p>
           <p v-if="selectedCatalog.sync_error" class="mt-2 text-sm text-red-700" role="alert">

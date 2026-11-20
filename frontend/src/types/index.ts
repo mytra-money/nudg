@@ -13,6 +13,8 @@ export interface Account {
   status: 'Active' | 'Inactive'
   auto_read_receipts?: boolean
   is_default?: boolean
+  /** Set when this user was given the number. Administrators who can see every number leave this unset. */
+  assigned?: boolean
 }
 
 export interface TemplateButton {
@@ -118,6 +120,8 @@ export interface Conversation {
   conversation_status: ConversationStatus
   needs_reply: boolean
   failed: boolean
+  /** Incoming messages not yet opened. Shown like the WhatsApp mobile badge. */
+  unread_count?: number
   assignment?: AssignmentInfo
 }
 
@@ -131,6 +135,8 @@ export interface Inbox {
   accounts: Account[]
   templates: Template[]
   conversations: Conversation[]
+  has_more?: boolean
+  start?: number
 }
 
 export interface ConversationNote {
@@ -147,6 +153,7 @@ export interface Thread {
   window: WindowState
   references: DocLink[]
   links: DocLink[]
+  has_older?: boolean
 }
 
 export interface IntegrationStatus {

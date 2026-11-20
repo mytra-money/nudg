@@ -1,15 +1,16 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { createResource, toast } from 'frappe-ui'
+import { call, createResource, toast } from 'frappe-ui'
 import { conversationStatusOf } from '@/utils/conversationStatus'
 import { errorText } from '@/utils/format'
 import { sampleInbox, sampleLogs } from '@/mocks/sample'
 import { applyConversation, isNewIncoming, type InboxLiveEvent } from '@/stores/inboxLive'
 import { isLiveSession } from '@/stores/session'
 import { playSound } from '@/stores/sounds'
-import { getSocket } from '@/socket'
+import { getSocket, onDeskEvent } from '@/socket'
+import { chooseAccount, readSavedAccount, writeSavedAccount } from '@/utils/accountSelection'
 import { deskCacheKey } from '@/utils/deskCache'
-import type { Inbox, LogRow } from '@/types'
+import type { Inbox, LogRow, Template } from '@/types'
 
 export interface InboxLiveHandlers {
   onEvent?: (event: InboxLiveEvent) => void
@@ -19,13 +20,14 @@ export interface InboxLiveHandlers {
 export type PresenceRow = { user: string; name: string; typing: boolean; viewing: boolean }
 
 export const useInboxStore = defineStore('nudg-inbox', () => {
-  const account = ref('all')
+  const account = ref(readSavedAccount() || 'all')
   const presence = ref<Record<string, PresenceRow[]>>({})
   const error = ref<string | null>(null)
   const loading = ref(true)
   const started = ref(false)
   let realtimeBound = false
   let catchUp = false
+  let pollTimer: ReturnType<typeof setTimeout> | undefined
   let liveHandlers: InboxLiveHandlers = {}
 
   const inboxResource = createResource<Inbox | null>({
@@ -42,8 +44,23 @@ export const useInboxStore = defineStore('nudg-inbox', () => {
     auto: false,
   })
 
+  const templatesResource = createResource<Template[]>({
+    url: 'nudg.api.get_templates',
+    cache: deskCacheKey('templates'),
+    initialData: [],
+    auto: false,
+  })
+
+  let conversationOffset = 0
+
   const inbox = computed({
-    get: () => inboxResource.data,
+    get: () => {
+      const data = inboxResource.data
+      if (!data) return data
+      const templates = templatesResource.data
+      if (Array.isArray(templates) && templates.length) return { ...data, templates }
+      return data
+    },
     set: (value) => {
       inboxResource.setData(value)
     },
@@ -60,6 +77,11 @@ export const useInboxStore = defineStore('nudg-inbox', () => {
 
   function accountArg() {
     return account.value && account.value !== 'all' ? account.value : undefined
+  }
+
+  function fetchTemplates() {
+    if (!isLiveSession()) return Promise.resolve()
+    return templatesResource.fetch({ account: accountArg() }).catch(() => undefined)
   }
 
   function syncTabTitle() {
@@ -116,17 +138,33 @@ export const useInboxStore = defineStore('nudg-inbox', () => {
    */
   function bindRealtime() {
     if (realtimeBound || typeof window === 'undefined') return
-    const socket = getSocket()
-    if (!socket) return
+    const bound = onDeskEvent('nudg_inbox', (data) => applyLive(data as InboxLiveEvent))
+    if (!bound) return
     realtimeBound = true
-    socket.on('nudg_inbox', (data: InboxLiveEvent) => applyLive(data))
-    socket.on('nudg_agent_typing', (data: Record<string, unknown>) => applyPresence(data, 'typing'))
-    socket.on('nudg_agent_viewing', (data: Record<string, unknown>) => applyPresence(data, 'viewing'))
-    socket.on('connect', () => {
+    onDeskEvent('nudg_agent_typing', (data) => applyPresence(data as Record<string, unknown>, 'typing'))
+    onDeskEvent('nudg_agent_viewing', (data) => applyPresence(data as Record<string, unknown>, 'viewing'))
+    getSocket()?.on('connect', () => {
       if (!catchUp) return
       void refresh({ silent: true })
       liveHandlers.onReconnect?.()
     })
+    schedulePoll()
+  }
+
+  function socketIsLive() {
+    return Boolean(getSocket()?.connected)
+  }
+
+  // The public tunnel does not carry Socket.IO, so a quiet refresh is what
+  // brings a new message onto the open inbox.
+  function schedulePoll() {
+    if (pollTimer) clearTimeout(pollTimer)
+    pollTimer = setTimeout(() => {
+      if (catchUp && isLiveSession() && !socketIsLive()) {
+        void refresh({ silent: true }).then(() => liveHandlers.onReconnect?.())
+      }
+      schedulePoll()
+    }, 5000)
   }
 
   async function load() {
@@ -141,9 +179,17 @@ export const useInboxStore = defineStore('nudg-inbox', () => {
         logsResource.setData(sampleLogs())
         return
       }
+      const remembered = readSavedAccount()
+      if (remembered) account.value = remembered
       await inboxResource.fetch({ account: accountArg() })
-      if (inboxResource.data?.can_read_logs) {
-        await logsResource.fetch({ account: accountArg() })
+      conversationOffset = inboxResource.data?.conversations?.length || 0
+      void fetchTemplates()
+      const next = chooseAccount(inboxResource.data?.accounts || [], remembered)
+      if (next !== account.value) {
+        account.value = next
+        await inboxResource.fetch({ account: accountArg() })
+        conversationOffset = inboxResource.data?.conversations?.length || 0
+        void fetchTemplates()
       }
     } catch (caught) {
       error.value = errorText(caught)
@@ -158,25 +204,70 @@ export const useInboxStore = defineStore('nudg-inbox', () => {
     if (!isLiveSession()) return
     try {
       await inboxResource.fetch({ account: accountArg() })
+      conversationOffset = inboxResource.data?.conversations?.length || 0
+      void fetchTemplates()
       syncTabTitle()
     } catch (caught) {
       if (!options?.silent) toast.error(errorText(caught))
     }
   }
 
+  function markRead(profileName: string) {
+    const current = inbox.value
+    if (!current) return
+    inboxResource.setData({
+      ...current,
+      conversations: current.conversations.map((row) =>
+        row.profile.name === profileName ? { ...row, unread_count: 0 } : row,
+      ),
+    })
+  }
+
   async function setAccount(name: string) {
     account.value = name || 'all'
+    writeSavedAccount(account.value)
     const selected = accountArg()
     if (!isLiveSession() || !inbox.value) return
     try {
       await inboxResource.fetch({ account: selected })
+      conversationOffset = inboxResource.data?.conversations?.length || 0
+      void fetchTemplates()
       syncTabTitle()
-      if (inboxResource.data?.can_read_logs) {
-        await logsResource.fetch({ account: selected })
-      }
     } catch (caught) {
       toast.error(errorText(caught))
     }
+  }
+
+  async function loadLogs() {
+    if (!isLiveSession()) {
+      logsResource.setData(sampleLogs())
+      return
+    }
+    try {
+      if (inbox.value && inbox.value.can_read_logs === false) return
+      await logsResource.fetch({ account: accountArg() })
+    } catch {
+      // The logs page explains a permission error. Inbox startup does not wait on it.
+    }
+  }
+
+  async function loadMoreConversations() {
+    const current = inboxResource.data
+    if (!current?.has_more || !isLiveSession()) return
+    const page = await call<Inbox>('nudg.api.get_inbox', {
+      account: accountArg(),
+      start: conversationOffset,
+      limit: 30,
+    })
+    const seen = new Set((current.conversations || []).map((row) => row.profile.name))
+    const extra = (page?.conversations || []).filter((row) => row.profile?.name && !seen.has(row.profile.name))
+    conversationOffset += page?.conversations?.length || 0
+    inboxResource.setData({
+      ...current,
+      conversations: [...(current.conversations || []), ...extra],
+      has_more: Boolean(page?.has_more),
+    })
+    syncTabTitle()
   }
 
   return {
@@ -189,11 +280,15 @@ export const useInboxStore = defineStore('nudg-inbox', () => {
     presence,
     inboxResource,
     logsResource,
+    templatesResource,
     accountArg,
     syncTabTitle,
     bindLive,
     load,
+    loadLogs,
     refresh,
+    markRead,
     setAccount,
+    loadMoreConversations,
   }
 })

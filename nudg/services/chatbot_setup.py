@@ -135,13 +135,17 @@ def save_bot(account: str | None, payload: dict) -> dict:
 	return get_bot(account)
 
 
-def list_keywords(account: str | None) -> list[dict]:
+def list_keywords(account: str | None, start: int | None = 0, limit: int | None = None) -> list[dict]:
+	from nudg.paging import page_limit, page_start
+
 	account = _account(account)
 	return frappe.get_all(
 		"WA Keyword Reply",
 		filters={"whatsapp_account": account},
 		fields=["name", "title", "keywords", "match_type", "response_type", "response_text", "trigger_flow", "enabled", "priority"],
 		order_by="priority desc, modified desc",
+		limit_start=page_start(start),
+		limit_page_length=page_limit(limit, default=50, maximum=50),
 	)
 
 
@@ -188,9 +192,18 @@ def delete_keyword(account: str | None, name: str) -> dict:
 	return {"name": name, "deleted": True}
 
 
-def list_flows(account: str | None) -> list[dict]:
+def list_flows(account: str | None, start: int | None = 0, limit: int | None = None) -> list[dict]:
+	from nudg.paging import page_limit, page_start
+
 	account = _account(account)
-	names = frappe.get_all("WA Chatbot Flow", filters={"whatsapp_account": account}, pluck="name", order_by="modified desc")
+	names = frappe.get_all(
+		"WA Chatbot Flow",
+		filters={"whatsapp_account": account},
+		pluck="name",
+		order_by="modified desc",
+		limit_start=page_start(start),
+		limit_page_length=page_limit(limit, default=50, maximum=50),
+	)
 	rows = []
 	for name in names:
 		doc = frappe.get_doc("WA Chatbot Flow", name)

@@ -10,7 +10,6 @@ from nudg.security import (
 	has_tenant_permission,
 	get_tenant_conversation_query,
 	get_tenant_campaign_query,
-	get_tenant_rule_query,
 	get_tenant_quick_reply_query,
 	get_tenant_catalog_query,
 )

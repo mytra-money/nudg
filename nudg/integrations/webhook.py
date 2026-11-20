@@ -44,7 +44,20 @@ def handler() -> Response | str:
 	method = getattr(request, "method", "GET") if request else "GET"
 	if method == "GET":
 		return _handle_verification()
-	frappe.flags.nudg_webhook_payload = _peek_payload()
+	payload = _peek_payload()
+	frappe.flags.nudg_webhook_payload = payload
+	from nudg.integrations.site_store import payload_is_remote
+
+	if payload_is_remote(payload):
+		_verify_meta_signature()
+		from nudg.integrations.site_store import ingest
+
+		ingest(payload)
+		response = getattr(frappe.local, "response", None)
+		if response is not None:
+			response.http_status_code = 200
+			response["content_type"] = "text/plain"
+		return "ok"
 	try:
 		from whatsapp.whatsapp.webhook import handler as wa_handler
 		return wa_handler()
@@ -86,6 +99,29 @@ def _handle_verification() -> Response:
 	logger.info("Webhook subscription verified successfully")
 	# Return raw challenge string as text/plain
 	return Response(str(challenge), status=200, mimetype="text/plain")
+
+
+def _verify_meta_signature() -> None:
+	"""Check the signature Meta sent to this site. An empty secret skips the check."""
+	secret = None
+	try:
+		if frappe.db.exists("DocType", "WA Settings"):
+			secret = frappe.db.get_single_value("WA Settings", "webhook_secret")
+	except Exception:
+		secret = None
+	if not isinstance(secret, str) or not secret:
+		return
+	request = getattr(frappe.local, "request", None)
+	raw = b""
+	if request and hasattr(request, "get_data"):
+		raw = request.get_data(cache=True, as_text=False) or b""
+	header = frappe.get_request_header("X-Hub-Signature-256", "") or ""
+	if not header.startswith("sha256="):
+		frappe.throw(_("Missing or malformed X-Hub-Signature-256 header."), frappe.AuthenticationError)
+	expected = header[len("sha256="):]
+	computed = hmac.new(secret.encode("utf-8"), raw, hashlib.sha256).hexdigest()
+	if not hmac.compare_digest(computed, expected):
+		frappe.throw(_("HMAC-SHA256 signature mismatch."), frappe.AuthenticationError)
 
 
 def _peek_payload() -> dict:

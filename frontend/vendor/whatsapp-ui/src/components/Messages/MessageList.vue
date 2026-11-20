@@ -155,7 +155,7 @@ onBeforeUnmount(() => {
 				<li
 					v-else
 					:ref="(el) => registerRow(row.message.name, el)"
-					class="group flex gap-2 rounded-6 transition-shadow [contain-intrinsic-size:auto_5rem] [content-visibility:auto]"
+					class="group flex gap-2 rounded-6 transition-shadow"
 					:class="[
 						rowClass,
 						row.message.direction == 'Outgoing' ? 'flex-row-reverse' : '',

@@ -119,18 +119,6 @@ def _copy_conversation(doctype: str, name: str):
 	if not profile_name or not frappe.db.exists("WA Profile", profile_name):
 		return
 	profile = frappe.get_doc("WA Profile", profile_name)
-	for field in (
-		"assignee",
-		"assignment_status",
-		"conversation_status",
-		"priority",
-		"tags",
-		"last_assigned_on",
-		"assignment_source",
-	):
-		value = row.get(field)
-		if value not in (None, ""):
-			profile.set(field, value)
 	link_doctype = row.get("reference_doctype")
 	link_name = row.get("reference_name")
 	if link_doctype and link_name:
@@ -141,6 +129,17 @@ def _copy_conversation(doctype: str, name: str):
 	profile.flags.ignore_permissions = True
 	profile.flags.ignore_mandatory = True
 	profile.save(ignore_permissions=True)
+	from nudg.services.assignments import apply_legacy_profile_state
+
+	apply_legacy_profile_state(
+		profile_name,
+		assignee=row.get("assignee"),
+		assignment_status=row.get("assignment_status"),
+		tags=row.get("tags"),
+		priority=row.get("priority"),
+		last_assigned_on=row.get("last_assigned_on"),
+		source=row.get("assignment_source"),
+	)
 	_retarget("Comment", "reference_doctype", "reference_name", doctype, name, profile_name)
 	_retarget("ToDo", "reference_type", "reference_name", doctype, name, profile_name)
 

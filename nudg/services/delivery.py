@@ -14,6 +14,21 @@ STUCK_AFTER_MINUTES = 2
 STUCK_ERROR = "Send did not finish. Try sending it again."
 
 
+def enqueue_fail_stuck_outgoing() -> None:
+	"""Scheduler entry. Cleanup runs on a worker so HTTP reads stay read-only."""
+	try:
+		frappe.enqueue(
+			"nudg.services.delivery.fail_stuck_outgoing",
+			queue="short",
+			timeout=120,
+			job_id="nudg-fail-stuck-outgoing",
+			deduplicate=True,
+		)
+	except Exception:
+		frappe.log_error(title="Nudg stuck-message enqueue", message=frappe.get_traceback())
+		fail_stuck_outgoing()
+
+
 def fail_stuck_outgoing() -> int:
 	"""Mark abandoned outgoing sends as Failed, or Sent when Meta already accepted them.
 

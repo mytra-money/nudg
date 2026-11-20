@@ -35,6 +35,16 @@ class TestInboxAndPresenceParity(unittest.TestCase):
 
 		self.mock_cache = MagicMock()
 		self.mock_cache.get_value.return_value = 0
+		self._redis: dict[str, dict] = {}
+
+		def _hset(name, key, value, **kwargs):
+			self._redis.setdefault(name, {})[key] = value
+
+		def _hgetall(name):
+			return dict(self._redis.get(name) or {})
+
+		self.mock_cache.hset.side_effect = _hset
+		self.mock_cache.hgetall.side_effect = _hgetall
 		frappe.cache = MagicMock(return_value=self.mock_cache)
 
 	def tearDown(self):
@@ -60,10 +70,16 @@ class TestInboxAndPresenceParity(unittest.TestCase):
 		from nudg.install import account_site_fields, profile_inbox_fields
 
 		profile_fields = {field["fieldname"]: field for field in profile_inbox_fields()}
-		self.assertIn("assignment_status", profile_fields)
-		self.assertIn("assignee", profile_fields)
-		self.assertIn("tags", profile_fields)
-		self.assertEqual(profile_fields["assignee"]["options"], "User")
+		for removed in (
+			"assignee",
+			"assignment_status",
+			"tags",
+			"priority",
+			"last_assigned_on",
+			"assignment_source",
+			"conversation_status",
+		):
+			self.assertNotIn(removed, profile_fields)
 
 		site_fields = {field["fieldname"]: field for field in account_site_fields()}
 		self.assertEqual(site_fields["connected_site_tab"]["fieldtype"], "Tab Break")
@@ -105,10 +121,13 @@ class TestInboxAndPresenceParity(unittest.TestCase):
 		mock_conv.assignment_source = "Manual"
 		mock_conv.whatsapp_account = "WA-ACC-1"
 
-		with patch("frappe.get_doc", return_value=mock_conv):
+		with patch("frappe.get_doc", return_value=mock_conv), \
+			 patch("frappe.desk.doctype.tag.tag.add_tag") as add_tag, \
+			 patch("frappe.desk.doctype.tag.tag.remove_tag") as remove_tag:
 			res = desk_api.set_conversation_tags("profile_1", ["VIP", "Urgent"])
-			self.assertEqual(mock_conv.tags, "VIP, Urgent")
 			self.assertEqual(res["tags"], ["VIP", "Urgent"])
+			self.assertEqual(add_tag.call_count, 2)
+			remove_tag.assert_not_called()
 			mock_publish.assert_called_once()
 			self.assertEqual(mock_publish.call_args[0][0], "nudg_conversation_tags_updated")
 
@@ -183,27 +202,16 @@ class TestInboxAndPresenceParity(unittest.TestCase):
 				c.last_assigned_on = None
 				conv_docs.append(c)
 
-			# 1st assignment -> agent_a
-			with patch("frappe.get_doc", return_value=conv_docs[0]), \
-				 patch("frappe.get_all", return_value=[]):
-				res1 = assignments.auto_assign_round_robin(conv_docs[0])
-				self.assertEqual(res1["assignee"], "agent_a@example.com")
-				self.assertEqual(conv_docs[0].assignment_source, "Round Robin")
+			res1 = assignments.auto_assign_round_robin(conv_docs[0])
+			self.assertEqual(res1["assignee"], "agent_a@example.com")
+			self.assertEqual(res1["assignment_source"], "Round Robin")
+			self.assertEqual(res1["assignment_status"], "Assigned")
 
-			# 2nd assignment -> agent_b
-			with patch("frappe.get_doc", return_value=conv_docs[1]), \
-				 patch("frappe.get_all", return_value=[frappe._dict({"assignee": "agent_a@example.com", "last_assigned_on": datetime.datetime(2026, 11, 8, 11, 0, 0)})]):
-				res2 = assignments.auto_assign_round_robin(conv_docs[1])
-				self.assertEqual(res2["assignee"], "agent_b@example.com")
+			res2 = assignments.auto_assign_round_robin(conv_docs[1])
+			self.assertEqual(res2["assignee"], "agent_b@example.com")
 
-			# 3rd assignment -> agent_c
-			with patch("frappe.get_doc", return_value=conv_docs[2]), \
-				 patch("frappe.get_all", return_value=[
-					 frappe._dict({"assignee": "agent_b@example.com", "last_assigned_on": datetime.datetime(2026, 11, 8, 11, 30, 0)}),
-					 frappe._dict({"assignee": "agent_a@example.com", "last_assigned_on": datetime.datetime(2026, 11, 8, 11, 0, 0)})
-				 ]):
-				res3 = assignments.auto_assign_round_robin(conv_docs[2])
-				self.assertEqual(res3["assignee"], "agent_c@example.com")
+			res3 = assignments.auto_assign_round_robin(conv_docs[2])
+			self.assertEqual(res3["assignee"], "agent_c@example.com")
 
 	@patch("nudg.services.assignments.get_eligible_desk_agents")
 	def test_auto_assign_skips_already_assigned(self, mock_agents):
@@ -212,10 +220,7 @@ class TestInboxAndPresenceParity(unittest.TestCase):
 		c = MagicMock()
 		c.name = "CONV-LOCKED"
 		c.profile = "profile_locked"
-		c.assignee = "agent_assigned@example.com"
-		c.assignment_status = "Assigned"
-		c.assignment_source = "Manual"
-		c.last_assigned_on = datetime.datetime(2026, 11, 8, 12, 0, 0)
+		c._assign = '["agent_assigned@example.com"]'
 
 		res = assignments.auto_assign_round_robin(c)
 		self.assertEqual(res["assignee"], "agent_assigned@example.com")

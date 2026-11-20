@@ -498,8 +498,8 @@ class TestAdversarialRoundRobin(unittest.TestCase):
 				with patch("frappe.get_all", return_value=recent_rows):
 					res = assignments.auto_assign_round_robin(conv)
 					self.assertEqual(res["assignee"], single_agent)
-					self.assertEqual(conv.assignee, single_agent)
-					self.assertEqual(conv.assignment_source, "Round Robin")
+					self.assertEqual(res["assignees"], [single_agent])
+					self.assertEqual(res["assignment_source"], "Round Robin")
 
 	def test_concurrent_round_robin_assignments(self):
 		"""Concurrent execution across threads assigning unassigned conversations."""
@@ -563,14 +563,13 @@ class TestAdversarialRoundRobin(unittest.TestCase):
 		conv.assignment_source = "Manual"
 		conv.last_assigned_on = None
 
-		corrupt_rows = [
-			frappe._dict({"assignee": "agent_a@example.com", "last_assigned_on": "NOT_A_VALID_DATE"}),
-			frappe._dict({"assignee": "agent_b@example.com", "last_assigned_on": datetime.datetime(2026, 11, 8, 10, 0, 0)}),
-		]
+		self.mock_cache.hgetall.return_value = {
+			"agent_a@example.com": "NOT_A_VALID_DATE",
+			"agent_b@example.com": datetime.datetime(2026, 11, 8, 10, 0, 0),
+		}
 
 		with patch("nudg.services.assignments.get_eligible_desk_agents", return_value=agents), \
 			 patch("nudg.services.assignments._sync_todo"), \
-			 patch("frappe.get_all", return_value=corrupt_rows), \
 			 patch("frappe.publish_realtime"):
 
 			try:

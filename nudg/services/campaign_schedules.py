@@ -13,7 +13,6 @@ from __future__ import annotations
 import frappe
 from frappe.utils import add_days, getdate, today
 
-from nudg.services.bulk import clean_mobile
 
 
 def schedule_is_due(start_date, send_after_days, on_date=None, already_sent: bool = False) -> bool:
@@ -92,16 +91,6 @@ def create_bulk_from_schedule(campaign, row) -> str | None:
 		"recipient_list": recipient_list,
 	}
 	doc = frappe.get_doc(payload)
-	if not recipient_list:
-		for recipient in campaign.get("whatsapp_recipients") or []:
-			phone = clean_mobile(getattr(recipient, "phone_number", None) or "")
-			if not phone:
-				continue
-			doc.append("recipients", {
-				"mobile_number": phone,
-				"recipient_name": getattr(recipient, "profile", None),
-				"recipient_data": getattr(recipient, "variables_json", None),
-			})
 	if doc.recipient_type == "Individual" and not doc.recipients:
 		frappe.log_error(title=f"Campaign schedule {campaign.name} has no recipients")
 		return None

@@ -27,6 +27,10 @@ export function useDesk() {
     await inboxStore.load()
   }
 
+  async function loadLogs() {
+    await inboxStore.loadLogs()
+  }
+
   async function refresh() {
     await inboxStore.refresh()
     if (threadStore.profile) await threadStore.syncOpen()
@@ -54,9 +58,12 @@ export function useDesk() {
     windowState,
     presence,
     load,
+    loadLogs,
     setAccount,
     refresh,
     openProfile: threadStore.openProfile,
+    loadMoreConversations: inboxStore.loadMoreConversations,
+    loadOlder: threadStore.loadOlder,
     setThreadNotes: threadStore.setThreadNotes,
     sendText: threadStore.sendText,
     sendMedia: threadStore.sendMedia,

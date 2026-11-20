@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import {
   Button,
@@ -20,12 +20,13 @@ import ManualConnectDialog from '@/components/ManualConnectDialog.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import { isManager, useDesk } from '@/stores/desk'
 import { shellNav } from '@/router'
+import { sessionUser as readSessionUser } from '@/utils/frappeSession'
 import logoUrl from '@/assets/logo.svg'
 
 const desk = useDesk()
 const route = useRoute()
 const sessionLive = Boolean(window.csrf_token)
-const sessionUser = window.user || ''
+const sessionUser = readSessionUser()
 const sessionSite = window.sitename || ''
 const visibleNav = computed(() => shellNav.filter((link) => !link.managerOnly || isManager.value))
 const accounts = ref<Array<{ name: string; account_name: string }>>([])
@@ -111,6 +112,12 @@ function isActive(path: string) {
 const showAccountModal = ref(false)
 const showCredentialsModal = ref(false)
 const moreOpen = ref(false)
+const keyboardOpen = ref(false)
+
+function syncKeyboard() {
+  const viewport = window.visualViewport
+  keyboardOpen.value = Boolean(viewport && window.innerHeight - viewport.height > 120)
+}
 
 const mobilePrimaryTo = ['/', '/conversations', '/template-studio', '/analytics']
 const mobileShort: Record<string, string> = {
@@ -147,11 +154,20 @@ async function onManualConnected() {
 
 onMounted(() => {
   void loadAccounts()
+  syncKeyboard()
+  window.visualViewport?.addEventListener('resize', syncKeyboard)
+})
+
+onUnmounted(() => {
+  window.visualViewport?.removeEventListener('resize', syncKeyboard)
 })
 </script>
 
 <template>
-  <div class="nudg-shell flex h-dvh w-screen flex-col overflow-hidden bg-surface-gray-1 text-ink-gray-9 md:flex-row">
+  <div
+    class="nudg-shell flex h-dvh w-screen max-w-full flex-col overflow-hidden bg-surface-gray-1 text-ink-gray-9 md:flex-row"
+    :class="keyboardOpen ? 'keyboard-open' : ''"
+  >
     <div class="relative z-20 hidden h-full shrink-0 md:flex">
       <Sidebar
         v-model:collapsed="sidebarCollapsed"
@@ -305,7 +321,7 @@ onMounted(() => {
         </RouterView>
       </main>
 
-      <div class="relative z-30 shrink-0 md:hidden">
+      <div class="nudg-mobile-nav relative z-30 shrink-0 md:hidden">
         <button
           v-if="moreOpen"
           type="button"

@@ -56,15 +56,6 @@ class DeskContactRepository:
 		reason: str | None = None,
 	) -> None:
 		"""Update contact opt-in or opt-out status (e.g. on STOP keyword)."""
-		if frappe.db.exists("DocType", "WA Profile") and frappe.db.exists("WA Profile", contact_id):
-			# If WA Profile has a custom consent field or status
-			try:
-				values = {}
-				if frappe.db.has_column("WA Profile", "consent_status"):
-					values["consent_status"] = consent_status
-				if reason and frappe.db.has_column("WA Profile", "consent_reason"):
-					values["consent_reason"] = reason
-				if values:
-					frappe.db.set_value("WA Profile", contact_id, values)
-			except Exception:
-				pass
+		# consent_status and consent_reason were removed. Callers still record the
+		# keyword; profile status is what later sends check.
+		return

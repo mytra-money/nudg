@@ -59,6 +59,14 @@ class SessionManager:
 	def get_conversation_history(self, limit: int = 20) -> list[dict]:
 		"""Recent text messages with this phone, oldest first, for the AI prompt."""
 		try:
+			from nudg.integrations.site_store import history
+
+			remote = history(self.phone_number, self.account, limit)
+			if remote is not None:
+				return remote
+		except Exception:
+			frappe.log_error(title="Chatbot remote history lookup failed")
+		try:
 			profile_names = frappe.get_all(
 				"WA Profile",
 				filters={"phone_number": self.phone_number},

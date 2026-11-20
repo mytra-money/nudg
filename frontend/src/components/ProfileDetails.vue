@@ -4,6 +4,7 @@ import { Avatar, Button, Combobox, Dialog, toast } from 'frappe-ui'
 import { isManager } from '@/stores/desk'
 import { whatsappScreen } from '@/utils/format'
 import { listAssignableUsers } from '@/services/catalogApi'
+import { userLabel } from '@/utils/frappeSession'
 import { router } from '@/router'
 import type { AssignmentInfo, Thread } from '@/types'
 
@@ -97,8 +98,7 @@ const assignees = computed(() => {
 function personLabel(user: string) {
   const known = userOptions.value.find((row) => row.value === user)?.label
   if (known) return known
-  const local = user.split('@')[0] || user
-  return local.replace(/[._]/g, ' ')
+  return userLabel(user)
 }
 
 function handleUnassign(user: string) {

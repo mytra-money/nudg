@@ -99,7 +99,7 @@ def _reject_resolved(host: str, port: int, resolve: Resolver) -> None:
 
 
 def _is_loopback_name(host: str) -> bool:
-	if host in {"localhost", "localhost.localdomain"}:
+	if host in {"localhost", "localhost.localdomain"} or host.endswith(".localhost"):
 		return True
 	try:
 		return ipaddress.ip_address(host).is_loopback

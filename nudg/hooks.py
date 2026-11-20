@@ -75,6 +75,8 @@ export_python_type_annotations = True
 # payload for chatbot button ids and WhatsApp Flow replies, then calls it.
 override_whitelisted_methods = {
 	"whatsapp.whatsapp.webhook.handler": "nudg.integrations.webhook.handler",
+	"whatsapp.whatsapp.api.messages.send_message": "nudg.integrations.site_store.send_message",
+	"whatsapp.whatsapp.api.messages.send_template": "nudg.integrations.site_store.send_template_message",
 }
 
 extend_bootinfo = ["nudg.desk_access.extend_bootinfo"]
@@ -89,6 +91,16 @@ doc_events = {
 	"WA Account": {
 		"validate": "nudg.integrations.erpnext.service.validate_account_site",
 		"after_insert": "nudg.security.undo_autoselected_default",
+		"on_update": "nudg.security.on_wa_account_change",
+		"on_trash": "nudg.security.on_wa_account_change",
+	},
+	"WA Template": {
+		"on_update": "nudg.security.on_template_change",
+		"on_trash": "nudg.security.on_template_change",
+	},
+	"User Permission": {
+		"on_update": "nudg.security.on_user_permission_change",
+		"on_trash": "nudg.security.on_user_permission_change",
 	},
 	"WA Profile": {
 		"on_update": "nudg.services.assignments.on_conversation_update",
@@ -111,9 +123,11 @@ scheduler_events = {
 	"cron": {
 		"* * * * *": [
 			"nudg.services.campaigns.check_and_run_scheduled_campaigns",
-			"nudg.services.delivery.fail_stuck_outgoing",
 			"nudg.services.bulk.process_scheduled_bulk_messages",
-		]
+		],
+		"*/5 * * * *": [
+			"nudg.services.delivery.enqueue_fail_stuck_outgoing",
+		],
 	},
 	"hourly": [
 		"nudg.chatbot.session_manager.cleanup_expired_sessions",

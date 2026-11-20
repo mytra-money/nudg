@@ -2,7 +2,9 @@
 import { computed, onMounted, ref } from 'vue'
 import { Button, Dialog } from 'frappe-ui'
 import EmbeddedSignup from '@/components/EmbeddedSignup.vue'
+import EmptyState from '@/components/EmptyState.vue'
 import ManualConnectDialog from '@/components/ManualConnectDialog.vue'
+import StatusBadge from '@/components/StatusBadge.vue'
 import { useDesk } from '@/stores/desk'
 import { accounts as sampleAccounts } from '@/mocks/sample'
 import type { Account } from '@/types'
@@ -79,7 +81,7 @@ const filteredAccounts = computed(() => {
           v-model="searchQuery"
           type="text"
           placeholder="Search numbers"
-          class="h-8 w-48 rounded-lg border border-outline-gray-2 bg-white px-3 text-xs text-ink-gray-9"
+          class="h-8 w-full rounded-lg border border-outline-gray-2 bg-white px-3 text-xs text-ink-gray-9 sm:w-48"
         />
       </div>
       <div class="mt-4 grid gap-3 md:grid-cols-2">
@@ -89,18 +91,13 @@ const filteredAccounts = computed(() => {
           class="rounded-xl border border-outline-gray-2 bg-white p-4"
         >
           <div class="flex items-start justify-between gap-3">
-            <h2 class="text-base font-semibold text-ink-gray-9">{{ account.account_name }}</h2>
-            <span
-              class="rounded-full px-2 py-0.5 text-xs font-medium"
-              :class="account.status === 'Active' ? 'bg-emerald-50 text-emerald-700' : 'bg-surface-gray-2 text-ink-gray-6'"
-            >
-              {{ account.status }}
-            </span>
+            <h2 class="min-w-0 truncate text-base font-semibold text-ink-gray-9">{{ account.account_name }}</h2>
+            <StatusBadge :label="account.status || 'Inactive'" />
           </div>
           <p v-if="account.is_default" class="mt-2 text-xs font-medium text-[#075E54]">Default number</p>
         </article>
       </div>
-      <p v-if="filteredAccounts.length === 0" class="mt-6 text-sm text-ink-gray-6">No numbers match that search.</p>
+      <EmptyState v-if="filteredAccounts.length === 0" compact title="No numbers match" description="Try a different name." />
     </div>
 
     <Dialog v-model="showConnectModal" title="Connect WhatsApp">

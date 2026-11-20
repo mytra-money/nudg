@@ -233,6 +233,7 @@ function summarize(profile: Profile, rows: ChatMessage[]): Conversation {
     conversation_status,
     needs_reply: conversation_status === 'needs_reply',
     failed: conversation_status === 'failed',
+    unread_count: rows.filter((row) => row.direction === 'Incoming' && !row.reaction && row.status !== 'Read' && row.status !== 'Failed').length,
     assignment: {
       assignment_status: profile.status === 'Blocked' ? 'Closed' : 'Unassigned',
       assignee: null,

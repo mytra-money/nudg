@@ -6,6 +6,7 @@ import { MessageInput, MessageList } from '@whatsapp/ui/components/Messages'
 import type { ReactPayload, WhatsAppMessage } from '@whatsapp/ui/components/Messages'
 import DeskTemplatePreview from '@/components/DeskTemplatePreview.vue'
 import ProfileDetails from '@/components/ProfileDetails.vue'
+import StatusBadge from '@/components/StatusBadge.vue'
 import {
   CONVERSATION_STATUS_FILTERS,
   conversationStatusAt,
@@ -26,6 +27,7 @@ import {
 } from '@/services/catalogApi'
 import { errorText } from '@/utils/format'
 import { threadAccountAllowed } from '@/utils/deskCache'
+import { sessionUser as readSessionUser, userLabel } from '@/utils/frappeSession'
 import type { Conversation, ConversationNote, Template } from '@/types'
 
 const desk = useDesk()
@@ -102,7 +104,7 @@ const catalogItems = ref<any[]>([])
 const assignUser = ref('')
 const picked = ref<Template | null>(null)
 const scroller = ref<HTMLElement | null>(null)
-const sessionUser = window.user || ''
+const sessionUser = readSessionUser()
 const now = ref(Date.now())
 let clock = 0
 onMounted(() => {
@@ -174,8 +176,13 @@ const assignOptions = computed(() => [
 ])
 
 // Live counts for quick chips
+function unreadCount(row: Conversation) {
+  return Math.max(0, Number(row.unread_count || 0))
+}
+
 const allRows = computed(() => {
-  const rows = desk.inbox.value?.conversations || []
+  const rows = [...(desk.inbox.value?.conversations || [])]
+  rows.sort((a, b) => (b.preview?.creation || '').localeCompare(a.preview?.creation || ''))
   const selected = desk.account.value
   if (!selected || selected === 'all') return rows
   return rows.filter((row) => row.profile.whatsapp_account === selected)
@@ -219,12 +226,52 @@ const windowState = computed(() => {
   return serviceWindow(messages, now.value)
 })
 
+const pinLatest = ref(true)
+let shownProfile = ''
+let ignoreScroll = false
+
+function scrollToLatest() {
+  const el = scroller.value
+  if (!el || !pinLatest.value) {
+    ignoreScroll = false
+    return
+  }
+  ignoreScroll = true
+  el.scrollTop = el.scrollHeight
+  requestAnimationFrame(() => {
+    ignoreScroll = false
+  })
+}
+
+async function loadEarlier() {
+  const el = scroller.value
+  const before = el?.scrollHeight || 0
+  await desk.loadOlder()
+  await nextTick()
+  if (!el) return
+  el.scrollTop = el.scrollHeight - before
+}
+
+function onChatScroll() {
+  if (ignoreScroll) return
+  const el = scroller.value
+  if (!el) return
+  const gap = el.scrollHeight - el.scrollTop - el.clientHeight
+  pinLatest.value = gap < 120
+}
+
 watch(
-  () => [desk.profile.value, current.value?.messages.length] as const,
-  async () => {
+  () => [current.value?.profile.name || '', current.value?.messages.length || 0, current.value?.messages.at(-1)?.name || ''] as const,
+  async ([name]) => {
+    if (name !== shownProfile) {
+      shownProfile = name
+      pinLatest.value = true
+    }
     await nextTick()
-    if (scroller.value) scroller.value.scrollTop = scroller.value.scrollHeight
+    scrollToLatest()
+    requestAnimationFrame(scrollToLatest)
   },
+  { flush: 'post', immediate: true },
 )
 
 function open(row: Conversation) {
@@ -409,8 +456,7 @@ function agentLabel(user?: string | null) {
   if (!user) return 'Unassigned'
   const known = filterUsers.value.find((row) => row.value === user)
   if (known?.label) return known.label
-  const local = user.split('@')[0] || user
-  return local.replace(/[._]/g, ' ')
+  return userLabel(user)
 }
 
 const headerAssignees = computed(() => assigneesOf({ assignment: currentAssignment.value }))
@@ -445,12 +491,12 @@ function toggleChatSearch() {
   if (!chatSearchOpen.value) chatQuery.value = ''
 }
 
-function isPhone() {
-  return window.matchMedia('(max-width: 767px)').matches
+function isCompact() {
+  return window.matchMedia('(max-width: 1279px)').matches
 }
 
 function openContact() {
-  if (isPhone()) {
+  if (isCompact()) {
     details.value = true
     return
   }
@@ -458,7 +504,7 @@ function openContact() {
 }
 
 function openAssign() {
-  if (isPhone()) {
+  if (isCompact()) {
     details.value = true
     void nextTick(() => drawerProfile.value?.openAssign())
     return
@@ -492,7 +538,7 @@ async function retryMessage(message: WhatsAppMessage) {
   <div class="flex h-full min-w-0 overflow-hidden bg-[#F0F2F5]">
     <!-- Left Conversation Sidebar -->
     <aside
-      class="inbox-list flex min-h-0 flex-col border-r border-[#E9EDEF] bg-white"
+      class="inbox-list min-h-0 flex-col border-r border-[#E9EDEF] bg-white"
       :class="desk.profile.value ? 'hidden md:flex' : 'flex'"
     >
       <!-- Search & Filters Container -->
@@ -539,7 +585,7 @@ async function retryMessage(message: WhatsAppMessage) {
             <span class="lucide-search-x size-5" aria-hidden="true" />
           </div>
           <p class="mt-2 font-medium text-ink-gray-8">No conversations found</p>
-          <p class="mt-1 text-ink-gray-5">No threads match your current search or filter filters.</p>
+          <p class="mt-1 text-ink-gray-5">No threads match this search or these filters.</p>
           <button
             type="button"
             class="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[#075E54] hover:underline"
@@ -585,24 +631,40 @@ async function retryMessage(message: WhatsAppMessage) {
             <div class="min-w-0 flex-1">
               <!-- Row 1: Name -->
               <span
-                class="block text-sm font-semibold leading-snug"
-                :class="desk.profile.value === row.profile.name ? 'text-[#075E54]' : 'text-ink-gray-9'"
+                class="block truncate text-sm leading-snug"
+                :class="[
+                  unreadCount(row) ? 'font-bold' : 'font-semibold',
+                  desk.profile.value === row.profile.name ? 'text-[#075E54]' : 'text-ink-gray-9',
+                ]"
               >
                 {{ row.profile.profile_name || row.profile.phone_number }}
               </span>
 
               <!-- Row 2: Message Preview Snippet -->
-              <p class="mt-0.5 truncate text-xs text-ink-gray-6">
+              <p
+                class="mt-0.5 truncate text-xs"
+                :class="unreadCount(row) ? 'font-medium text-ink-gray-8' : 'text-ink-gray-6'"
+              >
                 <span v-if="row.preview?.direction === 'Outgoing'" class="font-medium text-ink-gray-5">You: </span>
                 <span>{{ previewText(row.preview) }}</span>
               </p>
 
             </div>
 
-            <!-- Timestamp, with assignee initials under it -->
+            <!-- Timestamp, unread count, then assignee initials -->
             <div class="flex shrink-0 flex-col items-end gap-1">
-              <span class="text-[11px] text-ink-gray-5 font-mono">
+              <span
+                class="text-[11px] font-mono"
+                :class="unreadCount(row) ? 'font-semibold text-[#25D366]' : 'text-ink-gray-5'"
+              >
                 {{ row.preview?.creation ? formatTime(row.preview.creation) : '' }}
+              </span>
+              <span
+                v-if="unreadCount(row) > 0"
+                class="grid h-5 min-w-5 place-items-center rounded-full bg-[#25D366] px-1.5 text-[11px] font-semibold leading-none text-white"
+                :title="`${unreadCount(row)} unread`"
+              >
+                {{ unreadCount(row) > 99 ? '99+' : unreadCount(row) }}
               </span>
               <div v-if="assigneesOf(row).length" class="flex items-center justify-end">
                 <Avatar
@@ -618,12 +680,20 @@ async function retryMessage(message: WhatsAppMessage) {
             </div>
           </div>
         </button>
+        <button
+          v-if="desk.inbox.value?.has_more"
+          type="button"
+          class="w-full px-3 py-3 text-center text-xs font-semibold text-[#075E54] hover:bg-surface-gray-1"
+          @click="desk.loadMoreConversations()"
+        >
+          Load more conversations
+        </button>
       </div>
     </aside>
 
     <!-- Center Chat Pane -->
     <section
-      class="inbox-chat flex min-h-0 flex-row overflow-hidden bg-white"
+      class="inbox-chat min-h-0 flex-row overflow-hidden bg-white"
       :class="desk.profile.value ? 'flex' : 'hidden md:flex'"
     >
       <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#efeae2]">
@@ -642,7 +712,7 @@ async function retryMessage(message: WhatsAppMessage) {
               Select a customer conversation from the list to view complete message history, reply within the 24-hour SLA window, or send approved Meta templates.
             </p>
           </div>
-          <div class="grid grid-cols-2 gap-3 pt-3 text-left">
+          <div class="grid grid-cols-1 gap-3 pt-3 text-left sm:grid-cols-2">
             <div class="rounded-xl border border-outline-gray-2 bg-white p-3.5 shadow-xs">
               <p class="text-xs font-semibold text-ink-gray-9 flex items-center gap-1.5">
                 <span class="lucide-clock size-3.5 text-emerald-600" /> 24h Service Window
@@ -674,8 +744,8 @@ async function retryMessage(message: WhatsAppMessage) {
       <!-- Active Thread View -->
       <template v-else-if="current">
         <!-- Thread Header -->
-        <header class="inbox-chat-header z-10 flex h-14 shrink-0 items-center gap-2 overflow-x-auto border-b border-[#E9EDEF] bg-white px-3">
-          <div class="inbox-contact flex items-center gap-2.5">
+        <header class="inbox-chat-header sticky top-0 z-10 flex h-14 shrink-0 items-center gap-1 overflow-hidden border-b border-[#E9EDEF] bg-white px-2 sm:gap-2 sm:px-3">
+          <div class="inbox-contact flex min-w-0 items-center gap-2">
             <button
               type="button"
               class="inline-flex size-9 items-center justify-center rounded-full text-[#54656F] hover:bg-[#F0F2F5] md:hidden"
@@ -687,7 +757,7 @@ async function retryMessage(message: WhatsAppMessage) {
 
             <button
               type="button"
-              class="flex items-center gap-2.5 rounded-lg text-left hover:bg-[#F0F2F5]"
+              class="flex min-w-0 items-center gap-2.5 rounded-lg text-left hover:bg-[#F0F2F5]"
               title="Contact info"
               @click="openContact"
             >
@@ -698,11 +768,11 @@ async function retryMessage(message: WhatsAppMessage) {
                   class="absolute bottom-0 right-0 size-2.5 rounded-full bg-[#25D366] ring-2 ring-white"
                 />
               </span>
-              <span>
-                <span class="block whitespace-nowrap text-sm font-semibold leading-tight text-[#111B21]">
+              <span class="min-w-0">
+                <span class="block truncate text-sm font-semibold leading-tight text-[#111B21]">
                   {{ current.profile.profile_name || current.profile.phone_number }}
                 </span>
-                <span class="block whitespace-nowrap text-xs leading-tight text-[#667781]">
+                <span class="block truncate text-xs leading-tight text-[#667781]">
                   {{ current.profile.phone_number }}
                 </span>
               </span>
@@ -762,12 +832,23 @@ async function retryMessage(message: WhatsAppMessage) {
 
             <button
               type="button"
-              class="inline-flex h-8 items-center gap-1 rounded-full px-2.5 text-xs font-medium text-[#54656F] hover:bg-[#F0F2F5]"
+              class="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-[#54656F] hover:bg-[#F0F2F5] sm:hidden"
+              title="Assign"
+              @click="openAssign"
+            >
+              <span class="lucide-user-plus size-4" aria-hidden="true" />
+            </button>
+
+            <button
+              type="button"
+              class="inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2 text-xs font-medium text-[#54656F] hover:bg-[#F0F2F5]"
               :class="notesOpen ? 'bg-emerald-50 text-emerald-700' : ''"
+              :title="notes.length ? `Notes ${notes.length}` : 'Notes'"
               @click="notesOpen = !notesOpen"
             >
               <span class="lucide-sticky-note size-4" aria-hidden="true" />
-              <span>Notes<span v-if="notes.length"> {{ notes.length }}</span></span>
+              <span class="hidden sm:inline">Notes<span v-if="notes.length"> {{ notes.length }}</span></span>
+              <span v-if="notes.length" class="sm:hidden text-[11px] font-semibold">{{ notes.length }}</span>
             </button>
 
             <button
@@ -811,14 +892,27 @@ async function retryMessage(message: WhatsAppMessage) {
               <div class="mt-0.5 whitespace-pre-wrap text-ink-gray-7">{{ note.content }}</div>
             </li>
           </ul>
-          <form class="mt-2 flex items-center gap-2" @submit.prevent="saveNote">
+          <form class="mt-2 flex flex-wrap items-center gap-2" @submit.prevent="saveNote">
             <TextInput v-model="noteText" class="min-w-0 flex-1" placeholder="Add an internal note" />
             <Button type="submit" size="sm" variant="solid" label="Save" :loading="savingNote" :disabled="!noteText.trim()" />
           </form>
         </div>
 
         <!-- Message History Canvas -->
-        <div ref="scroller" class="wa-chat-wallpaper min-h-0 min-w-0 flex-1 overflow-y-auto px-3 py-3 sm:px-6 md:px-10">
+        <div
+          ref="scroller"
+          class="wa-chat-wallpaper min-h-0 min-w-0 flex-1 overflow-y-auto px-3 py-3 sm:px-6 md:px-10"
+          @scroll="onChatScroll"
+          @load.capture="scrollToLatest"
+        >
+          <button
+            v-if="current?.has_older"
+            type="button"
+            class="mb-3 w-full rounded-md bg-white/80 px-3 py-2 text-center text-xs font-semibold text-[#075E54] shadow-sm"
+            @click="loadEarlier"
+          >
+            Load earlier messages
+          </button>
           <MessageList
             :key="current.profile.name"
             :messages="composer.messages"
@@ -855,7 +949,7 @@ async function retryMessage(message: WhatsAppMessage) {
           <Button
             size="sm"
             variant="solid"
-            class="bg-[#075E54] text-white hover:bg-[#128C7E] shrink-0"
+            class="w-full bg-[#075E54] text-white hover:bg-[#128C7E] sm:w-auto shrink-0"
             label="Select Template to Send"
             icon-left="lucide-layout-template"
             @click="templateOpen = true"
@@ -865,7 +959,7 @@ async function retryMessage(message: WhatsAppMessage) {
         <!-- Message Composer Input -->
         <div
           v-if="current.profile.status !== 'Blocked'"
-          class="shrink-0 border-t border-[#E9EDEF] bg-[#F0F2F5] px-2 py-2 sm:px-3"
+          class="inbox-composer sticky bottom-0 z-10 shrink-0 border-t border-[#E9EDEF] bg-[#F0F2F5] px-2 py-2 sm:px-3"
         >
           <MessageInput
             v-bind="composer"
@@ -907,7 +1001,7 @@ async function retryMessage(message: WhatsAppMessage) {
 
       <aside
         v-if="current && contactOpen"
-        class="inbox-rail inbox-rail-open relative hidden h-auto min-h-0 flex-col self-stretch border-l border-[#E9EDEF] bg-white md:flex"
+        class="inbox-rail inbox-rail-open relative hidden h-auto min-h-0 flex-col self-stretch border-l border-[#E9EDEF] bg-white xl:flex"
       >
         <div class="flex h-14 shrink-0 items-center gap-2 border-b border-[#E9EDEF] px-2">
           <button
@@ -932,9 +1026,9 @@ async function retryMessage(message: WhatsAppMessage) {
       </aside>
     </section>
 
-    <div v-if="details && current" class="fixed inset-0 z-50 md:hidden">
+    <div v-if="details && current" class="fixed inset-0 z-50 xl:hidden">
       <button type="button" class="absolute inset-0 bg-black/40" aria-label="Close contact info" @click="details = false" />
-      <aside class="absolute inset-x-0 bottom-0 flex max-h-[min(70dvh,32rem)] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl">
+      <aside class="absolute inset-x-0 bottom-0 flex max-h-[min(70dvh,32rem)] w-full flex-col overflow-hidden rounded-t-2xl bg-white pb-[env(safe-area-inset-bottom)] shadow-xl">
         <div class="flex h-11 shrink-0 items-center justify-between border-b border-[#E9EDEF] px-3">
           <span class="text-sm font-semibold text-[#111B21]">Contact info</span>
           <button type="button" class="grid size-8 place-items-center rounded-full text-[#54656F] hover:bg-[#F0F2F5]" aria-label="Close" @click="details = false">
@@ -1013,12 +1107,7 @@ async function retryMessage(message: WhatsAppMessage) {
                 <span class="text-sm font-semibold text-ink-gray-9">
                   {{ template.template_label || template.name }}
                 </span>
-                <span
-                  class="rounded-full px-2 py-0.5 text-[10px] font-medium"
-                  :class="template.status === 'Approved' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'"
-                >
-                  {{ template.status }}
-                </span>
+                <StatusBadge :label="template.status || 'Pending'" />
               </div>
               <p class="mt-1 line-clamp-2 text-xs text-ink-gray-6">{{ template.message }}</p>
               <div class="mt-2 flex items-center gap-2 text-[10px] text-ink-gray-5">
@@ -1138,7 +1227,7 @@ async function retryMessage(message: WhatsAppMessage) {
           <div
             v-for="item in filteredCatalogItems"
             :key="item.name"
-            class="flex items-center justify-between gap-3 rounded-xl border border-outline-gray-2 p-3 hover:border-outline-gray-4 transition-colors bg-white"
+            class="flex flex-col gap-3 rounded-xl border border-outline-gray-2 bg-white p-3 transition-colors hover:border-outline-gray-4 sm:flex-row sm:items-center sm:justify-between"
           >
             <div class="flex items-center gap-3 min-w-0">
               <div class="size-11 shrink-0 rounded-lg border border-outline-gray-2 bg-surface-gray-1 flex items-center justify-center overflow-hidden text-base">
@@ -1160,6 +1249,7 @@ async function retryMessage(message: WhatsAppMessage) {
               label="Send Product"
               icon-left="lucide-send"
               :loading="catalogSending && catalogSendingItem === item.name"
+              class="w-full sm:w-auto"
               :disabled="!catalogWindowOpen || catalogIdInvalid(item) || catalogSending"
               @click="sendProduct(item)"
             />

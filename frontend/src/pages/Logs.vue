@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
-import { Badge, Button, Dialog, toast } from 'frappe-ui'
+import { Button, Dialog, toast } from 'frappe-ui'
+import StatusBadge from '@/components/StatusBadge.vue'
 import { userFacingError } from '@/utils/errors'
 import { formatDay, formatTime, whatsappScreen } from '@/utils/format'
 import { isManager, useDesk } from '@/stores/desk'
@@ -282,8 +283,16 @@ const webhookLogsCount = computed(() => {
 })
 
 onMounted(() => {
-  desk.load()
+  void desk.load()
+  if (desk.mode.value === 'live') void desk.loadLogs()
 })
+
+watch(
+  () => desk.account.value,
+  () => {
+    if (desk.mode.value === 'live') void desk.loadLogs()
+  },
+)
 </script>
 
 <template>
@@ -298,7 +307,8 @@ onMounted(() => {
           <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
-          <span>WABA Channels & Accounts</span>
+          <span class="sm:hidden">Numbers</span>
+          <span class="hidden sm:inline">WABA Channels & Accounts</span>
         </RouterLink>
 
         <RouterLink
@@ -308,7 +318,8 @@ onMounted(() => {
           <svg class="h-4 w-4 text-[#075E54]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
-          <span>Message & Webhook Logs</span>
+          <span class="sm:hidden">Logs</span>
+          <span class="hidden sm:inline">Message & Webhook Logs</span>
         </RouterLink>
       </div>
 
@@ -527,32 +538,7 @@ onMounted(() => {
             <div class="flex flex-wrap items-start justify-between gap-2">
               <div class="flex flex-wrap items-center gap-2">
                 <!-- Level Badge -->
-                <span
-                  class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold"
-                  :class="
-                    row.level === 'Error'
-                      ? 'bg-red-50 text-red-700 ring-1 ring-inset ring-red-600/20'
-                      : row.level === 'Warning'
-                      ? 'bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20'
-                      : row.level === 'Info'
-                      ? 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20'
-                      : 'bg-gray-100 text-gray-700'
-                  "
-                >
-                  <span
-                    class="h-1.5 w-1.5 rounded-full"
-                    :class="
-                      row.level === 'Error'
-                        ? 'bg-red-500'
-                        : row.level === 'Warning'
-                        ? 'bg-amber-500'
-                        : row.level === 'Info'
-                        ? 'bg-emerald-500'
-                        : 'bg-gray-400'
-                    "
-                  ></span>
-                  {{ row.level }}
-                </span>
+                <StatusBadge :label="row.level || 'Info'" />
 
                 <!-- Event Type -->
                 <span class="rounded bg-surface-gray-2 px-2 py-0.5 text-[11px] font-medium text-ink-gray-7">
@@ -642,7 +628,7 @@ onMounted(() => {
                   Copy JSON
                 </button>
               </div>
-              <pre class="overflow-x-auto whitespace-pre-wrap max-h-56 leading-relaxed">{{ parsePayload(row.response_data || row.request_data) }}</pre>
+              <pre class="max-h-56 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed">{{ parsePayload(row.response_data || row.request_data) }}</pre>
             </div>
           </div>
         </div>

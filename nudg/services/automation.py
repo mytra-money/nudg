@@ -88,7 +88,6 @@ def on_wa_message(doc, method=None):
 		except Exception:
 			pass
 
-
 def guard_duplicate_inbound(doc, method=None):
 	"""Ignore a second delivery of the same incoming WhatsApp message.
 

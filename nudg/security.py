@@ -36,6 +36,69 @@ def _get_roles(user: str) -> set[str]:
 	return set()
 
 
+def _cache_enabled() -> bool:
+	flags = getattr(getattr(frappe, "local", None), "flags", None)
+	return not bool(getattr(flags, "in_test", False))
+
+
+def cache_get(key: str):
+	"""Redis value, or None when caching is off or the key is missing."""
+	if not _cache_enabled():
+		return None
+	try:
+		return frappe.cache().get_value(key, expires=True)
+	except Exception:
+		return None
+
+
+def cache_set(key: str, value, ttl: int = 120) -> None:
+	if not _cache_enabled():
+		return
+	try:
+		frappe.cache().set_value(key, value, expires_in_sec=ttl)
+	except Exception:
+		return
+
+
+def cache_delete_prefix(prefix: str) -> None:
+	try:
+		frappe.cache().delete_keys(prefix)
+	except Exception:
+		return
+
+
+def clear_account_caches(user: str | None = None) -> None:
+	"""Drop permission, account, template, and analytics caches."""
+	if user:
+		try:
+			frappe.cache().delete_value(f"nudg:wa-accounts:{user}")
+		except Exception:
+			pass
+		for prefix in (
+			f"nudg:accounts-meta:{user}",
+			f"nudg:analytics:{user}",
+			f"nudg:templates:{user}",
+		):
+			cache_delete_prefix(prefix)
+		return
+	for prefix in ("nudg:wa-accounts", "nudg:accounts-meta", "nudg:analytics", "nudg:templates"):
+		cache_delete_prefix(prefix)
+
+
+def on_wa_account_change(doc=None, method=None) -> None:
+	clear_account_caches()
+
+
+def on_template_change(doc=None, method=None) -> None:
+	cache_delete_prefix("nudg:templates")
+
+
+def on_user_permission_change(doc=None, method=None) -> None:
+	if getattr(doc, "allow", None) != "WA Account":
+		return
+	clear_account_caches(getattr(doc, "user", None))
+
+
 def get_user_wa_accounts(user: str | None = None) -> list[str]:
 	"""Return list of WA Account names the user is permitted to access.
 
@@ -49,6 +112,17 @@ def get_user_wa_accounts(user: str | None = None) -> list[str]:
 	if user in ("Guest", None):
 		return []
 
+	cache_key = f"nudg:wa-accounts:{user}"
+	cached = cache_get(cache_key)
+	if isinstance(cached, list):
+		return list(cached)
+
+	accounts = _query_user_wa_accounts(user)
+	cache_set(cache_key, accounts, 120)
+	return accounts
+
+
+def _query_user_wa_accounts(user: str) -> list[str]:
 	roles = _get_roles(user)
 	if user == "Administrator" or "System Manager" in roles:
 		return frappe.get_all(
@@ -77,11 +151,42 @@ def get_user_wa_accounts(user: str | None = None) -> list[str]:
 			filters={"owner": user},
 			pluck="name",
 		)
-		for acc in owned:
-			ensure_account_user_permission(acc, user)
-			valid.append(acc)
+		for acc in owned or []:
+			if not isinstance(acc, str) or not acc.strip():
+				continue
+			if ensure_account_user_permission(acc, user):
+				valid.append(acc)
 
 	return valid
+
+
+def get_assigned_wa_accounts(user: str | None = None) -> list[str]:
+	"""Accounts given to this user, not every account an administrator can open.
+
+	A User Permission or ownership counts. The System Manager "see all accounts"
+	list does not, so someone with no number of their own stays on All numbers.
+	"""
+	if not frappe.db or not frappe.db.exists("DocType", "WA Account"):
+		return []
+
+	user = user or getattr(getattr(frappe, "session", None), "user", None) or "Guest"
+	if user in ("Guest", None, "Administrator"):
+		return []
+
+	names: list[str] = []
+	permitted = frappe.get_all(
+		"User Permission",
+		filters={"user": user, "allow": "WA Account"},
+		pluck="for_value",
+		order_by="for_value asc",
+	)
+	for acc in permitted or []:
+		if acc and acc not in names and frappe.db.exists("WA Account", acc):
+			names.append(acc)
+	for acc in frappe.get_all("WA Account", filters={"owner": user}, pluck="name"):
+		if acc and acc not in names:
+			names.append(acc)
+	return names
 
 
 def undo_autoselected_default(doc, method=None) -> None:
@@ -155,10 +260,12 @@ def ensure_account_user_permission(account: str, user: str | None = None) -> boo
 		return False
 
 	roles = _get_roles(user)
-	if "System Manager" in roles:
+	if isinstance(roles, (list, tuple, set)) and "System Manager" in roles:
 		return False
 
-	acc = (account or "").strip()
+	if not isinstance(account, str):
+		return False
+	acc = account.strip()
 	if not acc or not frappe.db.exists("WA Account", acc):
 		return False
 
@@ -223,10 +330,6 @@ def get_tenant_campaign_query(user: str | None = None) -> str:
 
 	escaped = ", ".join(frappe.db.escape(a) for a in accounts)
 	return f"(`tabUTM Campaign`.whatsapp_account IN ({escaped}) OR `tabUTM Campaign`.whatsapp_account IS NULL OR `tabUTM Campaign`.whatsapp_account = '')"
-
-
-def get_tenant_hours_query(user: str | None = None) -> str:
-	return ""
 
 
 def get_tenant_quick_reply_query(user: str | None = None) -> str:

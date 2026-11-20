@@ -37,3 +37,8 @@ def conversation_status(profile: dict, preview: dict | None, window: dict) -> st
 	if (window or {}).get("status") == "open":
 		return WINDOW_OPEN
 	return TEMPLATE_ONLY
+
+
+def sync_profile_conversation_status(profile_name: str | None) -> None:
+	"""Inbox status is computed when the desk reads a conversation. Nothing is stored."""
+	return

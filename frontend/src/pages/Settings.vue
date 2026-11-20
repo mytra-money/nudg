@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { Badge, Button, call, Dialog, toast } from 'frappe-ui'
+import { Button, call, Dialog, toast } from 'frappe-ui'
+import EmptyState from '@/components/EmptyState.vue'
+import ErrorState from '@/components/ErrorState.vue'
+import LoadingState from '@/components/LoadingState.vue'
+import StatusBadge from '@/components/StatusBadge.vue'
 import { errorText } from '@/utils/format'
 import { deleteQuickReply, getWhatsappSettings, listQuickReplies, saveQuickReply, saveWhatsappSettings, updateWhatsappAccount } from '@/services/catalogApi'
 import { isManager, isSiteAdmin, useDesk } from '@/stores/desk'
@@ -30,6 +34,7 @@ export interface TeamMember {
 
 const teamMembers = ref<TeamMember[]>([])
 const teamLoading = ref(false)
+const teamError = ref<string | null>(null)
 const showAddMemberModal = ref(false)
 const showEditMemberModal = ref(false)
 const editingMember = ref<TeamMember | null>(null)
@@ -209,6 +214,7 @@ async function load() {
       replies.value = fallbackQuickReplies
     } else {
       error.value = errorText(caught)
+      toast.error(error.value)
     }
   } finally {
     loading.value = false
@@ -351,6 +357,7 @@ const mostUsedReply = computed(() => {
 
 async function loadTeamMembers() {
   const isLive = Boolean(window.csrf_token)
+  teamError.value = null
   if (!isLive) {
     teamMembers.value = fallbackTeamMembers
     return
@@ -358,13 +365,15 @@ async function loadTeamMembers() {
   teamLoading.value = true
   try {
     const res = await call('nudg.desk_api.list_team_members')
-    if (Array.isArray(res)) {
-      teamMembers.value = res
-    } else {
-      teamMembers.value = fallbackTeamMembers
+    teamMembers.value = Array.isArray(res) ? res : []
+    if (!Array.isArray(res)) {
+      teamError.value = 'Could not load team members.'
+      toast.error(teamError.value)
     }
-  } catch {
-    teamMembers.value = fallbackTeamMembers
+  } catch (caught) {
+    teamMembers.value = []
+    teamError.value = errorText(caught)
+    toast.error(teamError.value)
   } finally {
     teamLoading.value = false
   }
@@ -615,6 +624,9 @@ onMounted(() => {
 
       <!-- TAB 1: QUICK REPLIES -->
       <div v-if="activeTab === 'replies'" class="mt-6 space-y-6">
+        <LoadingState v-if="loading" label="Loading quick replies…" />
+        <ErrorState v-else-if="error" :message="error" allow-retry @retry="load" />
+        <template v-else>
         <!-- KPI Metrics -->
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div class="rounded-xl border border-outline-gray-2 bg-white p-4 shadow-2xs">
@@ -689,9 +701,7 @@ onMounted(() => {
                   <h3 class="text-sm font-semibold text-ink-gray-9">{{ row.title }}</h3>
                 </div>
 
-                <span class="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
-                  {{ row.status || 'Active' }}
-                </span>
+                <StatusBadge :label="row.status || 'Active'" />
               </div>
 
               <p class="mt-3 text-xs text-ink-gray-7 leading-relaxed whitespace-pre-wrap bg-surface-gray-2/40 rounded-lg p-3 border border-outline-gray-1">
@@ -745,6 +755,7 @@ onMounted(() => {
             Reset Filters
           </button>
         </div>
+        </template>
       </div>
 
       <!-- TAB 2: ROUTING & AUTO-ASSIGNMENT -->
@@ -954,8 +965,16 @@ onMounted(() => {
             />
           </div>
 
+          <LoadingState v-if="teamLoading" label="Loading team members…" />
+          <ErrorState v-else-if="teamError" :message="teamError" allow-retry @retry="loadTeamMembers" />
+          <EmptyState
+            v-else-if="!teamMembers.length"
+            title="No team members yet"
+            description="Add an agent to give them access to WhatsApp conversations."
+          />
+
           <!-- Members Table -->
-          <div class="mt-4 overflow-x-auto">
+          <div v-else class="mt-4 overflow-x-auto">
             <table class="min-w-full divide-y divide-outline-gray-2 text-xs">
               <thead>
                 <tr class="text-left text-ink-gray-5">
@@ -980,24 +999,13 @@ onMounted(() => {
                     </div>
                   </td>
                   <td class="py-3 px-4">
-                    <span
-                      class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold"
-                      :class="member.role === 'WhatsApp Manager' ? 'bg-purple-50 text-purple-700 border border-purple-200' : 'bg-blue-50 text-blue-700 border border-blue-200'"
-                    >
-                      {{ member.role }}
-                    </span>
+                    <StatusBadge :label="member.role" :tone="member.role === 'WhatsApp Manager' ? 'purple' : 'blue'" />
                   </td>
                   <td class="py-3 px-4 text-ink-gray-7 font-medium">
                     {{ member.account || 'All Permitted' }}
                   </td>
                   <td class="py-3 px-4">
-                    <span
-                      class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium"
-                      :class="member.enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'"
-                    >
-                      <span class="h-1.5 w-1.5 rounded-full" :class="member.enabled ? 'bg-emerald-500' : 'bg-red-500'"></span>
-                      {{ member.enabled ? 'Active' : 'Disabled' }}
-                    </span>
+                    <StatusBadge :label="member.enabled ? 'Active' : 'Disabled'" />
                   </td>
                   <td class="py-3 pl-4 text-right">
                     <button

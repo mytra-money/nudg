@@ -17,6 +17,7 @@ from frappe import _
 from frappe.utils import get_datetime, now_datetime
 
 from nudg.integrations.whatsapp import adapter
+from nudg.paging import page_limit, page_start
 from nudg.services import assignments, chatbot
 from nudg.utils.conversation_status import conversation_status
 from nudg.utils.errors import format_error_message
@@ -66,9 +67,16 @@ def _profile_column(fieldname: str) -> bool:
 
 def _profile_fields() -> list[str]:
 	fields = list(PROFILE_FIELDS)
-	if _profile_column("tags"):
-		fields.append("tags")
+	for optional in ("_user_tags", "_assign"):
+		if _profile_column(optional):
+			fields.append(optional)
 	return fields
+
+
+def _tag_parts(raw) -> list[str]:
+	if isinstance(raw, (list, tuple)):
+		return [str(part).strip() for part in raw if str(part).strip()]
+	return [part.strip() for part in str(raw or "").split(",") if part.strip()]
 ACCOUNT_FIELDS = ["name", "account_name", "status", "phone_id", "business_id", "app_id", "auto_read_receipts"]
 TEMPLATE_FIELDS = [
 	"name",
@@ -88,6 +96,10 @@ TEMPLATE_FIELDS = [
 	"variable_format",
 ]
 WINDOW = timedelta(hours=24)
+INBOX_PAGE = 30
+THREAD_PAGE = 40
+LOG_PAGE = 40
+TEMPLATE_PAGE = 50
 
 
 def has_app_permission() -> bool:
@@ -127,6 +139,8 @@ def _empty_inbox() -> dict:
 		"templates": [],
 		"conversations": [],
 		"queue_counts": {"all": 0, "mine": 0, "unassigned": 0, "bot": 0, "transferred": 0},
+		"has_more": False,
+		"start": 0,
 	}
 
 
@@ -141,22 +155,23 @@ def _assignment_people(assignment: dict | None) -> tuple[str | None, list[str]]:
 			if person and person not in people:
 				people.append(person)
 	single = assignment.get("assignee")
-	if single and single not in people and status != "Unassigned":
+	if single and single not in people and status == "Assigned":
 		people.append(single)
-	if status == "Unassigned" and not assignment.get("assignees"):
+	if status != "Assigned":
 		people = []
-	primary = people[-1] if people else None
+	primary = people[0] if people else None
 	return primary, people
 
 
-def _conversation_item(profile, preview, last_incoming, assignment) -> dict:
+def _conversation_item(profile, preview, last_incoming, assignment, unread_count: int = 0, bot_info: dict | None = None) -> dict:
 	"""One inbox card. Shared by the list endpoint and the socket payload."""
 	window = _window(last_incoming)
 	status = conversation_status(profile, preview, window)
 	raw_tags = assignment.get("tags") or ""
-	conv_tags = [t.strip() for t in str(raw_tags).split(",") if t.strip()]
+	conv_tags = _tag_parts(raw_tags)
 	phone_norm = normalize_mobile_no(profile.phone_number)
-	bot_info = chatbot.get_bot_status(profile.phone_number, profile.whatsapp_account)
+	if bot_info is None:
+		bot_info = chatbot.get_bot_status(profile.phone_number, profile.whatsapp_account)
 	assignee, assignees = _assignment_people(assignment)
 	return {
 		"profile": profile,
@@ -169,6 +184,7 @@ def _conversation_item(profile, preview, last_incoming, assignment) -> dict:
 		"failed": status == "failed",
 		"tags": conv_tags,
 		"tags_str": str(raw_tags),
+		"unread_count": int(unread_count or 0),
 		"assignment": {
 			"name": assignment.get("name"),
 			"assignee": assignee,
@@ -185,57 +201,69 @@ def _conversation_item(profile, preview, last_incoming, assignment) -> dict:
 
 
 @frappe.whitelist()
-def get_inbox(account: str | None = None, tag: str | None = None, tags: str | None = None, queue: str | None = "all") -> dict:
+def get_inbox(
+	account: str | None = None,
+	tag: str | None = None,
+	tags: str | None = None,
+	queue: str | None = "all",
+	start: int | None = 0,
+	limit: int | None = None,
+) -> dict:
 	if not _ready():
 		return _empty_inbox()
-	from nudg.services.delivery import fail_stuck_outgoing
-
-	fail_stuck_outgoing()
-	profiles = frappe.get_list(
-		"WA Profile",
-		fields=_profile_fields(),
-		filters={"whatsapp_account": account} if account else {},
-		order_by="modified desc",
-		limit_page_length=200,
-	)
-	profile_names = [row.name for row in profiles]
-	messages = []
-	if profile_names:
-		messages = frappe.get_list(
-			"WA Message",
-			fields=MESSAGE_FIELDS,
-			filters={"to": ["in", profile_names]},
-			order_by="creation desc",
-			limit_page_length=800,
+	if account:
+		_assert_account_allowed(account)
+	page_size = page_limit(limit, default=INBOX_PAGE, maximum=INBOX_PAGE)
+	offset = page_start(start)
+	filter_tag = (tag or tags or "").strip().lower()
+	queue_filter = (queue or "all").strip().lower()
+	filtering = bool(filter_tag) or queue_filter not in ("", "all")
+	# Filtered views scan a bounded window, then page the matches. The default
+	# inbox reads one page of the most recently updated conversations.
+	profile_filters = {"whatsapp_account": account} if account else {}
+	if filtering:
+		profiles = frappe.get_list(
+			"WA Profile",
+			fields=_profile_fields(),
+			filters=profile_filters,
+			order_by="modified desc",
+			limit_page_length=120,
 		)
-	messages = [_stamp(row) for row in messages]
-	latest: dict[str, dict] = {}
-	last_incoming: dict[str, str] = {}
-	for row in messages:
-		if row.get("reaction"):
-			continue
-		latest.setdefault(row.to, row)
-		if row.direction == "Incoming" and row.to not in last_incoming:
-			last_incoming[row.to] = row.creation
+	else:
+		profiles = frappe.get_list(
+			"WA Profile",
+			fields=_profile_fields(),
+			filters=profile_filters,
+			order_by="modified desc",
+			limit_start=offset,
+			limit_page_length=page_size + 1,
+		)
+	has_more = False
+	if not filtering:
+		has_more = len(profiles) > page_size
+		profiles = profiles[:page_size]
+	profile_names = [row.name for row in profiles]
+	latest, last_incoming = _latest_previews(profile_names)
 
 	default_account = _default_account()
 	assignment_map = assignments.get_conversation_map(profile_names) if profile_names else {}
+	unread_counts = _unread_counts(profile_names)
+	bot_map = chatbot.bot_status_for_profiles(profiles)
 
-	filter_tag = (tag or tags or "").strip().lower()
-	queue_filter = (queue or "all").strip().lower()
 	conversations = []
 	queue_counts = {"all": 0, "mine": 0, "unassigned": 0, "bot": 0, "transferred": 0}
 
 	for profile in profiles:
 		preview = latest.get(profile.name)
 		assignment = assignment_map.get(profile.name) or {}
-		conv_item = _conversation_item(profile, preview, last_incoming.get(profile.name), assignment)
-		status = conv_item["conversation_status"]
-
-		if assignment.get("name") and assignment.get("conversation_status") != status:
-			if _profile_column("conversation_status"):
-				frappe.db.set_value("WA Profile", profile.name, "conversation_status", status, update_modified=False)
-			assignment["conversation_status"] = status
+		conv_item = _conversation_item(
+			profile,
+			preview,
+			last_incoming.get(profile.name),
+			assignment,
+			unread_counts.get(profile.name, 0),
+			bot_map.get(profile.name),
+		)
 
 		raw_tags = assignment.get("tags") or ""
 		conv_tags = conv_item["tags"]
@@ -276,6 +304,11 @@ def get_inbox(account: str | None = None, tag: str | None = None, tags: str | No
 
 		conversations.append(conv_item)
 
+	conversations.sort(key=_latest_activity, reverse=True)
+	if filtering:
+		has_more = len(conversations) > offset + page_size
+		conversations = conversations[offset : offset + page_size]
+
 	return {
 		"mode": "live",
 		"connected": True,
@@ -284,9 +317,11 @@ def get_inbox(account: str | None = None, tag: str | None = None, tags: str | No
 		"default_account": default_account,
 		"can_read_logs": bool(frappe.has_permission("WA Log", "read")),
 		"accounts": _accounts(default_account),
-		"templates": _templates(account),
+		"templates": [],
 		"conversations": conversations,
 		"queue_counts": queue_counts,
+		"has_more": has_more,
+		"start": offset,
 	}
 
 
@@ -366,12 +401,9 @@ def publish_presence(conversation_id: str, action: str) -> dict:
 
 
 @frappe.whitelist()
-def get_thread(profile: str) -> dict:
+def get_thread(profile: str, before_creation: str | None = None, limit: int | None = None) -> dict:
 	if not _ready():
 		frappe.throw(_("WhatsApp is not connected on this site."))
-	from nudg.services.delivery import fail_stuck_outgoing
-
-	fail_stuck_outgoing()
 	visible = frappe.get_list(
 		"WA Profile",
 		filters={"name": profile},
@@ -381,13 +413,26 @@ def get_thread(profile: str) -> dict:
 	if not visible:
 		frappe.throw(_("You can't open this conversation."), frappe.PermissionError)
 
-	raw = frappe.get_list(
-		"WA Message",
-		filters={"to": profile},
-		fields=MESSAGE_FIELDS,
-		order_by="creation asc",
-		limit_page_length=500,
-	)
+	page_size = page_limit(limit, default=THREAD_PAGE, maximum=50)
+	cursor = (before_creation or "").strip()
+	from nudg.integrations.site_store import thread_messages
+
+	remote = thread_messages(profile, cursor or None, page_size + 1)
+	if remote is not None:
+		raw = remote
+	else:
+		filters: dict = {"to": profile}
+		if cursor:
+			filters["creation"] = ["<", cursor]
+		raw = frappe.get_list(
+			"WA Message",
+			filters=filters,
+			fields=MESSAGE_FIELDS,
+			order_by="creation desc",
+			limit_page_length=page_size + 1,
+		)
+	has_older = len(raw) > page_size
+	raw = list(reversed(raw[:page_size]))
 	raw = [_stamp(row) for row in raw]
 	rendered = _rendered_for(raw)
 	by_name = {row.name: row for row in raw}
@@ -404,13 +449,15 @@ def get_thread(profile: str) -> dict:
 
 	notes = _get_conversation_notes(profile)
 	prof = visible[0]
-	raw_tags = prof.get("tags") or ""
-	if not raw_tags and _profile_column("tags"):
-		raw_tags = frappe.db.get_value("WA Profile", profile, "tags") or ""
-	tags_list = [t.strip() for t in str(raw_tags).split(",") if t.strip()]
+	raw_tags = prof.get("_user_tags") or ""
+	if not raw_tags and _profile_column("_user_tags"):
+		raw_tags = frappe.db.get_value("WA Profile", profile, "_user_tags") or ""
+	tags_list = _tag_parts(raw_tags)
 
-	# Auto Read Receipts (Meta Cloud API + DB status sync)
-	_send_auto_read_receipts(profile)
+	# Marking messages read writes rows and may call Meta. Do that after the
+	# response is committed so opening a thread stays a read.
+	if not cursor:
+		_enqueue_read_receipts(profile)
 
 	bot_info = chatbot.get_bot_status(prof.get("phone_number"), prof.get("whatsapp_account"))
 
@@ -420,38 +467,80 @@ def get_thread(profile: str) -> dict:
 		"notes": notes,
 		"tags": tags_list,
 		"bot_status": bot_info,
-		"window": _window_from_messages(folded),
+		"window": _thread_window(profile, folded),
 		"references": _references(folded),
 		"links": _profile_links(profile),
+		"has_older": has_older,
 	}
 
 
-def _send_auto_read_receipts(profile: str) -> None:
-	"""Send Meta read receipts for incoming messages if auto_read_receipts is enabled on the account."""
+def _enqueue_read_receipts(profile: str) -> None:
+	if getattr(getattr(frappe.local, "flags", None), "in_test", False):
+		return
+	# The badge is the Read status. Apply it in this request so it does not wait
+	# for a background worker. Telling Meta stays on the queue.
+	message_ids: list[str] = []
+	account_name = frappe.db.get_value("WA Profile", profile, "whatsapp_account")
+	auto_read = bool(account_name and frappe.db.get_value("WA Account", account_name, "auto_read_receipts"))
 	try:
-		account_name = frappe.db.get_value("WA Profile", profile, "whatsapp_account")
-		if not account_name:
-			return
-		auto_read = frappe.db.get_value("WA Account", account_name, "auto_read_receipts")
-		if not auto_read:
-			return
+		from nudg.integrations.site_store import mark_thread_read
 
-		unread = frappe.get_all(
-			"WA Message",
-			filters={"to": profile, "direction": "Incoming", "status": ["!=", "Read"]},
-			fields=["name", "message_id"],
-			limit=20,
+		remote_ids = mark_thread_read(profile)
+		if remote_ids is not None:
+			message_ids = remote_ids
+			publish_inbox_change(profile)
+		elif _unread_counts([profile]).get(profile, 0):
+			unread = frappe.get_all(
+				"WA Message",
+				filters={"to": profile, "direction": "Incoming", "status": ["not in", ["Read", "Failed"]]},
+				fields=["message_id"],
+				limit_page_length=50,
+			)
+			message_ids = [row.message_id for row in unread if row.get("message_id")]
+			reaction_clause = ""
+			if frappe.db.has_column("WA Message", "reaction"):
+				reaction_clause = "and ifnull(`reaction`, '') = ''"
+			frappe.db.sql(
+				f"""
+				update `tabWA Message`
+				set status = 'Read'
+				where `to` = %(profile)s
+				  and direction = 'Incoming'
+				  and ifnull(status, '') not in ('Read', 'Failed')
+				  {reaction_clause}
+				""",
+				{"profile": profile},
+			)
+			publish_inbox_change(profile)
+	except Exception:
+		frappe.log_error(title="Nudg read receipt", message=frappe.get_traceback())
+		return
+	if not auto_read or not account_name or not message_ids:
+		return
+	try:
+		frappe.enqueue(
+			"nudg.api._send_auto_read_receipts",
+			queue="short",
+			timeout=120,
+			enqueue_after_commit=True,
+			profile=profile,
+			account_name=account_name,
+			message_ids=message_ids,
 		)
-		if not unread:
-			return
+	except Exception:
+		pass
 
-		for msg in unread:
-			if msg.get("message_id"):
-				adapter.mark_as_read(msg.message_id, account_name)
-			frappe.db.set_value("WA Message", msg.name, "status", "Read", update_modified=False)
-			publish_inbox_change(profile, msg.name, bump=False)
 
-		frappe.db.commit()
+def _send_auto_read_receipts(profile: str, account_name: str | None = None, message_ids: list | None = None) -> None:
+	"""Tell Meta that messages already marked Read were opened. The badge is set before this runs."""
+	if not account_name or not message_ids:
+		return
+	try:
+		for message_id in message_ids:
+			try:
+				adapter.mark_as_read(message_id, account_name)
+			except Exception:
+				frappe.log_error(title="WhatsApp read receipt", message=frappe.get_traceback())
 		frappe.publish_realtime(
 			"whatsapp_inbox_update",
 			{"type": "read", "profile": profile},
@@ -467,6 +556,7 @@ def assign_agent(profile: str, agent: str | None = None) -> dict:
 		frappe.throw(_("Log in to open Nudg."), frappe.PermissionError)
 	if not profile:
 		frappe.throw(_("Profile is required."))
+	_assert_profile_allowed(profile)
 
 	agent = (agent or "").strip()
 	res = (
@@ -533,6 +623,7 @@ def transfer_conversation_to_agent(profile: str, agent: str | None = None, notes
 	"""Hand off a chatbot session to a human agent."""
 	if frappe.session.user == "Guest":
 		frappe.throw(_("Log in to open Nudg."), frappe.PermissionError)
+	_assert_profile_allowed(profile)
 	phone = frappe.db.get_value("WA Profile", profile, "phone_number")
 	account = frappe.db.get_value("WA Profile", profile, "whatsapp_account")
 	if not phone:
@@ -549,6 +640,7 @@ def resume_conversation_chatbot(profile: str) -> dict:
 	"""Resume automated chatbot for a conversation."""
 	if frappe.session.user == "Guest":
 		frappe.throw(_("Log in to open Nudg."), frappe.PermissionError)
+	_assert_profile_allowed(profile)
 	phone = frappe.db.get_value("WA Profile", profile, "phone_number")
 	account = frappe.db.get_value("WA Profile", profile, "whatsapp_account")
 	if not phone:
@@ -557,7 +649,7 @@ def resume_conversation_chatbot(profile: str) -> dict:
 
 
 def _profiles_assigned_to(user: str) -> list[str]:
-	"""Profiles with an open ToDo for this user, plus the legacy single assignee field."""
+	"""Profiles with an open ToDo for this user."""
 	names: list[str] = []
 	try:
 		todo_names = frappe.get_all(
@@ -570,22 +662,43 @@ def _profiles_assigned_to(user: str) -> list[str]:
 			names.extend(todo_names)
 	except Exception:
 		pass
-	try:
-		legacy = frappe.get_all(
-			"WA Profile",
-			filters={"assignee": user, "assignment_status": "Assigned"},
-			pluck="name",
-			limit_page_length=0,
-		)
-		if isinstance(legacy, list):
-			names.extend(legacy)
-	except Exception:
-		pass
 	unique: list[str] = []
 	for name in names:
 		if name and name not in unique:
 			unique.append(name)
 	return unique
+
+
+def _unassigned_profile_count() -> int | None:
+	"""Profiles with nobody assigned and no Closed ToDo. None when ToDo cannot be read."""
+	try:
+		if not frappe.db.exists("DocType", "ToDo") or not frappe.db.exists("DocType", "WA Profile"):
+			return None
+		rows = frappe.get_all(
+			"ToDo",
+			filters={"reference_type": "WA Profile", "status": ["in", ["Open", "Closed"]]},
+			fields=["reference_name", "status"],
+			limit_page_length=0,
+		)
+		if not isinstance(rows, list):
+			return None
+		open_names: set[str] = set()
+		closed_names: set[str] = set()
+		for row in rows:
+			name = row.get("reference_name") if isinstance(row, dict) else getattr(row, "reference_name", None)
+			status = row.get("status") if isinstance(row, dict) else getattr(row, "status", None)
+			if not name:
+				continue
+			if status == "Open":
+				open_names.add(name)
+			elif status == "Closed":
+				closed_names.add(name)
+		total = frappe.db.count("WA Profile")
+		if not isinstance(total, int):
+			return None
+		return max(total - len(open_names) - len(closed_names - open_names), 0)
+	except Exception:
+		return None
 
 
 @frappe.whitelist()
@@ -600,29 +713,12 @@ def get_unread_count() -> dict[str, int]:
 		assigned_to_me = 0
 		unassigned = 0
 
-		if _profile_column("assignment_status"):
-			needs_reply = frappe.db.count(
-				"WA Profile",
-				filters={"conversation_status": ["in", ["needs_reply", "window_open"]]},
-			)
+		assigned_names = _profiles_assigned_to(user)
+		assigned_to_me = len(assigned_names)
 
-			assigned_names = _profiles_assigned_to(user)
-			assigned_to_me = (
-				frappe.db.count(
-					"WA Profile",
-					filters={
-						"name": ["in", assigned_names],
-						"conversation_status": ["in", ["needs_reply", "window_open"]],
-					},
-				)
-				if assigned_names
-				else 0
-			)
-
-			unassigned = frappe.db.count(
-				"WA Profile",
-				filters={"assignment_status": "Unassigned"},
-			)
+		native_unassigned = _unassigned_profile_count()
+		if native_unassigned is not None:
+			unassigned = native_unassigned
 
 		unread_messages = 0
 		if frappe.db.exists("DocType", "WA Message"):
@@ -642,14 +738,21 @@ def get_unread_count() -> dict[str, int]:
 
 
 @frappe.whitelist()
-def get_logs(account: str | None = None) -> list:
+def get_logs(account: str | None = None, start: int | None = 0, limit: int | None = None) -> list:
 	if frappe.session.user == "Guest":
 		frappe.throw(_("Log in to open Nudg."), frappe.PermissionError)
 	if not frappe.db.exists("DocType", "WA Log"):
 		return []
 	if not frappe.has_permission("WA Log", "read"):
 		frappe.throw(_("You can't read the WhatsApp log."), frappe.PermissionError)
-	filters = {"account": account} if account else {}
+	filters: dict = {}
+	if account:
+		_assert_account_allowed(account)
+		filters["account"] = account
+	else:
+		allowed = _readable_accounts()
+		if allowed is not None:
+			filters["account"] = ["in", allowed or ["__none__"]]
 	rows = frappe.get_list(
 		"WA Log",
 		fields=[
@@ -666,13 +769,177 @@ def get_logs(account: str | None = None) -> list:
 		],
 		filters=filters,
 		order_by="timestamp desc",
-		limit_page_length=80,
+		limit_start=page_start(start),
+		limit_page_length=page_limit(limit, default=LOG_PAGE, maximum=50),
 	)
 	for row in rows:
 		row.timestamp = _iso(row.timestamp)
 		row.request_data = _clip(row.request_data)
 		row.response_data = _clip(row.response_data)
 	return rows
+
+
+def _readable_accounts() -> list[str] | None:
+	"""Account names a non-admin may read. None leaves the list unscoped."""
+	from nudg.security import _get_roles, get_user_wa_accounts
+
+	user = getattr(frappe.session, "user", None)
+	roles = _get_roles(user) if user else set()
+	if user == "Administrator" or (isinstance(roles, (list, tuple, set)) and "System Manager" in roles):
+		return None
+	allowed = get_user_wa_accounts(user)
+	if not isinstance(allowed, list):
+		return None
+	return [item for item in allowed if isinstance(item, str)]
+
+
+def _assert_account_allowed(account: str | None) -> None:
+	if not isinstance(account, str) or not account.strip():
+		return
+	allowed = _readable_accounts()
+	if allowed is None:
+		return
+	if account not in allowed:
+		frappe.throw(_("You do not have access to this WhatsApp account."), frappe.PermissionError)
+
+
+def _assert_profile_allowed(profile: str) -> None:
+	if not profile:
+		return
+	try:
+		account = frappe.db.get_value("WA Profile", profile, "whatsapp_account")
+	except Exception:
+		return
+	if isinstance(account, str):
+		_assert_account_allowed(account)
+
+
+def _row_dicts(value) -> list | None:
+	if isinstance(value, list):
+		return value
+	return None
+
+
+def _latest_previews(profile_names: list[str]) -> tuple[dict, dict]:
+	"""One latest message and the last incoming time per conversation."""
+	latest: dict[str, dict] = {}
+	last_incoming: dict[str, str] = {}
+	if not profile_names:
+		return latest, last_incoming
+	from nudg.integrations.site_store import previews, split_profiles
+
+	local_names, remote_profiles = split_profiles(profile_names)
+	for row in (_preview_rows(local_names) if local_names else []):
+		stamped = _stamp(row)
+		if stamped.get("reaction"):
+			continue
+		key = stamped.get("to")
+		if not key or key in latest:
+			continue
+		latest[key] = stamped
+		if stamped.get("direction") == "Incoming":
+			last_incoming[key] = stamped.creation
+	for row in (_last_incoming_rows(local_names) if local_names else []):
+		key = row.get("profile") or row.get("to")
+		created = row.get("creation")
+		if key and created and key not in last_incoming:
+			last_incoming[key] = _iso(created)
+	for name, (preview, incoming) in previews(remote_profiles).items():
+		latest[name] = _stamp(preview)
+		if incoming:
+			last_incoming[name] = _iso(incoming)
+	return latest, last_incoming
+
+
+def _preview_rows(profile_names: list[str]) -> list:
+	try:
+		from frappe.query_builder import Order
+		from frappe.query_builder.functions import IfNull, Max
+
+		message = frappe.qb.DocType("WA Message")
+		latest = (
+			frappe.qb.from_(message)
+			.select(message.to.as_("profile_name"), Max(message.creation).as_("latest_creation"))
+			.where(message.to.isin(profile_names))
+			.where(IfNull(message.reaction, "") == "")
+			.groupby(message.to)
+		).as_("latest")
+		query = (
+			frappe.qb.from_(message)
+			.join(latest)
+			.on((latest.profile_name == message.to) & (latest.latest_creation == message.creation))
+			.select(*(getattr(message, field) for field in MESSAGE_FIELDS))
+			.where(IfNull(message.reaction, "") == "")
+			.orderby(message.creation, order=Order.desc)
+		)
+		rows = _row_dicts(query.run(as_dict=True))
+		if rows is not None:
+			return rows
+	except Exception:
+		pass
+	cap = min(max(len(profile_names) * 3, INBOX_PAGE), 90)
+	rows = frappe.get_list(
+		"WA Message",
+		fields=MESSAGE_FIELDS,
+		filters={"to": ["in", profile_names]},
+		order_by="creation desc",
+		limit_page_length=cap,
+	)
+	return rows if isinstance(rows, list) else []
+
+
+def _last_incoming_rows(profile_names: list[str]) -> list:
+	try:
+		from frappe.query_builder.functions import IfNull, Max
+
+		message = frappe.qb.DocType("WA Message")
+		query = (
+			frappe.qb.from_(message)
+			.select(message.to.as_("profile"), Max(message.creation).as_("creation"))
+			.where(message.to.isin(profile_names))
+			.where(message.direction == "Incoming")
+			.where(IfNull(message.reaction, "") == "")
+			.groupby(message.to)
+		)
+		rows = _row_dicts(query.run(as_dict=True))
+		if rows is not None:
+			return rows
+	except Exception:
+		pass
+	return []
+
+
+def _thread_window(profile: str, messages: list) -> dict:
+	"""Window from the latest incoming message, including ones older than this page."""
+	from nudg.integrations.site_store import last_incoming_at
+
+	remote_at = last_incoming_at(profile)
+	if remote_at is not None:
+		return _window(remote_at or None)
+	created = None
+	try:
+		created = frappe.db.get_value(
+			"WA Message",
+			{"to": profile, "direction": "Incoming"},
+			"creation",
+			order_by="creation desc",
+		)
+	except Exception:
+		created = None
+	if _looks_like_datetime(created):
+		return _window(created)
+	return _window_from_messages(messages)
+
+
+def _looks_like_datetime(value) -> bool:
+	from datetime import date, datetime
+
+	if isinstance(value, (datetime, date)):
+		return True
+	if not isinstance(value, str):
+		return False
+	text = value.strip()
+	return len(text) >= 10 and text[4:5] == "-" and text[7:8] == "-"
 
 
 def _ready() -> bool:
@@ -699,34 +966,70 @@ def _default_account() -> str | None:
 def _accounts(default_account: str | None) -> list:
 	if not frappe.db.exists("DocType", "WA Account"):
 		return []
-	from nudg.security import get_user_wa_accounts
-	user_accounts = get_user_wa_accounts(getattr(frappe.session, "user", None))
-	if not user_accounts:
+	from nudg.security import cache_get, cache_set, get_assigned_wa_accounts, get_user_wa_accounts
+	user = getattr(frappe.session, "user", None)
+	user_accounts = get_user_wa_accounts(user)
+	if not isinstance(user_accounts, list) or not user_accounts:
 		return []
-	rows = frappe.get_all(
-		"WA Account",
-		filters={"name": ["in", user_accounts]},
-		fields=ACCOUNT_FIELDS,
-		order_by="account_name asc",
-		limit_page_length=50,
-	)
+	cache_key = f"nudg:accounts-meta:{user}:{','.join(user_accounts)}"
+	cached = cache_get(cache_key)
+	if isinstance(cached, list):
+		rows = [dict(row) for row in cached]
+	else:
+		assigned = set(get_assigned_wa_accounts(user))
+		rows = frappe.get_all(
+			"WA Account",
+			filters={"name": ["in", user_accounts]},
+			fields=ACCOUNT_FIELDS,
+			order_by="account_name asc",
+			limit_page_length=50,
+		)
+		if not isinstance(rows, list):
+			return []
+		for row in rows:
+			row["assigned"] = row.name in assigned
+			row["auto_read_receipts"] = bool(row.auto_read_receipts)
+		cache_set(cache_key, [dict(row) for row in rows], 120)
+		rows = [dict(row) for row in rows]
 	for row in rows:
-		row["is_default"] = row.name == default_account
-		row["auto_read_receipts"] = bool(row.auto_read_receipts)
+		row["is_default"] = row.get("name") == default_account
 	return rows
 
 
-def _templates(account: str | None = None) -> list:
+@frappe.whitelist()
+def get_templates(account: str | None = None, start: int | None = 0, limit: int | None = None) -> list:
+	"""Approved and draft templates for the composer. Not part of the inbox payload."""
+	if not _ready():
+		return []
+	if account:
+		_assert_account_allowed(account)
+	offset = page_start(start)
+	page_size = page_limit(limit, default=TEMPLATE_PAGE, maximum=100)
+	user = getattr(frappe.session, "user", None) or "Guest"
+	cache_key = f"nudg:templates:{user}:{account or 'all'}:{offset}:{page_size}"
+	from nudg.security import cache_get, cache_set
+
+	cached = cache_get(cache_key)
+	if isinstance(cached, list):
+		return cached
+	rows = _templates(account, start=offset, limit=page_size)
+	cache_set(cache_key, rows, 300)
+	return rows
+
+
+def _templates(account: str | None = None, start: int = 0, limit: int = TEMPLATE_PAGE) -> list:
 	if not frappe.has_permission("WA Template", "read"):
 		return []
+	window = start + limit
 	rows = frappe.get_list(
 		"WA Template",
 		fields=TEMPLATE_FIELDS,
 		order_by="modified desc",
-		limit_page_length=200,
+		limit_page_length=window,
 	)
 	if account:
 		rows = [row for row in rows if not row.whatsapp_account or row.whatsapp_account == account]
+	rows = rows[start:window]
 	_attach_template_buttons(rows)
 	_attach_template_variables(rows)
 	return rows
@@ -743,7 +1046,7 @@ def _attach_template_variables(rows: list) -> None:
 		filters={"parent": ["in", names], "parenttype": "WA Template"},
 		fields=["parent", "variable_name", "variable_example", "variable_field", "idx"],
 		order_by="idx asc",
-		limit_page_length=2000,
+		limit_page_length=max(len(names) * 20, 1),
 	)
 	grouped: dict[str, list] = {}
 	for variable in variables:
@@ -946,6 +1249,11 @@ def _window_from_messages(messages: list) -> dict:
 
 def get_window_state(profile: str) -> dict:
 	"""Return the 24-hour service window state for a given profile."""
+	from nudg.integrations.site_store import last_incoming_at
+
+	remote_at = last_incoming_at(profile)
+	if remote_at is not None:
+		return _window(remote_at or None)
 	last_incoming = frappe.db.get_value(
 		"WA Message",
 		filters={"to": profile, "direction": "Incoming"},
@@ -955,15 +1263,60 @@ def get_window_state(profile: str) -> dict:
 	return _window(str(last_incoming) if last_incoming else None)
 
 
+def _latest_activity(item: dict) -> str:
+	"""Newest incoming or outgoing message. Chats with no message sort last."""
+	preview = item.get("preview") or {}
+	return str(preview.get("creation") or "")
+
+
+def _unread_counts(profile_names: list[str]) -> dict[str, int]:
+	"""Incoming messages the agent has not opened, per conversation."""
+	if not profile_names or not frappe.db.has_column("WA Message", "status"):
+		return {}
+	from nudg.integrations.site_store import split_profiles, unread_counts
+
+	local_names, remote_profiles = split_profiles(profile_names)
+	remote_unread = unread_counts(remote_profiles)
+	if not local_names:
+		return remote_unread
+	profile_names = local_names
+	reaction_clause = ""
+	if frappe.db.has_column("WA Message", "reaction"):
+		reaction_clause = "and ifnull(`reaction`, '') = ''"
+	rows = frappe.db.sql(
+		f"""
+		select `to` as profile, count(*) as unread
+		from `tabWA Message`
+		where `to` in %(profiles)s
+		  and direction = 'Incoming'
+		  and ifnull(status, '') not in ('Read', 'Failed')
+		  {reaction_clause}
+		group by `to`
+		""",
+		{"profiles": profile_names},
+		as_dict=True,
+	)
+	counts = {row.profile: int(row.unread or 0) for row in rows}
+	counts.update(remote_unread)
+	return counts
+
+
 def _stamp(row):
+	if not isinstance(row, frappe._dict):
+		row = frappe._dict(row)
 	row.creation = _iso(row.creation)
-	row.is_template = bool(row.is_template)
+	row.is_template = bool(row.get("is_template"))
 	if row.get("error_message"):
 		row.error_message = format_error_message(row.error_message)
 	return row
 
 
-def publish_inbox_change(profile: str | None, message_name: str | None = None, bump: bool = False) -> None:
+def publish_inbox_change(
+	profile: str | None,
+	message_name: str | None = None,
+	bump: bool = False,
+	message: dict | None = None,
+) -> None:
 	"""Push one conversation card the desk already computed.
 
 	The browser inserts that card and, when present, the one changed message.
@@ -978,7 +1331,10 @@ def publish_inbox_change(profile: str | None, message_name: str | None = None, b
 		card = _conversation_card(profile)
 		if not card:
 			return
-		message = _visible_message(message_name) if message_name else None
+		if message is None and message_name:
+			message = _visible_message(message_name)
+		elif message is not None:
+			message = _stamp(message)
 		frappe.publish_realtime(
 			"nudg_inbox",
 			{
@@ -1003,30 +1359,15 @@ def _conversation_card(profile_name: str) -> dict | None:
 	if not rows:
 		return None
 	profile = rows[0]
-	messages = frappe.get_all(
-		"WA Message",
-		filters={"to": profile_name},
-		fields=MESSAGE_FIELDS,
-		order_by="creation desc",
-		limit_page_length=40,
-	)
-	preview = None
-	last_incoming = None
-	for row in messages:
-		stamped = _stamp(frappe._dict(row))
-		if stamped.get("reaction"):
-			continue
-		if preview is None:
-			preview = stamped
-		if stamped.get("direction") == "Incoming" and last_incoming is None:
-			last_incoming = stamped.creation
-		if preview is not None and last_incoming is not None:
-			break
+	latest, incoming_at = _latest_previews([profile_name])
+	preview = latest.get(profile_name)
+	last_incoming = incoming_at.get(profile_name)
 	try:
 		assignment = assignments.get_conversation_map([profile_name]).get(profile_name) or {}
 	except Exception:
 		assignment = {}
-	return _conversation_item(profile, preview, last_incoming, assignment)
+	unread = _unread_counts([profile_name]).get(profile_name, 0)
+	return _conversation_item(profile, preview, last_incoming, assignment, unread)
 
 
 def _as_message(row):

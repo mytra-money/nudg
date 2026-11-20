@@ -15,6 +15,10 @@ import requests
 from nudg.integrations.erpnext.safety import SiteURLError, validate_site_url
 
 _TOKEN_RE = re.compile(r"(token\s+)[^\s\"']+", re.IGNORECASE)
+_BEARER_RE = re.compile(r"(bearer\s+)[^\s\"']+", re.IGNORECASE)
+_SECRET_FIELD_RE = re.compile(
+	r"(?i)(api[_-]?key|api[_-]?secret|access[_-]?token|authorization)([=:]\s*)([^\s\"']+)"
+)
 Transport = Callable[..., requests.Response]
 
 
@@ -29,6 +33,8 @@ def redact(text: str | None, secrets: list[str] | None = None) -> str:
 	if not text:
 		return ""
 	cleaned = _TOKEN_RE.sub(r"\1[REDACTED]", str(text))
+	cleaned = _BEARER_RE.sub(r"\1[REDACTED]", cleaned)
+	cleaned = _SECRET_FIELD_RE.sub(r"\1\2[REDACTED]", cleaned)
 	for secret in secrets or []:
 		if secret and len(secret) > 4:
 			cleaned = cleaned.replace(secret, "[REDACTED]")
@@ -46,7 +52,7 @@ class ERPNextClient:
 		*,
 		allow_http: bool = False,
 		allow_loopback: bool = False,
-		timeout: tuple[float, float] = (5.0, 20.0),
+		timeout: tuple[float, float] = (3.0, 10.0),
 		transport: Transport | None = None,
 	):
 		self.site_url = validate_site_url(site_url, allow_http=allow_http, allow_loopback=allow_loopback)
@@ -74,6 +80,7 @@ class ERPNextClient:
 		fields: list[str],
 		filters: list | dict | None = None,
 		limit: int = 100,
+		order_by: str = "modified desc",
 	) -> list:
 		result = self._data(
 			self.request(
@@ -83,7 +90,7 @@ class ERPNextClient:
 					"fields": json.dumps(fields),
 					"filters": json.dumps(filters or []),
 					"limit_page_length": limit,
-					"order_by": "modified desc",
+					"order_by": order_by,
 				},
 			)
 		)
@@ -169,6 +176,16 @@ class ERPNextClient:
 				timeout=self.timeout,
 				allow_redirects=False,
 			)
+		except requests.Timeout:
+			raise ERPNextClientError(
+				"The ERPNext site did not respond in time.",
+				retryable=True,
+			) from None
+		except requests.ConnectionError:
+			raise ERPNextClientError(
+				"Could not reach the ERPNext site.",
+				retryable=True,
+			) from None
 		except requests.RequestException as exc:
 			from nudg.integrations.erpnext.payload import classify_transport_failure
 
@@ -176,12 +193,21 @@ class ERPNextClient:
 			raise ERPNextClientError(
 				"Could not reach the ERPNext site.",
 				retryable=kind == "retryable",
-			) from exc
+			) from None
 		if allow_404 and response.status_code == 404:
 			return None
-		if response.status_code >= 400:
+		if response.status_code in {401, 403}:
 			raise ERPNextClientError(
-				redact(response.text, self._secrets) or f"ERPNext returned HTTP {response.status_code}.",
+				"ERPNext refused the API credentials.",
+				status_code=response.status_code,
+				retryable=False,
+			)
+		if response.status_code >= 400:
+			detail = redact(response.text, self._secrets)
+			if response.status_code >= 500 and not detail:
+				detail = "ERPNext could not complete the request."
+			raise ERPNextClientError(
+				detail or f"ERPNext returned HTTP {response.status_code}.",
 				status_code=response.status_code,
 				retryable=response.status_code in {408, 429, 500, 502, 503, 504},
 			)

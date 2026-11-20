@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { Button, Dialog, toast } from 'frappe-ui'
+import EmptyState from '@/components/EmptyState.vue'
+import ErrorState from '@/components/ErrorState.vue'
+import LoadingState from '@/components/LoadingState.vue'
+import StatusBadge from '@/components/StatusBadge.vue'
 import { formatDay, formatTime, rawErrorText } from '@/utils/format'
 import {
   cancelChatbotSession,
@@ -287,14 +291,28 @@ function when(value?: string) {
   return `${formatDay(value)} ${formatTime(value)}`.trim()
 }
 
+function pickAccount() {
+  const names = accounts.value.map((row) => row.name)
+  const selected = desk.account.value
+  if (selected && selected !== 'all' && names.includes(selected)) {
+    account.value = selected
+    return
+  }
+  if (!account.value || !names.includes(account.value)) account.value = names[0] || ''
+  if (!account.value) loading.value = false
+}
+
 watch(account, () => {
   if (account.value) loadAccount()
 })
 
+watch(accounts, () => {
+  if (!account.value) pickAccount()
+})
+
 onMounted(async () => {
   await desk.load()
-  account.value = accounts.value[0]?.name || ''
-  if (!account.value) loading.value = false
+  pickAccount()
 })
 </script>
 
@@ -310,7 +328,7 @@ onMounted(async () => {
           </div>
           <div>
             <h1 class="text-2xl font-bold tracking-tight text-ink-gray-9">Automation</h1>
-            <p class="text-xs text-ink-gray-6 sm:text-sm">Replies, questions, and handoff for one WhatsApp number.</p>
+            <p class="text-xs text-ink-gray-6 sm:text-sm">Set up the bot, then add keywords and questions for one WhatsApp number.</p>
           </div>
         </div>
         <label class="block w-full text-xs font-semibold text-ink-gray-7 md:w-72">
@@ -327,7 +345,7 @@ onMounted(async () => {
       <div class="mt-6 flex flex-wrap items-center gap-1 border-b border-outline-gray-2 pb-px">
         <button
           v-for="item in [
-            { id: 'bot', label: 'Bot' },
+            { id: 'bot', label: 'Set up bot' },
             { id: 'keywords', label: 'Keywords' },
             { id: 'flows', label: 'Flows' },
             { id: 'handoffs', label: 'Handoffs' },
@@ -342,23 +360,26 @@ onMounted(async () => {
         </button>
       </div>
 
-      <p v-if="error" class="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
-      <p v-else-if="!account" class="mt-6 rounded-xl border border-outline-gray-2 bg-white p-6 text-sm text-ink-gray-6">
-        Connect a WhatsApp account before setting up the bot.
-      </p>
-      <p v-else-if="loading" class="mt-6 text-sm text-ink-gray-5">Loading…</p>
+      <EmptyState
+        v-if="!account"
+        class="mt-6"
+        title="No WhatsApp account connected"
+        description="Connect a WhatsApp number before setting up the bot."
+      />
+      <LoadingState v-else-if="loading" label="Loading automation…" />
+      <ErrorState v-else-if="error" class="mt-6" :message="error" allow-retry @retry="loadAccount" />
 
       <div v-else-if="tab === 'bot'" class="mt-6 space-y-4">
         <div class="grid items-start gap-4 lg:grid-cols-2">
           <section class="rounded-xl border border-outline-gray-2 bg-white p-5 shadow-2xs">
-            <div class="flex items-center justify-between gap-3">
+            <div class="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 class="text-sm font-bold text-ink-gray-9">Replies</h2>
-                <p class="mt-1 text-xs text-ink-gray-5">Used when no keyword or flow matches.</p>
+                <h2 class="text-sm font-bold text-ink-gray-9">Set up the bot</h2>
+                <p class="mt-1 text-xs text-ink-gray-5">Turn it on and save the reply used when no keyword or flow matches.</p>
               </div>
               <label class="flex items-center gap-2 text-xs font-semibold text-ink-gray-7">
                 <input v-model="bot.enabled" type="checkbox" class="h-4 w-4 rounded border-outline-gray-3" :true-value="1" :false-value="0" />
-                On
+                {{ bot.enabled ? 'Bot on' : 'Bot off' }}
               </label>
             </div>
             <label class="mt-4 block text-xs font-semibold text-ink-gray-7">
@@ -375,7 +396,7 @@ onMounted(async () => {
           </section>
 
           <section class="rounded-xl border border-outline-gray-2 bg-white p-5 shadow-2xs">
-            <div class="flex items-center justify-between gap-3">
+            <div class="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 class="text-sm font-bold text-ink-gray-9">Business hours</h2>
                 <p class="mt-1 text-xs text-ink-gray-5">Outside these hours the bot sends the away message.</p>
@@ -389,28 +410,34 @@ onMounted(async () => {
               Away message
               <textarea v-model="bot.out_of_hours_message" rows="2" class="mt-1 block w-full resize-y rounded-lg border border-outline-gray-2 px-3 py-2 text-sm font-normal" placeholder="We are closed. We will reply in the morning." />
             </label>
-            <div class="mt-3 overflow-x-auto rounded-lg border border-outline-gray-2">
-              <div class="grid min-w-[22rem] grid-cols-[7.5rem_4.5rem_minmax(0,1fr)_minmax(0,1fr)] gap-2 border-b border-outline-gray-2 bg-surface-gray-1 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-ink-gray-5">
+            <div class="mt-3 divide-y divide-outline-gray-1 overflow-hidden rounded-lg border border-outline-gray-2">
+              <div class="hidden grid-cols-[7.5rem_4.5rem_minmax(0,1fr)_minmax(0,1fr)] gap-2 bg-surface-gray-1 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-ink-gray-5 sm:grid">
                 <span>Day</span>
                 <span>Open</span>
                 <span>From</span>
                 <span>To</span>
               </div>
-              <div v-for="row in bot.business_hours" :key="row.day" class="grid min-w-[22rem] grid-cols-[7.5rem_4.5rem_minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 border-b border-outline-gray-1 px-3 py-2 last:border-b-0">
+              <div v-for="row in bot.business_hours" :key="row.day" class="grid grid-cols-1 gap-2 px-3 py-2 sm:grid-cols-[7.5rem_4.5rem_minmax(0,1fr)_minmax(0,1fr)] sm:items-center">
                 <span class="text-xs font-semibold text-ink-gray-8">{{ row.day }}</span>
                 <label class="flex items-center gap-1.5 text-xs text-ink-gray-6">
                   <input v-model="row.enabled" type="checkbox" class="h-3.5 w-3.5" :true-value="1" :false-value="0" />
                   Open
                 </label>
-                <input v-model="row.start_time" type="time" class="w-full rounded-md border border-outline-gray-2 px-2 py-1 text-xs" :disabled="!row.enabled" />
-                <input v-model="row.end_time" type="time" class="w-full rounded-md border border-outline-gray-2 px-2 py-1 text-xs" :disabled="!row.enabled" />
+                <label class="block text-[11px] font-medium text-ink-gray-5">
+                  <span class="sm:sr-only">From</span>
+                  <input v-model="row.start_time" type="time" class="mt-1 w-full rounded-md border border-outline-gray-2 px-2 py-1 text-xs font-normal text-ink-gray-8 sm:mt-0" :disabled="!row.enabled" />
+                </label>
+                <label class="block text-[11px] font-medium text-ink-gray-5">
+                  <span class="sm:sr-only">To</span>
+                  <input v-model="row.end_time" type="time" class="mt-1 w-full rounded-md border border-outline-gray-2 px-2 py-1 text-xs font-normal text-ink-gray-8 sm:mt-0" :disabled="!row.enabled" />
+                </label>
               </div>
             </div>
           </section>
         </div>
 
         <section class="rounded-xl border border-outline-gray-2 bg-white p-5 shadow-2xs">
-          <div class="flex items-center justify-between gap-3">
+          <div class="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 class="text-sm font-bold text-ink-gray-9">AI fallback</h2>
               <p class="mt-1 text-xs text-ink-gray-5">Optional. The bot asks the model only after keywords and flows miss.</p>
@@ -451,12 +478,12 @@ onMounted(async () => {
       </div>
 
       <div v-else-if="tab === 'keywords'" class="mt-6">
-        <div class="mb-3 flex items-center justify-between gap-3">
+        <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
           <p class="text-xs text-ink-gray-5">A matching word sends a reply or starts a flow.</p>
           <Button variant="solid" size="sm" class="bg-[#075E54] text-white hover:bg-[#128C7E]" label="Add keyword" @click="openKeyword()" />
         </div>
         <div class="overflow-x-auto rounded-xl border border-outline-gray-2 bg-white shadow-2xs">
-          <p v-if="!keywords.length" class="px-5 py-8 text-center text-sm text-ink-gray-5">No keywords for this account yet.</p>
+          <EmptyState v-if="!keywords.length" compact title="No keywords yet" description="A matching word sends a reply or starts a flow." />
           <table v-else class="w-full text-left text-sm">
             <thead class="border-b border-outline-gray-2 bg-surface-gray-1 text-xs font-semibold text-ink-gray-5">
               <tr>
@@ -482,13 +509,11 @@ onMounted(async () => {
       </div>
 
       <div v-else-if="tab === 'flows'" class="mt-6">
-        <div class="mb-3 flex items-center justify-between gap-3">
+        <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
           <p class="text-xs text-ink-gray-5">Ask a few questions, then send the closing message. Use {email} to repeat a saved answer.</p>
           <Button variant="solid" size="sm" class="bg-[#075E54] text-white hover:bg-[#128C7E]" label="Add flow" @click="openFlow()" />
         </div>
-        <div v-if="!flows.length" class="rounded-xl border border-outline-gray-2 bg-white px-5 py-8 text-center text-sm text-ink-gray-5 shadow-2xs">
-          No flows for this account yet.
-        </div>
+        <EmptyState v-if="!flows.length" title="No flows yet" description="Ask a few questions, then send a closing message." />
         <div v-else class="grid gap-3 lg:grid-cols-2">
           <article v-for="row in flows" :key="row.name" class="rounded-xl border border-outline-gray-2 bg-white p-4 shadow-2xs">
             <div class="flex items-start justify-between gap-3">
@@ -496,9 +521,7 @@ onMounted(async () => {
                 <h2 class="truncate text-sm font-bold text-ink-gray-9">{{ row.flow_name || row.name }}</h2>
                 <p class="mt-1 text-xs text-ink-gray-5">Starts on: {{ row.trigger_keywords || 'a keyword that points here' }}</p>
               </div>
-              <span class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold" :class="row.enabled ? 'bg-green-50 text-green-700' : 'bg-surface-gray-2 text-ink-gray-5'">
-                {{ row.enabled ? 'On' : 'Off' }}
-              </span>
+              <StatusBadge :label="row.enabled ? 'On' : 'Off'" />
             </div>
             <ol class="mt-3 space-y-1 text-xs text-ink-gray-7">
               <li v-for="(step, index) in row.steps" :key="step.step_name">{{ Number(index) + 1 }}. {{ step.message }}</li>
@@ -517,9 +540,9 @@ onMounted(async () => {
             <h2 class="text-sm font-bold text-ink-gray-9">With an agent</h2>
             <p class="mt-1 text-xs text-ink-gray-5">The bot stays quiet until you hand the chat back.</p>
           </div>
-          <p v-if="!transfers.length" class="px-5 py-8 text-center text-sm text-ink-gray-5">No handoffs.</p>
+          <EmptyState v-if="!transfers.length" compact title="No handoffs" description="The bot stays quiet while an agent has the chat." />
           <ul v-else>
-            <li v-for="row in transfers" :key="row.name" class="flex items-center justify-between gap-3 border-b border-outline-gray-1 px-5 py-3 last:border-b-0">
+            <li v-for="row in transfers" :key="row.name" class="flex flex-wrap items-center justify-between gap-3 border-b border-outline-gray-1 px-5 py-3 last:border-b-0">
               <div class="min-w-0">
                 <p class="truncate text-sm font-medium text-ink-gray-9">{{ row.phone_number }}</p>
                 <p class="text-xs text-ink-gray-5">{{ row.agent_name || 'Unassigned' }} · {{ row.status }} · {{ when(row.transferred_at) }}</p>
@@ -533,9 +556,9 @@ onMounted(async () => {
             <h2 class="text-sm font-bold text-ink-gray-9">In a flow</h2>
             <p class="mt-1 text-xs text-ink-gray-5">Someone is answering questions. Stop it to let the normal bot reply.</p>
           </div>
-          <p v-if="!sessions.length" class="px-5 py-8 text-center text-sm text-ink-gray-5">No active flows.</p>
+          <EmptyState v-if="!sessions.length" compact title="No active flows" description="Stop a flow to let the normal bot reply." />
           <ul v-else>
-            <li v-for="row in sessions" :key="row.name" class="flex items-center justify-between gap-3 border-b border-outline-gray-1 px-5 py-3 last:border-b-0">
+            <li v-for="row in sessions" :key="row.name" class="flex flex-wrap items-center justify-between gap-3 border-b border-outline-gray-1 px-5 py-3 last:border-b-0">
               <div class="min-w-0">
                 <p class="truncate text-sm font-medium text-ink-gray-9">{{ row.phone_number }}</p>
                 <p class="text-xs text-ink-gray-5">{{ row.current_flow }} · {{ row.current_step }}</p>
@@ -610,38 +633,29 @@ onMounted(async () => {
           Opening message
           <input v-model="flowForm.initial_message" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 text-sm font-normal" placeholder="Sure, a few quick questions." />
         </label>
-        <div class="overflow-x-auto rounded-lg border border-outline-gray-2">
-          <table class="w-full min-w-[32rem] text-left text-xs">
-            <thead class="border-b border-outline-gray-2 bg-surface-gray-1 text-ink-gray-5">
-              <tr>
-                <th class="px-3 py-2 font-semibold">Question</th>
-                <th class="w-28 px-3 py-2 font-semibold">Answer</th>
-                <th class="w-28 px-3 py-2 font-semibold">Save as</th>
-                <th class="w-10 px-3 py-2" />
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(step, index) in flowForm.steps" :key="index" class="border-b border-outline-gray-1 last:border-b-0">
-                <td class="px-3 py-2">
-                  <input v-model="step.message" class="w-full rounded-md border border-outline-gray-2 px-2 py-1.5 text-sm" placeholder="What is your email?" />
-                </td>
-                <td class="px-3 py-2">
-                  <select v-model="step.input_type" class="w-full rounded-md border border-outline-gray-2 px-2 py-1.5 text-sm">
-                    <option>Text</option>
-                    <option>Email</option>
-                    <option>Phone</option>
-                    <option>Number</option>
-                  </select>
-                </td>
-                <td class="px-3 py-2">
-                  <input v-model="step.store_as" class="w-full rounded-md border border-outline-gray-2 px-2 py-1.5 text-sm" placeholder="email" />
-                </td>
-                <td class="px-3 py-2 text-right">
-                  <button type="button" class="text-xs font-semibold text-red-600" @click="removeStep(index)">Remove</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <div class="space-y-2">
+          <div v-for="(step, index) in flowForm.steps" :key="index" class="rounded-lg border border-outline-gray-2 p-3">
+            <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_8rem_8rem_auto] sm:items-end">
+              <label class="block text-[11px] font-semibold text-ink-gray-5">
+                Question
+                <input v-model="step.message" class="mt-1 w-full rounded-md border border-outline-gray-2 px-2 py-1.5 text-sm font-normal text-ink-gray-9" placeholder="What is your email?" />
+              </label>
+              <label class="block text-[11px] font-semibold text-ink-gray-5">
+                Answer
+                <select v-model="step.input_type" class="mt-1 w-full rounded-md border border-outline-gray-2 px-2 py-1.5 text-sm font-normal text-ink-gray-9">
+                  <option>Text</option>
+                  <option>Email</option>
+                  <option>Phone</option>
+                  <option>Number</option>
+                </select>
+              </label>
+              <label class="block text-[11px] font-semibold text-ink-gray-5">
+                Save as
+                <input v-model="step.store_as" class="mt-1 w-full rounded-md border border-outline-gray-2 px-2 py-1.5 text-sm font-normal text-ink-gray-9" placeholder="email" />
+              </label>
+              <button type="button" class="text-left text-xs font-semibold text-red-600 sm:mb-2" @click="removeStep(index)">Remove</button>
+            </div>
+          </div>
         </div>
         <button type="button" class="text-xs font-semibold text-[#075E54]" @click="addStep">Add question</button>
         <div class="grid gap-3 sm:grid-cols-2">

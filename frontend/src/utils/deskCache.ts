@@ -1,10 +1,11 @@
 import type { Account } from '@/types'
+import { sessionUser } from '@/utils/frappeSession'
 
 /** frappe-ui persists `createResource({ cache })` in IndexedDB under a shared key. */
 const LEGACY_CACHE_KEYS = ['["nudg:inbox"]', '["nudg:thread"]', '["nudg:logs"]']
 
-export function deskCacheKey(bucket: 'inbox' | 'thread' | 'logs') {
-  const user = typeof window !== 'undefined' && window.user ? window.user : 'anonymous'
+export function deskCacheKey(bucket: 'inbox' | 'thread' | 'logs' | 'templates') {
+  const user = sessionUser() || 'anonymous'
   const site =
     typeof window !== 'undefined' ? window.site_name || window.sitename || 'site' : 'site'
   return `nudg:${bucket}:${site}:${user}`

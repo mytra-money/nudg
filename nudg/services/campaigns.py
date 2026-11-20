@@ -27,8 +27,10 @@ def _redact_token_string(s: Any) -> str:
 	return re.sub(r"EAAB\w+", "EAAB[REDACTED]", str(s))
 
 
-def list_campaigns(account: str | None = None) -> list[dict]:
+def list_campaigns(account: str | None = None, start: int | None = 0, limit: int | None = None) -> list[dict]:
 	"""Retrieve list of campaigns with funnel metrics."""
+	from nudg.paging import page_limit, page_start
+
 	frappe.has_permission("UTM Campaign", "read", throw=True)
 	filters = {}
 	if account:
@@ -41,9 +43,9 @@ def list_campaigns(account: str | None = None) -> list[dict]:
 			"slug",
 			"campaign_description",
 			"whatsapp_account",
-			"whatsapp_template",
 			"whatsapp_status",
-			"whatsapp_scheduled_at",
+			"whatsapp_start_date",
+			"whatsapp_recipient_list",
 			"whatsapp_sent_count",
 			"whatsapp_delivered_count",
 			"whatsapp_read_count",
@@ -52,10 +54,13 @@ def list_campaigns(account: str | None = None) -> list[dict]:
 			"modified",
 		],
 		order_by="modified desc",
-		limit_page_length=100,
+		limit_start=page_start(start),
+		limit_page_length=page_limit(limit, default=50, maximum=50),
 	)
+	templates = _schedule_templates([c.name for c in raw_list])
 	result = []
 	for c in raw_list:
+		template = templates.get(c.name)
 		result.append({
 			"name": c.name,
 			"campaign_name": c.name,
@@ -63,12 +68,13 @@ def list_campaigns(account: str | None = None) -> list[dict]:
 			"description": c.get("campaign_description"),
 			"whatsapp_account": c.get("whatsapp_account"),
 			"whatsapp_channel": c.get("whatsapp_account"),
-			"template": c.get("whatsapp_template"),
-			"whatsapp_template": c.get("whatsapp_template"),
+			"whatsapp_recipient_list": c.get("whatsapp_recipient_list"),
+			"template": template,
+			"whatsapp_template": template,
 			"status": c.get("whatsapp_status") or "Draft",
 			"whatsapp_status": c.get("whatsapp_status") or "Draft",
-			"scheduled_at": c.get("whatsapp_scheduled_at"),
-			"whatsapp_scheduled_at": c.get("whatsapp_scheduled_at"),
+			"scheduled_at": c.get("whatsapp_start_date"),
+			"whatsapp_start_date": c.get("whatsapp_start_date"),
 			"sent_count": int(c.get("whatsapp_sent_count") or 0),
 			"delivered_count": int(c.get("whatsapp_delivered_count") or 0),
 			"read_count": int(c.get("whatsapp_read_count") or 0),
@@ -84,17 +90,22 @@ def get_campaign(name: str) -> dict:
 	doc = frappe.get_doc("UTM Campaign", name)
 	frappe.has_permission("UTM Campaign", "read", doc=doc, throw=True)
 	d = doc.as_dict()
+	template = _campaign_template(doc)
 	d["campaign_name"] = doc.name
 	d["whatsapp_channel"] = doc.get("whatsapp_account")
-	d["template"] = doc.get("whatsapp_template")
+	d["template"] = template
+	d["whatsapp_template"] = template
 	d["status"] = doc.get("whatsapp_status") or "Draft"
-	d["scheduled_at"] = doc.get("whatsapp_scheduled_at")
+	d["scheduled_at"] = doc.get("whatsapp_start_date")
+	d["whatsapp_start_date"] = doc.get("whatsapp_start_date")
+	d["whatsapp_recipient_list"] = doc.get("whatsapp_recipient_list")
+	d["whatsapp_schedules"] = doc.get("whatsapp_schedules") or []
 	d["sent_count"] = int(doc.get("whatsapp_sent_count") or 0)
 	d["delivered_count"] = int(doc.get("whatsapp_delivered_count") or 0)
 	d["read_count"] = int(doc.get("whatsapp_read_count") or 0)
 	d["failed_count"] = int(doc.get("whatsapp_failed_count") or 0)
 	d["last_error"] = doc.get("whatsapp_last_error")
-	d["recipients"] = doc.get("whatsapp_recipients") or []
+	d["recipients"] = _recipient_rows(doc)
 	return d
 
 
@@ -186,12 +197,8 @@ def check_recipient_consent(profile: str | None = None, phone_number: str | None
 			wa_prof = frappe.db.get_value("WA Profile", {"phone_number": phone_number}, "name")
 		if wa_prof:
 			prof_status = frappe.db.get_value("WA Profile", wa_prof, "status")
-			if prof_status == "Blocked":
+			if str(prof_status or "").lower() in ("blocked", "opted-out", "opt-out", "unsubscribed"):
 				return False
-			if frappe.db.has_column("WA Profile", "consent_status"):
-				c_status = frappe.db.get_value("WA Profile", wa_prof, "consent_status")
-				if str(c_status).lower() in ("opted-out", "opt-out", "unsubscribed", "blocked"):
-					return False
 
 	return True
 
@@ -229,7 +236,7 @@ def run_campaign(name: str, claimed: int = 0) -> dict:
 			"failed_count": doc.get("whatsapp_failed_count") or doc.get("failed_count") or 0,
 			"last_error": doc.get("whatsapp_last_error") or doc.get("last_error"),
 		}
-	template = doc.get("whatsapp_template") or doc.get("template")
+	template = _campaign_template(doc)
 	if not template:
 		frappe.throw(_("Campaign needs a template."))
 
@@ -254,7 +261,7 @@ def run_campaign(name: str, claimed: int = 0) -> dict:
 	except Exception as exc:
 		logger.debug(f"Could not load provider connector for {channel}: {exc}")
 
-	recipients = doc.get("whatsapp_recipients") or doc.get("recipients") or []
+	recipients = _recipient_rows(doc)
 	for row in recipients:
 		if row.status != "Pending":
 			continue
@@ -369,12 +376,12 @@ def enqueue_run(name: str) -> dict:
 def check_and_run_scheduled_campaigns(now: bool = False) -> list[str]:
 	"""Background scheduler runner: triggers scheduled campaigns whose scheduled_at is due."""
 	current_time = now_datetime()
+	filters = {"whatsapp_status": "Scheduled"}
+	if frappe.db.has_column("UTM Campaign", "whatsapp_start_date"):
+		filters["whatsapp_start_date"] = ["<=", current_time]
 	scheduled_campaigns = frappe.get_all(
 		"UTM Campaign",
-		filters={
-			"whatsapp_status": "Scheduled",
-			"whatsapp_scheduled_at": ["<=", current_time],
-		},
+		filters=filters,
 		pluck="name",
 	)
 
@@ -584,12 +591,12 @@ def create_campaign(
 			"slug": _unique_slug(name),
 			"campaign_description": (campaign_description or "").strip(),
 			"whatsapp_account": account,
-			"whatsapp_template": template,
 			"whatsapp_status": "Draft",
 		}
 	)
 	_apply_schedule(doc, scheduled_at)
 	_apply_recipients(doc, recipients)
+	_apply_template(doc, template)
 	doc.insert()
 	return get_campaign(doc.name)
 
@@ -622,9 +629,9 @@ def update_campaign(
 		doc.slug = _unique_slug(new_name, ignore=new_name)
 	doc.campaign_description = (campaign_description or "").strip()
 	doc.whatsapp_account = account
-	doc.whatsapp_template = template
 	_apply_schedule(doc, scheduled_at)
 	_apply_recipients(doc, recipients)
+	_apply_template(doc, template)
 	doc.save()
 	return get_campaign(doc.name)
 
@@ -640,36 +647,139 @@ def delete_campaign(name: str) -> dict:
 	return {"name": name, "deleted": True}
 
 
+def _campaign_template(doc) -> str | None:
+	"""Template from the first schedule row. Older docs may still carry it in memory."""
+	for row in doc.get("whatsapp_schedules") or []:
+		template = row.get("whatsapp_template") if isinstance(row, dict) else getattr(row, "whatsapp_template", None)
+		if template:
+			return template
+	return doc.get("whatsapp_template") or doc.get("template")
+
+
+def _schedule_templates(names: list[str]) -> dict[str, str]:
+	if not names or not frappe.db.exists("DocType", "WA Campaign Schedule"):
+		return {}
+	rows = frappe.get_all(
+		"WA Campaign Schedule",
+		filters={"parent": ["in", names], "parenttype": "UTM Campaign"},
+		fields=["parent", "whatsapp_template", "idx"],
+		order_by="idx asc",
+		limit_page_length=max(len(names) * 5, 1),
+	)
+	if not isinstance(rows, list):
+		return {}
+	found: dict[str, str] = {}
+	for row in rows:
+		parent = row.get("parent")
+		template = row.get("whatsapp_template")
+		if parent and template and parent not in found:
+			found[parent] = template
+	return found
+
+
+def _recipient_rows(doc) -> list:
+	"""In-memory child rows, or the phones on the linked recipient list."""
+	rows = doc.get("whatsapp_recipients") or doc.get("recipients")
+	if rows:
+		return rows
+	list_name = doc.get("whatsapp_recipient_list")
+	if not list_name or not frappe.db.exists("WA Recipient List", list_name):
+		return []
+	people = frappe.get_all(
+		"WA Recipient",
+		filters={"parent": list_name, "parenttype": "WA Recipient List"},
+		fields=["mobile_number", "recipient_name", "recipient_data"],
+		limit_page_length=500,
+	)
+	if not isinstance(people, list):
+		return []
+	loaded = []
+	for person in people:
+		loaded.append(
+			frappe._dict(
+				phone_number=person.get("mobile_number"),
+				profile=person.get("recipient_name"),
+				status="Pending",
+				variables_json=person.get("recipient_data"),
+				message=None,
+				error_message=None,
+			)
+		)
+	return loaded
+
+
 def _apply_schedule(doc, scheduled_at: str | None) -> None:
 	if scheduled_at is None:
 		return
 	value = (scheduled_at or "").strip()
-	doc.whatsapp_scheduled_at = value or None
+	doc.whatsapp_start_date = value[:10] if value else None
 	status = doc.get("whatsapp_status") or "Draft"
 	if status in ("Draft", "Scheduled"):
 		doc.whatsapp_status = "Scheduled" if value else "Draft"
 
 
+def _apply_template(doc, template: str | None) -> None:
+	if not template:
+		return
+	rows = list(doc.get("whatsapp_schedules") or [])
+	if rows:
+		first = rows[0]
+		if isinstance(first, dict):
+			first["whatsapp_template"] = template
+		else:
+			first.whatsapp_template = template
+		return
+	doc.append(
+		"whatsapp_schedules",
+		{
+			"whatsapp_template": template,
+			"send_after_days": 0,
+			"whatsapp_account": doc.get("whatsapp_account"),
+			"recipient_list": doc.get("whatsapp_recipient_list"),
+		},
+	)
+
+
+def _phone_list(recipients: Any) -> list[str]:
+	if isinstance(recipients, str):
+		return [line.strip() for line in recipients.replace(",", "\n").splitlines() if line.strip()]
+	if not isinstance(recipients, (list, tuple)):
+		return []
+	phones = []
+	for item in recipients:
+		if isinstance(item, dict):
+			phone = item.get("phone_number") or item.get("phone") or item.get("mobile_number") or ""
+		else:
+			phone = str(item)
+		phone = str(phone).strip()
+		if phone:
+			phones.append(phone)
+	return phones
+
+
 def _apply_recipients(doc, recipients: Any) -> None:
 	if recipients is None:
 		return
-	if isinstance(recipients, str):
-		phones = [line.strip() for line in recipients.replace(",", "\n").splitlines() if line.strip()]
-	elif isinstance(recipients, (list, tuple)):
-		phones = []
-		for item in recipients:
-			if isinstance(item, dict):
-				phone = item.get("phone_number") or item.get("phone") or ""
-			else:
-				phone = str(item)
-			phone = str(phone).strip()
-			if phone:
-				phones.append(phone)
+	phones = _phone_list(recipients)
+	if not frappe.db.exists("DocType", "WA Recipient List"):
+		return
+	list_name = doc.get("whatsapp_recipient_list")
+	if list_name and frappe.db.exists("WA Recipient List", list_name):
+		recipient_list = frappe.get_doc("WA Recipient List", list_name)
+		recipient_list.set("recipients", [])
 	else:
-		phones = []
-	doc.set("whatsapp_recipients", [])
+		label = f"{doc.name} recipients"[:140]
+		recipient_list = frappe.get_doc(
+			{
+				"doctype": "WA Recipient List",
+				"list_name": label,
+				"whatsapp_account": doc.get("whatsapp_account"),
+			}
+		)
 	for phone in phones:
-		profile = None
-		if frappe.db.exists("DocType", "WA Profile"):
-			profile = frappe.db.get_value("WA Profile", {"phone_number": phone}, "name")
-		doc.append("whatsapp_recipients", {"phone_number": phone, "profile": profile, "status": "Pending"})
+		recipient_list.append("recipients", {"mobile_number": phone})
+	if recipient_list.is_new():
+		recipient_list.insert(ignore_permissions=True)
+	else:
+		recipient_list.save(ignore_permissions=True)
+	doc.whatsapp_recipient_list = recipient_list.name

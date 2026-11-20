@@ -17,7 +17,9 @@ from nudg.integrations.whatsapp.catalog_adapter import sync_catalog
 logger = logging.getLogger("nudg.services.catalog")
 
 
-def list_catalogs(account: str | None = None) -> list[dict]:
+def list_catalogs(account: str | None = None, start: int | None = 0, limit: int | None = None) -> list[dict]:
+	from nudg.paging import page_limit, page_start
+
 	frappe.has_permission("WA Catalog", "read", throw=True)
 	filters = {}
 	if account:
@@ -37,11 +39,19 @@ def list_catalogs(account: str | None = None) -> list[dict]:
 			"modified",
 		],
 		order_by="modified desc",
-		limit_page_length=100,
+		limit_start=page_start(start),
+		limit_page_length=page_limit(limit, default=50, maximum=50),
 	)
 
 
-def list_items(catalog: str | None = None, status: str | None = "Active") -> list[dict]:
+def list_items(
+	catalog: str | None = None,
+	status: str | None = "Active",
+	start: int | None = 0,
+	limit: int | None = None,
+) -> list[dict]:
+	from nudg.paging import page_limit, page_start
+
 	frappe.has_permission("WA Catalog Item", "read", throw=True)
 	filters: dict = {}
 	if catalog:
@@ -65,7 +75,8 @@ def list_items(catalog: str | None = None, status: str | None = "Active") -> lis
 			"sort_order",
 		],
 		order_by="sort_order asc, modified desc",
-		limit_page_length=200,
+		limit_start=page_start(start),
+		limit_page_length=page_limit(limit, default=50, maximum=50),
 	)
 	catalog_names = list({row.get("catalog") for row in rows if row.get("catalog")})
 	catalogs: dict[str, dict] = {}

@@ -6,7 +6,14 @@ import frappe
 from frappe import _
 
 
-def list_quick_replies(account: str | None = None, status: str | None = "Active") -> list[dict]:
+def list_quick_replies(
+	account: str | None = None,
+	status: str | None = "Active",
+	start: int | None = 0,
+	limit: int | None = None,
+) -> list[dict]:
+	from nudg.paging import page_limit, page_start
+
 	frappe.has_permission("WA Quick Reply", "read", throw=True)
 	filters: dict = {}
 	if status:
@@ -16,7 +23,8 @@ def list_quick_replies(account: str | None = None, status: str | None = "Active"
 		filters=filters,
 		fields=["name", "title", "shortcut", "body", "whatsapp_account", "status", "usage_count", "modified"],
 		order_by="modified desc",
-		limit_page_length=200,
+		limit_start=page_start(start),
+		limit_page_length=page_limit(limit, default=50, maximum=50),
 	)
 	if account:
 		rows = [row for row in rows if not row.whatsapp_account or row.whatsapp_account == account]

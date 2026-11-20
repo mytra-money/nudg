@@ -9,7 +9,6 @@ import IntegrationsView from '@/pages/Integrations.vue'
 import LogsView from '@/pages/Logs.vue'
 import MarketingView from '@/pages/Marketing.vue'
 import OverviewView from '@/pages/Overview.vue'
-import PlaceholderView from '@/pages/Placeholder.vue'
 import SettingsView from '@/pages/Settings.vue'
 import TemplatesView from '@/pages/Templates.vue'
 

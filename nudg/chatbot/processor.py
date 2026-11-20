@@ -299,19 +299,35 @@ def _send_as_system():
 def send_text(phone, account, message: str) -> str | None:
 	if not phone or not message:
 		return None
-	from nudg.integrations.whatsapp import adapter
+	from nudg.integrations.site_store import send_text as send_on_site
+	from nudg.integrations.site_store import stores_remotely
 
 	with _send_as_system():
+		if stores_remotely(account):
+			return send_on_site(phone, account, message)
+		from nudg.integrations.whatsapp import adapter
+
 		return adapter.send_message(to=phone, message=message, account=account)
 
 
 def send_template(phone, template, parameters=None, account=None) -> str | None:
 	if not phone or not template:
 		return None
-	from nudg.integrations.whatsapp import adapter
+	from nudg.integrations.site_store import send_template as send_on_site
+	from nudg.integrations.site_store import stores_remotely
 	from nudg.services.campaigns import build_template_body_components
 
 	with _send_as_system():
+		if account and stores_remotely(account):
+			body = {}
+			for component in build_template_body_components(parameters) or []:
+				if component.get("type") != "body":
+					continue
+				for index, param in enumerate(component.get("parameters") or [], 1):
+					body[param.get("parameter_name") or str(index)] = param.get("text") or ""
+			return send_on_site(phone, account, template, body)
+		from nudg.integrations.whatsapp import adapter
+
 		return adapter.send_template(
 			template=template,
 			to=phone,
@@ -341,7 +357,12 @@ def send_buttons(phone, account, message: str, buttons) -> str | None:
 		lines = [message] + [f"{index}. {row['title']}" for index, row in enumerate(rows, 1)]
 		return send_text(phone, account, "\n".join(line for line in lines if line))
 
+	from nudg.integrations.site_store import send_buttons as send_on_site
+	from nudg.integrations.site_store import stores_remotely
+
 	with _send_as_system():
+		if stores_remotely(account):
+			return send_on_site(phone, account, message, rows)
 		return _send_buttons(phone, account, message, rows)
 
 

@@ -9,7 +9,7 @@ import {
   templates as sampleTemplates,
 } from '@/mocks/sample'
 import { useInboxStore } from '@/stores/inbox'
-import { applyThreadMessage, type InboxLiveEvent } from '@/stores/inboxLive'
+import { eventTargets, mergeLiveThread, type InboxLiveEvent } from '@/stores/inboxLive'
 import { isLiveSession } from '@/stores/session'
 import { playSound } from '@/stores/sounds'
 import { getSocket } from '@/socket'
@@ -94,9 +94,37 @@ export const useThreadStore = defineStore('nudg-thread', () => {
   }
 
   function applyLive(event: InboxLiveEvent) {
+    const open = profile.value
+    if (!eventTargets(open, event) || !open) return
     const current = threadResource.data
-    if (!current || profile.value !== event.profile) return
-    threadResource.setData(applyThreadMessage(current, event))
+    if (!current || current.profile.name !== open) {
+      void syncOpen()
+      return
+    }
+    const next = mergeLiveThread(current, open, event)
+    if (next !== current) threadResource.setData(next)
+    const arrived = event.message?.name || event.conversation?.preview?.name
+    if (arrived && !next.messages.some((row) => row.name === arrived)) void syncOpen()
+  }
+
+  async function loadOlder() {
+    const name = profile.value
+    const current = threadResource.data
+    if (!name || !current?.has_older || !isLiveSession()) return
+    const oldest = current.messages[0]?.creation
+    if (!oldest) return
+    const page = await call<Thread>('nudg.api.get_thread', {
+      profile: name,
+      before_creation: oldest,
+      limit: 40,
+    })
+    const seen = new Set(current.messages.map((row) => row.name))
+    const older = (page?.messages || []).filter((row) => row.name && !seen.has(row.name))
+    threadResource.setData({
+      ...current,
+      messages: [...older, ...current.messages],
+      has_older: Boolean(page?.has_older),
+    })
   }
 
   /** Replace the open thread from the server without clearing what is already on screen. */
@@ -111,8 +139,8 @@ export const useThreadStore = defineStore('nudg-thread', () => {
   }
 
   async function confirmIfOffline() {
-    if (getSocket()?.connected) return
     await syncOpen()
+    if (getSocket()?.connected) return
     await useInboxStore().refresh({ silent: true })
   }
 
@@ -129,6 +157,7 @@ export const useThreadStore = defineStore('nudg-thread', () => {
     announcePresence(name, 'viewing')
     try {
       await threadResource.fetch({ profile: name })
+      useInboxStore().markRead(name)
     } catch (caught) {
       toast.error(errorText(caught))
     }
@@ -337,6 +366,7 @@ export const useThreadStore = defineStore('nudg-thread', () => {
     openProfile,
     applyLive,
     syncOpen,
+    loadOlder,
     setThreadNotes,
     sendText,
     sendMedia,

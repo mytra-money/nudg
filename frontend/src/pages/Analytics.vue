@@ -386,8 +386,8 @@ onUnmounted(() => window.clearInterval(timer))
             :key="card.label"
             class="rounded-xl border border-outline-gray-2 bg-white p-4.5 shadow-xs transition-all hover:border-[#128C7E] hover:shadow-sm"
           >
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-medium uppercase tracking-wider text-ink-gray-6">
+            <div class="flex items-start justify-between gap-2">
+              <span class="min-w-0 text-xs font-medium uppercase tracking-wider text-ink-gray-6">
                 {{ card.label }}
               </span>
               <span
@@ -411,7 +411,7 @@ onUnmounted(() => window.clearInterval(timer))
             </div>
 
             <div class="mt-3 flex items-baseline gap-2">
-              <span class="text-3xl font-extrabold tracking-tight text-ink-gray-9">
+              <span class="text-2xl font-semibold tracking-tight text-ink-gray-9 sm:text-3xl">
                 {{ card.value }}
               </span>
             </div>

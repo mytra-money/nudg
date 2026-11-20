@@ -204,7 +204,7 @@ function loadFacebookSdk(app: string, version: string) {
     <div class="flex flex-col items-center gap-3">
       <Button
         variant="solid"
-        class="min-w-[16rem] justify-center !bg-[#1877F2] !text-white hover:!bg-[#166FE5]"
+        class="w-full max-w-xs justify-center !bg-[#1877F2] !text-white hover:!bg-[#166FE5]"
         :loading="busy"
         :disabled="!config?.ready"
         label="Login with Facebook"
@@ -212,7 +212,7 @@ function loadFacebookSdk(app: string, version: string) {
       />
       <Button
         variant="solid"
-        class="min-w-[16rem] justify-center !bg-[#e5e7eb] !text-[#111827] hover:!bg-[#d1d5db]"
+        class="w-full max-w-xs justify-center !bg-[#e5e7eb] !text-[#111827] hover:!bg-[#d1d5db]"
         label="I already have credentials"
         @click="emit('manual')"
       />

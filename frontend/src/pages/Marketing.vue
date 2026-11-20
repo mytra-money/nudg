@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useMediaQuery } from '@vueuse/core'
 import { Badge, Button, Dialog, Select, TextInput, toast } from 'frappe-ui'
 import EmptyState from '@/components/EmptyState.vue'
 import ErrorState from '@/components/ErrorState.vue'
@@ -16,6 +17,8 @@ const loading = ref(true)
 const error = ref<string | null>(null)
 const rows = ref<any[]>([])
 const selected = ref<any | null>(null)
+const narrow = useMediaQuery('(max-width: 767px)')
+const showDetail = ref(false)
 const busy = ref(false)
 
 const query = ref('')
@@ -130,6 +133,7 @@ async function load() {
 }
 
 async function open(row: any) {
+  showDetail.value = true
   try {
     if (!live) {
       const found = sampleCampaigns.find((c) => c.name === row.name)
@@ -497,9 +501,12 @@ onMounted(() => {
     </EmptyState>
 
     <!-- Master-Detail Workspace Grid -->
-    <div v-else class="nudg-split grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[minmax(0,380px)_1fr] overflow-hidden">
+    <div v-else class="nudg-split nudg-master grid min-h-0 flex-1 grid-cols-1 overflow-hidden md:grid-cols-[minmax(0,380px)_1fr]">
       <!-- Left Column: Campaign List -->
-      <aside class="flex flex-col border-r border-outline-gray-2 bg-white min-h-0 overflow-hidden">
+      <aside
+        class="min-h-0 flex-col overflow-hidden border-r border-outline-gray-2 bg-white"
+        :class="narrow && showDetail ? 'hidden' : 'flex'"
+      >
         <!-- Search & Filter Tabs -->
         <div class="border-b border-outline-gray-2 p-3 space-y-2.5 shrink-0">
           <div class="relative">
@@ -606,7 +613,19 @@ onMounted(() => {
       </aside>
 
       <!-- Right Column: Campaign Inspector & Recipient Audit Funnel -->
-      <main class="flex flex-col bg-white min-h-0 overflow-y-auto">
+      <main
+        class="min-h-0 flex-col overflow-y-auto bg-white"
+        :class="narrow && !showDetail ? 'hidden' : 'flex'"
+      >
+        <button
+          v-if="narrow && selected"
+          type="button"
+          class="inline-flex items-center gap-1 px-4 pt-3 text-sm font-medium text-[#075E54]"
+          @click="showDetail = false"
+        >
+          <span class="lucide-arrow-left size-4" aria-hidden="true" />
+          All campaigns
+        </button>
         <!-- Active Campaign Inspector -->
         <div v-if="selected" class="p-5 sm:p-6 space-y-6">
           <!-- Inspector Header -->

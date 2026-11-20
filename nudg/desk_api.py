@@ -48,15 +48,20 @@ def _require_system_manager():
 
 
 @frappe.whitelist()
-def list_catalogs(account: str | None = None) -> list:
+def list_catalogs(account: str | None = None, start: int | None = 0, limit: int | None = None) -> list:
 	_require_manager()
-	return catalog_service.list_catalogs(account)
+	return catalog_service.list_catalogs(account, start=start, limit=limit)
 
 
 @frappe.whitelist()
-def list_catalog_items(catalog: str | None = None, status: str | None = "Active") -> list:
+def list_catalog_items(
+	catalog: str | None = None,
+	status: str | None = "Active",
+	start: int | None = 0,
+	limit: int | None = None,
+) -> list:
 	_require_login()
-	return catalog_service.list_items(catalog, status)
+	return catalog_service.list_items(catalog, status, start=start, limit=limit)
 
 
 @frappe.whitelist()
@@ -251,9 +256,14 @@ def send_catalog_product(
 
 
 @frappe.whitelist()
-def list_quick_replies(account: str | None = None, status: str | None = "Active") -> list:
+def list_quick_replies(
+	account: str | None = None,
+	status: str | None = "Active",
+	start: int | None = 0,
+	limit: int | None = None,
+) -> list:
 	_require_login()
-	return quick_replies.list_quick_replies(account, status)
+	return quick_replies.list_quick_replies(account, status, start=start, limit=limit)
 
 
 @frappe.whitelist()
@@ -361,9 +371,9 @@ def auto_assign_round_robin(profile: str) -> dict:
 
 
 @frappe.whitelist()
-def list_campaigns(account: str | None = None) -> list:
+def list_campaigns(account: str | None = None, start: int | None = 0, limit: int | None = None) -> list:
 	_require_manager()
-	return campaigns.list_campaigns(account)
+	return campaigns.list_campaigns(account, start=start, limit=limit)
 
 
 @frappe.whitelist()
@@ -1182,12 +1192,12 @@ def save_chatbot(account: str, payload) -> dict:
 
 
 @frappe.whitelist()
-def list_chatbot_keywords(account: str) -> list:
+def list_chatbot_keywords(account: str, start: int | None = 0, limit: int | None = None) -> list:
 	_require_manager()
 	_assert_account_access(account)
 	from nudg.services.chatbot_setup import list_keywords
 
-	return list_keywords(account)
+	return list_keywords(account, start=start, limit=limit)
 
 
 @frappe.whitelist()
@@ -1209,12 +1219,12 @@ def delete_chatbot_keyword(account: str, name: str) -> dict:
 
 
 @frappe.whitelist()
-def list_chatbot_flows(account: str) -> list:
+def list_chatbot_flows(account: str, start: int | None = 0, limit: int | None = None) -> list:
 	_require_manager()
 	_assert_account_access(account)
 	from nudg.services.chatbot_setup import list_flows
 
-	return list_flows(account)
+	return list_flows(account, start=start, limit=limit)
 
 
 @frappe.whitelist()

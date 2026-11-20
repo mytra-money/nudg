@@ -3,8 +3,8 @@
 
 """Connect an ERPNext site. Document rules stay on that site's Notification.
 
-Nudge only receives a send request and delivers it with the WhatsApp account
-that lives here. Chat and campaigns never wait for the ERPNext site.
+Nudge receives WhatsApp webhooks and document send requests. When the account
+is connected, chats are stored on that site. This site still sends through Meta.
 """
 
 from __future__ import annotations

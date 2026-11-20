@@ -24,6 +24,7 @@ active-account count is read only after ``frappe.has_permission("WA Account",
 from __future__ import annotations
 
 import frappe
+from frappe import _
 
 # DocTypes the desk needs from the official app. Child tables are not required.
 REQUIRED_DOCTYPES = ("WA Account", "WA Settings", "WA Message")
@@ -206,6 +207,91 @@ def send_template(
 		reference_doctype=reference_doctype,
 		reference_docname=reference_docname,
 	)
+
+
+def ensure_local_profile(
+	phone_number: str,
+	account_name: str,
+	profile_name: str | None = None,
+	wa_id: str | None = None,
+) -> str | None:
+	"""Inbox identity on this site. The transcript for a connected site is stored remotely."""
+	try:
+		from whatsapp.whatsapp.doctype.wa_profile.wa_profile import get_or_create_profile
+
+		return get_or_create_profile(
+			phone_number=phone_number,
+			account_name=account_name,
+			profile_name=profile_name,
+			wa_id=wa_id,
+		)
+	except Exception:
+		frappe.log_error(title="Nudg local profile")
+		return None
+
+
+def deliver_text(account: str, to_phone: str, text: str) -> str:
+	"""Send text through Meta and return the WhatsApp message id. Does not write a WA Message."""
+	from whatsapp.whatsapp.api.utils import build_text_message_payload
+
+	return _deliver(account, build_text_message_payload(to=_meta_phone(to_phone), text=text))
+
+
+def deliver_buttons(account: str, to_phone: str, text: str, buttons: list[dict]) -> str:
+	"""Send reply buttons through Meta. Does not write a WA Message."""
+	from whatsapp.whatsapp.api.utils import build_interactive_buttons_payload
+
+	payload = build_interactive_buttons_payload(
+		to=_meta_phone(to_phone),
+		body_text=text or "Choose an option",
+		buttons=[{"id": row["id"], "title": row["title"]} for row in buttons],
+	)
+	return _deliver(account, payload)
+
+
+def deliver_template(account: str, to_phone: str, template: str, body_parameters: dict | None = None) -> str:
+	"""Send an approved template through Meta. Does not write a WA Message."""
+	from whatsapp.whatsapp.api.utils import build_template_message_payload
+
+	template_doc = frappe.get_doc("WA Template", template)
+	return _deliver(
+		account,
+		build_template_message_payload(
+			to=_meta_phone(to_phone),
+			template_doc=template_doc,
+			body_parameters=body_parameters or {},
+		),
+	)
+
+
+def apply_local_webhook(field: str | None, value: dict) -> None:
+	"""Official handler for one webhook change that belongs on this site's database."""
+	if field == "messages":
+		from whatsapp.whatsapp.webhook import _handle_messages
+
+		_handle_messages(value)
+	elif field == "message_template_status_update":
+		from whatsapp.whatsapp.webhook import _handle_template_status
+
+		_handle_template_status(value)
+
+
+def _deliver(account: str, payload: dict) -> str:
+	from whatsapp.whatsapp.doctype.wa_message.wa_message import _get_whatsapp_client
+
+	account_doc = frappe.get_doc("WA Account", account)
+	settings = frappe.get_single("WA Settings")
+	result = _get_whatsapp_client(account_doc, settings).send_message(payload)
+	messages = (result or {}).get("messages") or []
+	message_id = messages[0].get("id") if messages else ""
+	if not message_id:
+		frappe.throw(_("WhatsApp did not return a message id."))
+	return str(message_id)
+
+
+def _meta_phone(phone: str) -> str:
+	digits = "".join(ch for ch in str(phone or "") if ch.isdigit())
+	return digits or str(phone or "")
 
 
 def mark_as_read(message_id: str, account_name: str | None = None) -> bool:

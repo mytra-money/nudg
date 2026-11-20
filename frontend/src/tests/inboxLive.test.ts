@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyConversation, applyThreadMessage, isNewIncoming } from '@/stores/inboxLive'
+import { applyConversation, applyThreadMessage, isNewIncoming, mergeLiveThread } from '@/stores/inboxLive'
 import { conversationStatusAt } from '@/utils/conversationStatus'
 import type { Conversation, Thread } from '@/types'
 
@@ -97,6 +97,37 @@ describe('inbox live patches', () => {
     })
     expect(next.messages).toHaveLength(1)
     expect(next.messages[0].name).toBe('m1')
+  })
+
+  it('adds the list preview to the open chat when the socket message is missing', () => {
+    const open = thread([
+      { name: 'm1', to: 'prof', direction: 'Incoming', message: 'Hi', creation: '2026-11-18T09:00:00' },
+    ])
+    const preview = {
+      name: 'm2',
+      to: 'prof',
+      direction: 'Outgoing' as const,
+      message: 'On my way',
+      creation: '2026-11-18T09:05:00',
+      status: 'Sent' as const,
+    }
+    const next = mergeLiveThread(open, 'prof', {
+      profile: 'prof',
+      bump: true,
+      conversation: { ...card('prof'), preview },
+    })
+    expect(next.messages.map((row) => row.name)).toEqual(['m1', 'm2'])
+  })
+
+  it('leaves a different conversation untouched', () => {
+    const open = thread([
+      { name: 'm1', to: 'prof', direction: 'Incoming', message: 'Hi', creation: '2026-11-18T09:00:00' },
+    ])
+    const next = mergeLiveThread(open, 'prof', {
+      profile: 'other',
+      message: { name: 'm9', to: 'other', direction: 'Incoming', message: 'Nope', creation: '2026-11-18T09:06:00' },
+    })
+    expect(next).toBe(open)
   })
 
   it('plays the receive sound only for a new incoming message', () => {

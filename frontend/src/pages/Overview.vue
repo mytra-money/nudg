@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { Avatar, Badge, Button } from 'frappe-ui'
 import EmptyState from '@/components/EmptyState.vue'
 import ErrorState from '@/components/ErrorState.vue'
@@ -17,7 +17,15 @@ onMounted(() => {
   void load()
   if (!desk.inbox.value) void desk.load()
   else void desk.refresh()
+  if (desk.mode.value === 'live') void desk.loadLogs()
 })
+
+watch(
+  () => desk.account.value,
+  () => {
+    if (desk.mode.value === 'live') void desk.loadLogs()
+  },
+)
 
 function accountCount(value: number | null) {
   return value === null ? 'Not reported' : String(value)

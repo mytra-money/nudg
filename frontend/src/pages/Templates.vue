@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useMediaQuery } from '@vueuse/core'
 import { Badge, Button, Dialog, Select, TextInput, toast } from 'frappe-ui'
 import DeskTemplatePreview from '@/components/DeskTemplatePreview.vue'
-import { errorText, formatDay, initials } from '@/utils/format'
+import EmptyState from '@/components/EmptyState.vue'
+import { errorText, initials } from '@/utils/format'
 import { deleteWhatsappTemplate, getWhatsappTemplate, saveWhatsappTemplate, syncWhatsappTemplates } from '@/services/catalogApi'
 import { isManager, useDesk } from '@/stores/desk'
 import type { Template } from '@/types'
@@ -10,6 +12,8 @@ import type { Template } from '@/types'
 const desk = useDesk()
 const live = Boolean(window.csrf_token)
 
+const narrow = useMediaQuery('(max-width: 767px)')
+const showDetail = ref(false)
 const query = ref('')
 const selectedCategory = ref<'all' | 'Utility' | 'Marketing' | 'Authentication'>('all')
 const selectedStatus = ref<string>('All')
@@ -116,6 +120,7 @@ async function send() {
 
 function selectTemplate(t: Template) {
   selected.value = t.name
+  showDetail.value = true
 }
 
 const templateEditorOpen = ref(false)
@@ -409,10 +414,18 @@ function clearFilters() {
     </section>
 
     <!-- Master-Detail Studio Grid -->
-    <div class="nudg-split grid min-h-0 flex-1 grid-cols-1 overflow-hidden md:grid-cols-[minmax(0,1fr)_minmax(0,480px)]">
+    <div class="nudg-split nudg-master grid min-h-0 flex-1 grid-cols-1 overflow-hidden md:grid-cols-[minmax(0,1fr)_minmax(0,480px)]">
       <!-- Left Column: Template Library List -->
-      <aside class="flex flex-col border-r border-outline-gray-2 bg-white min-h-0 overflow-y-auto divide-y divide-outline-gray-1">
-        <div v-if="visible.length === 0" class="p-8 text-center text-xs text-ink-gray-5">
+      <aside
+        class="min-h-0 flex-col divide-y divide-outline-gray-1 overflow-y-auto border-r border-outline-gray-2 bg-white"
+        :class="narrow && showDetail ? 'hidden' : 'flex'"
+      >
+        <EmptyState
+          v-if="templates.length === 0"
+          title="No templates yet"
+          description="Sync from Meta or create a template. Approved templates can be sent from the inbox."
+        />
+        <div v-else-if="visible.length === 0" class="p-8 text-center text-xs text-ink-gray-5">
           <div class="mx-auto grid size-10 place-items-center rounded-full bg-surface-gray-2 text-ink-gray-4">
             <span class="lucide-layout-template size-5" />
           </div>
@@ -484,7 +497,19 @@ function clearFilters() {
       </aside>
 
       <!-- Right Column: Interactive Studio Inspector Canvas -->
-      <main class="flex flex-col bg-white min-h-0 overflow-y-auto p-5 sm:p-6 space-y-5">
+      <main
+        class="min-h-0 flex-col space-y-5 overflow-y-auto bg-white p-5 sm:p-6"
+        :class="narrow && !showDetail ? 'hidden' : 'flex'"
+      >
+        <button
+          v-if="narrow"
+          type="button"
+          class="inline-flex items-center gap-1 text-sm font-medium text-[#075E54]"
+          @click="showDetail = false"
+        >
+          <span class="lucide-arrow-left size-4" aria-hidden="true" />
+          All templates
+        </button>
         <div v-if="current" class="space-y-5">
           <!-- Template Header & Metadata -->
           <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-outline-gray-2 pb-4">
@@ -510,7 +535,7 @@ function clearFilters() {
               </p>
             </div>
 
-            <div class="flex items-center gap-2 shrink-0">
+            <div class="flex flex-wrap items-center gap-2">
               <Button
                 v-if="isManager"
                 variant="subtle"
@@ -530,8 +555,8 @@ function clearFilters() {
           </div>
 
           <!-- Mode Toggle (Preview vs Technical Raw Payload) -->
-          <div class="flex items-center justify-between border-b border-outline-gray-2 pb-3">
-            <div class="flex items-center gap-1 text-xs">
+          <div class="flex flex-col gap-2 border-b border-outline-gray-2 pb-3 sm:flex-row sm:items-center sm:justify-between">
+            <div class="flex flex-wrap items-center gap-1 text-xs">
               <button
                 type="button"
                 class="rounded-lg px-3 py-1 font-semibold transition-colors"
@@ -550,8 +575,8 @@ function clearFilters() {
               </button>
             </div>
 
-            <span class="text-[11px] text-ink-gray-5">
-              {{ current.status === 'Approved' ? '✅ Ready for 24h & outbound broadcast' : '⚠️ Requires Meta approval before sending' }}
+            <span class="text-[11px] leading-relaxed text-ink-gray-5">
+              {{ current.status === 'Approved' ? 'Ready for chats and broadcasts' : 'Needs Meta approval before sending' }}
             </span>
           </div>
 
@@ -577,7 +602,7 @@ function clearFilters() {
               <div
                 v-for="v in current.template_variables"
                 :key="v.variable_name"
-                class="flex items-center justify-between p-2.5 bg-white"
+                class="flex flex-wrap items-center gap-2 bg-white p-2.5"
               >
                 <span class="font-mono font-bold text-[#075E54]">&#123;&#123;{{ v.variable_name }}&#125;&#125;</span>
                 <span class="text-ink-gray-7">

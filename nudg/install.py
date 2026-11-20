@@ -80,8 +80,63 @@ def after_install():
 def after_migrate():
 	check_frappe_version()
 	ensure_role()
+	from nudg.services.assignments import migrate_legacy_profile_fields
+
+	migrate_legacy_profile_fields()
 	setup_standard_custom_fields()
 	_ensure_desk_modules()
+	ensure_performance_indexes()
+
+
+def ensure_performance_indexes() -> None:
+	"""Index the columns the inbox, thread, and stuck-message job filter on."""
+	specs = (
+		("WA Profile", ["phone_number"], "nudg_profile_phone_idx"),
+		("WA Profile", ["whatsapp_account"], "nudg_profile_account_idx"),
+		("WA Profile", ["modified"], "nudg_profile_modified_idx"),
+		("WA Profile", ["whatsapp_account", "modified"], "nudg_profile_account_modified_idx"),
+		("WA Message", ["to"], "nudg_message_to_idx"),
+		("WA Message", ["direction"], "nudg_message_direction_idx"),
+		("WA Message", ["status"], "nudg_message_status_idx"),
+		("WA Message", ["creation"], "nudg_message_creation_idx"),
+		("WA Message", ["message_id"], "nudg_message_id_idx"),
+		("WA Message", ["to", "creation"], "nudg_message_to_creation_idx"),
+		("WA Message", ["direction", "status", "creation"], "nudg_message_stuck_idx"),
+	)
+	for doctype, fields, index_name in specs:
+		try:
+			if not frappe.db.table_exists(doctype):
+				continue
+			if any(not frappe.db.has_column(doctype, field) for field in fields):
+				continue
+			if _index_covers(doctype, fields):
+				continue
+			frappe.db.add_index(doctype, fields, index_name)
+		except Exception:
+			frappe.log_error(title=f"Nudg index {index_name}")
+
+
+def _index_covers(doctype: str, fields: list[str]) -> bool:
+	table = f"tab{doctype}"
+	try:
+		rows = frappe.db.sql(f"SHOW INDEX FROM `{table}`", as_dict=True)
+	except Exception:
+		return False
+	if not isinstance(rows, list):
+		return False
+	columns: dict[str, list[tuple[int, str]]] = {}
+	for row in rows:
+		key = row.get("Key_name") or row.get("key_name")
+		column = row.get("Column_name") or row.get("column_name")
+		seq = row.get("Seq_in_index") or row.get("seq_in_index") or 0
+		if not key or not column:
+			continue
+		columns.setdefault(key, []).append((int(seq), column))
+	for ordered in columns.values():
+		names = [name for _, name in sorted(ordered)]
+		if names[: len(fields)] == fields:
+			return True
+	return False
 
 
 def _ensure_desk_modules():
@@ -167,81 +222,8 @@ def account_site_fields() -> list[dict]:
 
 
 def profile_inbox_fields() -> list[dict]:
-	"""Assignment, tags, and cached inbox status live on the WhatsApp profile."""
-	return [
-		{
-			"fieldname": "inbox_section",
-			"label": "Assignment",
-			"fieldtype": "Section Break",
-			"insert_after": "wa_id",
-		},
-		{
-			"fieldname": "assignee",
-			"label": "Assignee",
-			"fieldtype": "Link",
-			"options": "User",
-			"insert_after": "inbox_section",
-			"in_list_view": 1,
-			"in_standard_filter": 1,
-		},
-		{
-			"fieldname": "assignment_status",
-			"label": "Assignment Status",
-			"fieldtype": "Select",
-			"options": "Unassigned\nAssigned\nClosed",
-			"default": "Unassigned",
-			"insert_after": "assignee",
-			"in_list_view": 1,
-			"in_standard_filter": 1,
-		},
-		{
-			"fieldname": "priority",
-			"label": "Priority",
-			"fieldtype": "Select",
-			"options": "Low\nMedium\nHigh",
-			"default": "Medium",
-			"insert_after": "assignment_status",
-		},
-		{
-			"fieldname": "tags",
-			"label": "Tags",
-			"fieldtype": "Data",
-			"insert_after": "priority",
-			"in_list_view": 1,
-			"in_standard_filter": 1,
-		},
-		{
-			"fieldname": "inbox_col",
-			"fieldtype": "Column Break",
-			"insert_after": "tags",
-		},
-		{
-			"fieldname": "last_assigned_on",
-			"label": "Last Assigned On",
-			"fieldtype": "Datetime",
-			"read_only": 1,
-			"insert_after": "inbox_col",
-		},
-		{
-			"fieldname": "assignment_source",
-			"label": "Assignment Source",
-			"fieldtype": "Select",
-			"options": "\nManual\nAssignment Rule\nRound Robin",
-			"read_only": 1,
-			"insert_after": "last_assigned_on",
-		},
-		{
-			"fieldname": "conversation_status",
-			"label": "Inbox Status",
-			"fieldtype": "Select",
-			"options": "template_only\nneeds_reply\nwindow_open\nfailed\nblocked\nclosed",
-			"insert_after": "assignment_source",
-			"in_list_view": 1,
-			"in_standard_filter": 1,
-			"read_only": 1,
-			"description": "Cached from the latest WA Message and the 24-hour window. The inbox recomputes it.",
-		},
-	]
+	"""No custom inbox columns. Assignment, tags, and notes use Frappe core."""
+	return []
 
 
 def setup_standard_custom_fields():
@@ -253,6 +235,16 @@ def setup_standard_custom_fields():
 
 	# WhatsApp Broadcast extensions for standard UTM Campaign
 	if frappe.db.exists("DocType", "UTM Campaign"):
+		_drop_custom_fields(
+			"UTM Campaign",
+			(
+				"whatsapp_template",
+				"whatsapp_scheduled_at",
+				"whatsapp_audience_filter",
+				"whatsapp_recipients_section",
+				"whatsapp_recipients",
+			),
+		)
 		custom_fields["UTM Campaign"] = [
 			{
 				"fieldname": "whatsapp_campaign_section",
@@ -270,39 +262,18 @@ def setup_standard_custom_fields():
 				"in_standard_filter": 1,
 			},
 			{
-				"fieldname": "whatsapp_template",
-				"label": "WhatsApp Template",
-				"fieldtype": "Link",
-				"options": "WA Template",
-				"insert_after": "whatsapp_account",
-				"in_list_view": 1,
-			},
-			{
 				"fieldname": "whatsapp_status",
 				"label": "WhatsApp Status",
 				"fieldtype": "Select",
 				"options": "Draft\nScheduled\nRunning\nCompleted\nFailed\nCancelled",
 				"default": "Draft",
-				"insert_after": "whatsapp_template",
+				"insert_after": "whatsapp_account",
 				"in_list_view": 1,
-			},
-			{
-				"fieldname": "whatsapp_scheduled_at",
-				"label": "Scheduled At",
-				"fieldtype": "Datetime",
-				"insert_after": "whatsapp_status",
-			},
-			{
-				"fieldname": "whatsapp_audience_filter",
-				"label": "Audience Filter",
-				"fieldtype": "Code",
-				"options": "JSON",
-				"insert_after": "whatsapp_scheduled_at",
 			},
 			{
 				"fieldname": "whatsapp_col_break",
 				"fieldtype": "Column Break",
-				"insert_after": "whatsapp_audience_filter",
+				"insert_after": "whatsapp_status",
 			},
 			{
 				"fieldname": "whatsapp_sent_count",
@@ -344,23 +315,10 @@ def setup_standard_custom_fields():
 				"insert_after": "whatsapp_failed_count",
 			},
 			{
-				"fieldname": "whatsapp_recipients_section",
-				"label": "WhatsApp Recipients",
-				"fieldtype": "Section Break",
-				"insert_after": "whatsapp_last_error",
-			},
-			{
-				"fieldname": "whatsapp_recipients",
-				"label": "Recipients",
-				"fieldtype": "Table",
-				"options": "WA Campaign Recipient",
-				"insert_after": "whatsapp_recipients_section",
-			},
-			{
 				"fieldname": "whatsapp_schedules_section",
 				"label": "WhatsApp Campaign Schedules",
 				"fieldtype": "Section Break",
-				"insert_after": "whatsapp_recipients",
+				"insert_after": "whatsapp_last_error",
 				"description": "Same timing as an Email Campaign: each row waits Send After days from the start date, uses a WhatsApp template, and creates a Bulk WhatsApp Message.",
 			},
 			{
@@ -420,8 +378,25 @@ def setup_standard_custom_fields():
 		]
 
 	if frappe.db.exists("DocType", "WA Profile"):
-		_drop_custom_fields("WA Profile", ("consent_status", "consent_reason"))
-		custom_fields["WA Profile"] = profile_inbox_fields()
+		_drop_custom_fields(
+			"WA Profile",
+			(
+				"consent_status",
+				"consent_reason",
+				"assignee",
+				"assignment_status",
+				"priority",
+				"tags",
+				"last_assigned_on",
+				"assignment_source",
+				"conversation_status",
+				"inbox_section",
+				"inbox_col",
+			),
+		)
+		inbox_fields = profile_inbox_fields()
+		if inbox_fields:
+			custom_fields["WA Profile"] = inbox_fields
 
 	# Optional ERPNext Item integration for self-hosted instances
 	if frappe.db.exists("DocType", "WA Catalog Item") and frappe.db.exists("DocType", "Item"):
