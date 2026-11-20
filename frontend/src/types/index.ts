@@ -112,6 +112,28 @@ export type ConversationStatus =
   | 'window_open'
   | 'template_only'
 
+export interface BotStatus {
+  installed?: boolean
+  enabled?: boolean
+  has_bot_session?: boolean
+  is_transferred?: boolean
+  flow_title?: string | null
+  session?: {
+    name?: string
+    current_flow?: string
+    current_step?: string
+    started_at?: string
+    last_activity?: string
+  } | null
+  transfer?: {
+    name?: string
+    agent?: string
+    agent_name?: string
+    transferred_at?: string
+    notes?: string
+  } | null
+}
+
 export interface Conversation {
   profile: Profile
   preview: ChatMessage | null
@@ -123,6 +145,7 @@ export interface Conversation {
   /** Incoming messages not yet opened. Shown like the WhatsApp mobile badge. */
   unread_count?: number
   assignment?: AssignmentInfo
+  bot_status?: BotStatus
 }
 
 export interface Inbox {
@@ -154,6 +177,8 @@ export interface Thread {
   references: DocLink[]
   links: DocLink[]
   has_older?: boolean
+  bot_status?: BotStatus
+  tags?: string[]
 }
 
 export interface IntegrationStatus {

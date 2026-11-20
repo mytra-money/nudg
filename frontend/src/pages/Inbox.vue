@@ -1,19 +1,24 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { Avatar, Button, Dialog, Dropdown, Select, TextInput, call, toast } from 'frappe-ui'
+import { Button, Dialog, Select, TextInput, call, toast } from 'frappe-ui'
 import { MessageInput, MessageList } from '@whatsapp/ui/components/Messages'
 import type { ReactPayload, WhatsAppMessage } from '@whatsapp/ui/components/Messages'
 import DeskTemplatePreview from '@/components/DeskTemplatePreview.vue'
 import ProfileDetails from '@/components/ProfileDetails.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
+import BotHandoffBanner from '@/components/inbox/BotHandoffBanner.vue'
+import CannedReplyPicker from '@/components/inbox/CannedReplyPicker.vue'
+import ChatHeader from '@/components/inbox/ChatHeader.vue'
+import ConversationList from '@/components/inbox/ConversationList.vue'
 import {
   CONVERSATION_STATUS_FILTERS,
   conversationStatusAt,
   conversationStatusOf,
 } from '@/utils/conversationStatus'
 import { useDeskComposer } from '@/composables/useComposer'
-import { formatRemaining, formatTime, previewText, serviceWindow } from '@/utils/format'
+import { applyQuickReplyDraft, slashCommand } from '@/utils/cannedReply'
+import { previewText, serviceWindow } from '@/utils/format'
 import { userFacingError } from '@/utils/errors'
 import { useDesk } from '@/stores/desk'
 import {
@@ -57,8 +62,11 @@ const templateOpen = ref(false)
 const templateQuery = ref('')
 const templateTypeFilter = ref<'all' | 'Utility' | 'Marketing'>('all')
 
-const quickOpen = ref(false)
-const quickQuery = ref('')
+const pickerManual = ref(false)
+const pickerQuery = ref('')
+const quickLoading = ref(false)
+const quickReplies = ref<any[]>([])
+const pickerRef = ref<InstanceType<typeof CannedReplyPicker> | null>(null)
 const notesOpen = ref(false)
 const noteText = ref('')
 const savingNote = ref(false)
@@ -91,7 +99,6 @@ async function saveNote() {
     savingNote.value = false
   }
 }
-const quickReplies = ref<any[]>([])
 
 const catalogOpen = ref(false)
 const catalogQuery = ref('')
@@ -311,32 +318,84 @@ function onReact(payload: ReactPayload) {
   void desk.react(payload.messageName, payload.emoji)
 }
 
-async function openQuickReplies() {
-  quickQuery.value = ''
+const slash = computed(() => slashCommand(composer.draft || ''))
+const pickerOpen = computed(() => pickerManual.value || Boolean(slash.value?.open))
+const pickerFilter = computed(() => (slash.value?.open ? slash.value.query : pickerQuery.value))
+
+async function ensureQuickReplies() {
+  if (quickLoading.value || quickReplies.value.length) return
+  quickLoading.value = true
   try {
     quickReplies.value = await listQuickReplies(desk.account.value === 'all' ? undefined : desk.account.value)
-    quickOpen.value = true
+  } catch (caught) {
+    toast.error(errorText(caught))
+  } finally {
+    quickLoading.value = false
+  }
+}
+
+watch(pickerOpen, (open) => {
+  if (open) void ensureQuickReplies()
+})
+
+watch(
+  () => desk.account.value,
+  () => {
+    quickReplies.value = []
+  },
+)
+
+async function openQuickReplies() {
+  pickerQuery.value = ''
+  pickerManual.value = true
+  await ensureQuickReplies()
+}
+
+function closePicker() {
+  pickerManual.value = false
+  if (slash.value?.open) {
+    composer.setDraft(applyQuickReplyDraft(composer.draft || '', ''))
+  }
+}
+
+function onPickerQuery(value: string) {
+  if (slash.value?.open) {
+    const draft = composer.draft || ''
+    const lines = draft.split('\n')
+    const last = lines[lines.length - 1] ?? ''
+    lines[lines.length - 1] = last.replace(/(^|\s)\/[^\s]*$/, `$1/${value}`)
+    composer.setDraft(lines.join('\n'))
+    return
+  }
+  pickerQuery.value = value
+}
+
+async function onPickReply(row: { name: string }) {
+  try {
+    const reply = await useQuickReply(row.name)
+    if (slash.value?.open) {
+      composer.setDraft(applyQuickReplyDraft(composer.draft || '', reply.body))
+    } else {
+      composer.setDraft(reply.body)
+    }
+    pickerManual.value = false
   } catch (caught) {
     toast.error(errorText(caught))
   }
 }
 
-const filteredQuickReplies = computed(() => {
-  if (!quickQuery.value.trim()) return quickReplies.value
-  const term = quickQuery.value.toLowerCase()
-  return quickReplies.value.filter(
-    (q) => (q.title || '').toLowerCase().includes(term) || (q.body || '').toLowerCase().includes(term),
-  )
-})
+function onComposerKeydown(event: KeyboardEvent) {
+  if (!pickerOpen.value) return
+  if (!['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(event.key)) return
+  pickerRef.value?.onKeydown(event)
+  // Keep Enter from sending while the slash/zap picker is open.
+  event.preventDefault()
+  event.stopPropagation()
+}
 
-async function insertQuickReply(name: string) {
-  try {
-    const reply = await useQuickReply(name)
-    composer.setDraft(reply.body)
-    quickOpen.value = false
-  } catch (caught) {
-    toast.error(errorText(caught))
-  }
+async function onHandoffResumed() {
+  if (desk.profile.value) await desk.openProfile(desk.profile.value)
+  await desk.refresh()
 }
 
 async function openCatalog() {
@@ -577,118 +636,18 @@ async function retryMessage(message: WhatsAppMessage) {
         </div>
       </div>
 
-      <!-- Conversation List Scroller -->
-      <div class="min-h-0 flex-1 overflow-y-auto divide-y divide-outline-gray-1">
-        <!-- Empty Results View -->
-        <div v-if="conversations.length === 0" class="p-6 text-center text-xs text-ink-gray-5">
-          <div class="mx-auto grid size-10 place-items-center rounded-full bg-surface-gray-2 text-ink-gray-4">
-            <span class="lucide-search-x size-5" aria-hidden="true" />
-          </div>
-          <p class="mt-2 font-medium text-ink-gray-8">No conversations found</p>
-          <p class="mt-1 text-ink-gray-5">No threads match this search or these filters.</p>
-          <button
-            type="button"
-            class="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[#075E54] hover:underline"
-            @click="clearSearch"
-          >
-            Clear all filters
-          </button>
-        </div>
-
-        <!-- Conversation Item Cards -->
-        <button
-          v-for="row in conversations"
-          :key="row.profile.name"
-          type="button"
-          class="flex w-full gap-3 px-3 py-3 text-left transition-all hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#128C7E]"
-          :class="
-            desk.profile.value === row.profile.name
-              ? 'bg-teal-50/70 border-l-4 border-l-[#075E54]'
-              : 'border-l-4 border-l-transparent'
-          "
-          @click="open(row)"
-        >
-          <!-- Avatar with window state dot -->
-          <div class="shrink-0 self-start">
-            <Avatar :label="row.profile.profile_name || row.profile.phone_number" size="xl">
-              <template #indicator>
-                <span
-                  v-if="rowStatus(row) === 'window_open'"
-                  class="size-2.5 rounded-full bg-[#25D366] ring-2 ring-white"
-                  title="24h Service Window Open"
-                />
-                <span
-                  v-else-if="row.needs_reply"
-                  class="size-2.5 rounded-full bg-red-500 ring-2 ring-white"
-                  title="Needs Reply"
-                />
-              </template>
-            </Avatar>
-          </div>
-
-          <!-- Conversation Summary -->
-          <div class="flex min-w-0 flex-1 items-start justify-between gap-2">
-            <div class="min-w-0 flex-1">
-              <!-- Row 1: Name -->
-              <span
-                class="block truncate text-sm leading-snug"
-                :class="[
-                  unreadCount(row) ? 'font-bold' : 'font-semibold',
-                  desk.profile.value === row.profile.name ? 'text-[#075E54]' : 'text-ink-gray-9',
-                ]"
-              >
-                {{ row.profile.profile_name || row.profile.phone_number }}
-              </span>
-
-              <!-- Row 2: Message Preview Snippet -->
-              <p
-                class="mt-0.5 truncate text-xs"
-                :class="unreadCount(row) ? 'font-medium text-ink-gray-8' : 'text-ink-gray-6'"
-              >
-                <span v-if="row.preview?.direction === 'Outgoing'" class="font-medium text-ink-gray-5">You: </span>
-                <span>{{ previewText(row.preview) }}</span>
-              </p>
-
-            </div>
-
-            <!-- Timestamp, unread count, then assignee initials -->
-            <div class="flex shrink-0 flex-col items-end gap-1">
-              <span
-                class="text-[11px] font-mono"
-                :class="unreadCount(row) ? 'font-semibold text-[#25D366]' : 'text-ink-gray-5'"
-              >
-                {{ row.preview?.creation ? formatTime(row.preview.creation) : '' }}
-              </span>
-              <span
-                v-if="unreadCount(row) > 0"
-                class="grid h-5 min-w-5 place-items-center rounded-full bg-[#25D366] px-1.5 text-[11px] font-semibold leading-none text-white"
-                :title="`${unreadCount(row)} unread`"
-              >
-                {{ unreadCount(row) > 99 ? '99+' : unreadCount(row) }}
-              </span>
-              <div v-if="assigneesOf(row).length" class="flex items-center justify-end">
-                <Avatar
-                  v-for="person in assigneesOf(row).slice(0, 3)"
-                  :key="person"
-                  :label="agentLabel(person)"
-                  size="sm"
-                  theme="blue"
-                  class="-ml-1 first:ml-0"
-                  :title="agentLabel(person)"
-                />
-              </div>
-            </div>
-          </div>
-        </button>
-        <button
-          v-if="desk.inbox.value?.has_more"
-          type="button"
-          class="w-full px-3 py-3 text-center text-xs font-semibold text-[#075E54] hover:bg-surface-gray-1"
-          @click="desk.loadMoreConversations()"
-        >
-          Load more conversations
-        </button>
-      </div>
+      <ConversationList
+        :conversations="conversations"
+        :selected="desk.profile.value"
+        :has-more="desk.inbox.value?.has_more"
+        :row-status="rowStatus"
+        :unread-count="unreadCount"
+        :assignees-of="assigneesOf"
+        :agent-label="agentLabel"
+        @select="open"
+        @clear-filters="clearSearch"
+        @load-more="desk.loadMoreConversations()"
+      />
     </aside>
 
     <!-- Center Chat Pane -->
@@ -743,126 +702,26 @@ async function retryMessage(message: WhatsAppMessage) {
 
       <!-- Active Thread View -->
       <template v-else-if="current">
-        <!-- Thread Header -->
-        <header class="inbox-chat-header sticky top-0 z-10 flex h-14 shrink-0 items-center gap-1 overflow-hidden border-b border-[#E9EDEF] bg-white px-2 sm:gap-2 sm:px-3">
-          <div class="inbox-contact flex min-w-0 items-center gap-2">
-            <button
-              type="button"
-              class="inline-flex size-9 items-center justify-center rounded-full text-[#54656F] hover:bg-[#F0F2F5] md:hidden"
-              title="Back to conversation list"
-              @click="desk.openProfile(null)"
-            >
-              <span class="lucide-arrow-left size-5" aria-hidden="true" />
-            </button>
-
-            <button
-              type="button"
-              class="flex min-w-0 items-center gap-2.5 rounded-lg text-left hover:bg-[#F0F2F5]"
-              title="Contact info"
-              @click="openContact"
-            >
-              <span class="relative shrink-0">
-                <Avatar :label="current.profile.profile_name || current.profile.phone_number" size="lg" />
-                <span
-                  v-if="current.profile.status === 'Active'"
-                  class="absolute bottom-0 right-0 size-2.5 rounded-full bg-[#25D366] ring-2 ring-white"
-                />
-              </span>
-              <span class="min-w-0">
-                <span class="block truncate text-sm font-semibold leading-tight text-[#111B21]">
-                  {{ current.profile.profile_name || current.profile.phone_number }}
-                </span>
-                <span class="block truncate text-xs leading-tight text-[#667781]">
-                  {{ current.profile.phone_number }}
-                </span>
-              </span>
-            </button>
-          </div>
-
-          <div class="flex shrink-0 items-center gap-1.5">
-            <div
-              v-if="windowState?.status === 'open'"
-              class="hidden items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 sm:inline-flex"
-              title="24-hour customer care window is open"
-            >
-              <span class="size-1.5 rounded-full bg-emerald-500" />
-              <span>{{ formatRemaining(windowState.expires_at, now) }}</span>
-            </div>
-            <div
-              v-else
-              class="hidden items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 sm:inline-flex"
-              title="24-hour window is closed. Send an approved template."
-            >
-              Window closed
-            </div>
-
-            <Button
-              v-if="desk.mode.value === 'sample' && windowState?.status === 'closed'"
-              size="sm"
-              variant="subtle"
-              label="Simulate reply"
-              @click="desk.simulateReply()"
-            />
-
-            <Dropdown
-              :options="[
-                { label: 'Assign to me', onClick: assignToMe },
-                { label: 'Assign', onClick: openAssign },
-                ...(headerAssignees.length ? [{ label: 'Unassign all', onClick: () => clearAssignment() }] : []),
-              ]"
-            >
-              <button
-                type="button"
-                class="hidden h-8 items-center gap-1.5 rounded-full border border-[#E9EDEF] bg-white px-2 text-xs font-medium text-[#111B21] hover:bg-[#F0F2F5] sm:inline-flex"
-              >
-                <span v-if="headerAssignees.length" class="flex items-center">
-                  <Avatar
-                    v-for="person in headerAssignees.slice(0, 3)"
-                    :key="person"
-                    :label="agentLabel(person)"
-                    size="sm"
-                    class="-ml-1 first:ml-0"
-                  />
-                </span>
-                <Avatar v-else label="Unassigned" size="sm" />
-                <span class="whitespace-nowrap">{{ assigneeSummary(headerAssignees) }}</span>
-                <span class="lucide-chevron-down size-3 text-[#667781]" aria-hidden="true" />
-              </button>
-            </Dropdown>
-
-            <button
-              type="button"
-              class="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-[#54656F] hover:bg-[#F0F2F5] sm:hidden"
-              title="Assign"
-              @click="openAssign"
-            >
-              <span class="lucide-user-plus size-4" aria-hidden="true" />
-            </button>
-
-            <button
-              type="button"
-              class="inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2 text-xs font-medium text-[#54656F] hover:bg-[#F0F2F5]"
-              :class="notesOpen ? 'bg-emerald-50 text-emerald-700' : ''"
-              :title="notes.length ? `Notes ${notes.length}` : 'Notes'"
-              @click="notesOpen = !notesOpen"
-            >
-              <span class="lucide-sticky-note size-4" aria-hidden="true" />
-              <span class="hidden sm:inline">Notes<span v-if="notes.length"> {{ notes.length }}</span></span>
-              <span v-if="notes.length" class="sm:hidden text-[11px] font-semibold">{{ notes.length }}</span>
-            </button>
-
-            <button
-              type="button"
-              class="grid size-8 place-items-center rounded-full text-[#54656F] hover:bg-[#F0F2F5]"
-              :class="chatSearchOpen ? 'bg-[#F0F2F5] text-[#00A884]' : ''"
-              title="Search in conversation"
-              @click="toggleChatSearch"
-            >
-              <span class="lucide-search size-4" aria-hidden="true" />
-            </button>
-
-          </div>
-        </header>
+        <ChatHeader
+          :profile="current.profile"
+          :window-state="windowState"
+          :now="now"
+          :mode="desk.mode.value"
+          :header-assignees="headerAssignees"
+          :notes-count="notes.length"
+          :notes-open="notesOpen"
+          :chat-search-open="chatSearchOpen"
+          :assignee-summary="assigneeSummary"
+          :agent-label="agentLabel"
+          @back="desk.openProfile(null)"
+          @open-contact="openContact"
+          @open-assign="openAssign"
+          @assign-to-me="assignToMe"
+          @clear-assignment="clearAssignment()"
+          @toggle-notes="notesOpen = !notesOpen"
+          @toggle-search="toggleChatSearch"
+          @simulate-reply="desk.simulateReply()"
+        />
 
         <div v-if="chatSearchOpen" class="flex shrink-0 items-center gap-2 border-b border-[#E9EDEF] bg-white px-3 py-2">
           <TextInput v-model="chatQuery" class="min-w-0 flex-1" placeholder="Search in this conversation" />
@@ -883,6 +742,12 @@ async function retryMessage(message: WhatsAppMessage) {
         >
           {{ presenceLabel }}
         </div>
+
+        <BotHandoffBanner
+          :bot-status="current.bot_status"
+          :account="current.profile.whatsapp_account"
+          @resumed="onHandoffResumed"
+        />
 
         <div v-if="notesOpen" class="border-b border-outline-gray-2 bg-amber-50/70 px-4 py-3">
           <p class="text-xs text-ink-gray-6">Internal notes stay on this conversation. They are never sent on WhatsApp.</p>
@@ -959,12 +824,23 @@ async function retryMessage(message: WhatsAppMessage) {
         <!-- Message Composer Input -->
         <div
           v-if="current.profile.status !== 'Blocked'"
-          class="inbox-composer sticky bottom-0 z-10 shrink-0 border-t border-[#E9EDEF] bg-[#F0F2F5] px-2 py-2 sm:px-3"
+          class="inbox-composer relative sticky bottom-0 z-10 shrink-0 border-t border-[#E9EDEF] bg-[#F0F2F5] px-2 py-2 sm:px-3"
+          @keydown.capture="onComposerKeydown"
         >
+          <CannedReplyPicker
+            ref="pickerRef"
+            :open="pickerOpen"
+            :query="pickerFilter"
+            :replies="quickReplies"
+            :loading="quickLoading"
+            @select="onPickReply"
+            @close="closePicker"
+            @update:query="onPickerQuery"
+          />
           <MessageInput
             v-bind="composer"
             :sender-name="current.profile.profile_name"
-            placeholder="Type a message... (Shift+Enter for newline)"
+            placeholder="Type a message… (/ for quick replies)"
             window-closed-label=""
             window-unopened-label=""
           >
@@ -972,7 +848,8 @@ async function retryMessage(message: WhatsAppMessage) {
               <button
                 type="button"
                 class="grid size-10 place-items-center rounded-full text-[#54656F] hover:bg-black/5"
-                title="Quick replies"
+                :class="pickerOpen ? 'bg-black/5 text-[#00A884]' : ''"
+                title="Quick replies (/)"
                 @click="openQuickReplies"
               >
                 <span class="lucide-zap size-5" aria-hidden="true" />
@@ -1151,35 +1028,6 @@ async function retryMessage(message: WhatsAppMessage) {
             />
           </div>
         </div>
-      </template>
-    </Dialog>
-
-    <!-- Quick Replies Modal Dialog -->
-    <Dialog v-model="quickOpen" title="Insert Quick Reply">
-      <div class="space-y-3">
-        <TextInput
-          v-model="quickQuery"
-          placeholder="Filter quick replies…"
-          class="w-full"
-        />
-        <div class="grid max-h-96 gap-2 overflow-y-auto">
-          <button
-            v-for="row in filteredQuickReplies"
-            :key="row.name"
-            type="button"
-            class="rounded-xl border border-outline-gray-2 p-3 text-left transition-colors hover:border-[#128C7E] hover:bg-surface-gray-1"
-            @click="insertQuickReply(row.name)"
-          >
-            <span class="block text-sm font-semibold text-ink-gray-9">{{ row.title }}</span>
-            <span class="mt-1 block text-xs text-ink-gray-6 leading-relaxed">{{ row.body }}</span>
-          </button>
-          <p v-if="!filteredQuickReplies.length" class="py-6 text-center text-xs text-ink-gray-5">
-            No active quick replies match your search.
-          </p>
-        </div>
-      </div>
-      <template #actions>
-        <Button label="Close" @click="quickOpen = false" />
       </template>
     </Dialog>
 
