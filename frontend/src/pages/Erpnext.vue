@@ -503,7 +503,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 flex-col bg-surface-gray-2/60">
+  <div class="flex h-full min-h-0 flex-col bg-white">
     <header class="flex flex-wrap items-center gap-2 border-b border-outline-gray-2 bg-white px-4 py-2 sm:px-6">
       <RouterLink to="/integrations" class="rounded-lg px-3 py-1.5 text-sm font-semibold text-ink-gray-6 hover:bg-surface-gray-2">WhatsApp numbers</RouterLink>
       <RouterLink to="/integrations/erpnext" class="rounded-lg border border-[#075E54]/20 bg-[#075E54]/10 px-3 py-1.5 text-sm font-semibold text-[#075E54]">ERPNext</RouterLink>
@@ -512,8 +512,7 @@ onMounted(load)
     <div class="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
       <div class="mx-auto flex max-w-3xl flex-col gap-6">
         <section class="rounded-xl border border-outline-gray-2 bg-white p-4">
-          <h1 class="text-lg font-semibold text-ink-gray-9">ERPNext</h1>
-          <p class="mt-1 text-sm text-ink-gray-6">
+          <p class="text-sm text-ink-gray-6">
             Connect an ERPNext site with its API key. Add an alert here and Nudg creates the Webhook on that site for the document and event you pick. When that event happens, their site calls Nudg and Nudg sends the WhatsApp template.
           </p>
         </section>

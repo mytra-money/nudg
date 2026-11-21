@@ -322,7 +322,7 @@ watch(
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 flex-col bg-surface-gray-2/60">
+  <div class="flex h-full min-h-0 flex-col bg-white">
     <!-- Sub-navigation Header Bar -->
     <header class="flex flex-wrap items-center justify-between border-b border-outline-gray-2 bg-white px-4 py-2 sm:px-6">
       <div class="flex items-center gap-1 sm:gap-2">
@@ -366,47 +366,27 @@ watch(
 
     <!-- Main Audit Content -->
     <div v-else class="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6 sm:px-8">
-      <!-- Page Header & Action Bar -->
-      <div class="flex flex-col gap-4 border-b border-outline-gray-2 pb-6 md:flex-row md:items-center md:justify-between">
-        <div>
-          <div class="flex items-center gap-2.5">
-            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-[#075E54]/10 text-[#075E54]">
-              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            </div>
-            <div>
-              <h1 class="text-2xl font-bold tracking-tight text-ink-gray-9">Message & Webhook Audit Logs</h1>
-              <p class="text-xs sm:text-sm text-ink-gray-6">
-                Inspect Meta WhatsApp Cloud API request/response payloads, inbound webhooks, and delivery error codes.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Header Actions -->
-        <div class="flex flex-wrap items-center gap-2 sm:gap-3">
-          <Button
-            variant="subtle"
-            size="sm"
-            :loading="isRefreshing"
-            icon-left="lucide-refresh-cw"
-            label="Refresh"
-            @click="refreshLogs"
-          />
-
-          <Button
-            variant="subtle"
-            size="sm"
-            icon-left="lucide-download"
-            label="Export CSV"
-            @click="exportCsv"
-          />
-        </div>
+      <!-- Actions only — AppShell owns the page title -->
+      <div class="mb-5 flex flex-wrap items-center justify-end gap-2">
+        <Button
+          variant="subtle"
+          size="sm"
+          :loading="isRefreshing"
+          icon-left="lucide-refresh-cw"
+          label="Refresh"
+          @click="refreshLogs"
+        />
+        <Button
+          variant="subtle"
+          size="sm"
+          icon-left="lucide-download"
+          label="Export CSV"
+          @click="exportCsv"
+        />
       </div>
 
       <!-- KPI Metrics Ribbon (frappe-ui NumberCard) -->
-      <section aria-labelledby="log-kpi-heading" class="mt-6">
+      <section aria-labelledby="log-kpi-heading">
         <h2 id="log-kpi-heading" class="sr-only">Audit Log Metrics</h2>
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <NumberCard

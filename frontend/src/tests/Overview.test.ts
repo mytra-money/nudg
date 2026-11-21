@@ -29,6 +29,7 @@ describe('OverviewView status', () => {
     expect(wrapper.text()).toContain('Could not load integration status')
     expect(wrapper.text()).toContain('Failed to get method')
     expect(wrapper.text()).not.toContain('DocTypes')
-    expect(wrapper.text()).toContain('Nudg')
+    // Page title lives in AppShell; the view still shows the overview blurb.
+    expect(wrapper.text()).toContain('conversation SLAs')
   })
 })

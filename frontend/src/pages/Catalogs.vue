@@ -3,9 +3,9 @@ import { computed, onMounted, ref } from 'vue'
 import { Badge, Button, Dialog, FormControl, Select, TextInput, dialog, toast } from 'frappe-ui'
 import { NumberCard } from 'frappe-ui/charts'
 import DeskCard from '@/components/desk/DeskCard.vue'
-import EmptyState from '@/components/EmptyState.vue'
-import ErrorState from '@/components/ErrorState.vue'
-import LoadingState from '@/components/LoadingState.vue'
+import DeskEmpty from '@/components/desk/DeskEmpty.vue'
+import DeskPage from '@/components/desk/DeskPage.vue'
+import DeskSplit from '@/components/desk/DeskSplit.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import { errorText } from '@/utils/format'
 import { useDesk } from '@/stores/desk'
@@ -604,42 +604,25 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 flex-col bg-surface-gray-2/60">
-    <!-- Main Content Area -->
-    <div class="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6 sm:px-8">
-      <!-- Page Header & Action Bar -->
-      <div class="flex flex-col gap-4 border-b border-outline-gray-2 pb-6 md:flex-row md:items-start md:justify-between">
-        <div class="flex min-w-0 items-start gap-2.5">
-          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#075E54]/10 text-[#075E54]">
-            <span class="lucide-shopping-bag size-5" />
-          </div>
-          <div class="min-w-0">
-            <div class="flex flex-wrap items-center gap-2">
-              <h1 class="text-2xl font-bold tracking-tight text-ink-gray-9">WhatsApp Product Catalogs</h1>
-              <Badge label="Stored on this site" theme="amber" variant="subtle" size="md" />
-            </div>
-            <p class="mt-1 text-xs text-ink-gray-6 sm:text-sm">
-              Add products here and send them in a chat. Meta catalog import is not available in this build.
-            </p>
-          </div>
-        </div>
+  <DeskPage variant="scroll">
+    <template #badges>
+      <Badge label="Stored on this site" theme="amber" variant="subtle" size="md" />
+    </template>
 
-        <!-- Header Actions -->
-        <div class="flex shrink-0 flex-wrap items-center gap-2 md:justify-end">
-          <Button variant="subtle" icon-left="lucide-refresh-cw" label="Refresh" :loading="loading" @click="load" />
-          <Button variant="subtle" icon-left="lucide-plus" label="New Catalog" @click="startCatalog()" />
-          <Button
-            variant="solid"
-            class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-            icon-left="lucide-plus"
-            label="Add Catalog Item"
-            @click="startItem()"
-          />
-        </div>
-      </div>
+    <template #actions>
+      <Button variant="subtle" icon-left="lucide-refresh-cw" label="Refresh" :loading="loading" @click="load" />
+      <Button variant="subtle" icon-left="lucide-plus" label="New Catalog" @click="startCatalog()" />
+      <Button
+        variant="solid"
+        class="bg-[#075E54] text-white hover:bg-[#128C7E]"
+        icon-left="lucide-plus"
+        label="Add Catalog Item"
+        @click="startItem()"
+      />
+    </template>
 
-      <!-- KPI Metrics Ribbon (frappe-ui NumberCard) -->
-      <div class="mt-6 grid grid-cols-1 items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <template #kpi>
+      <div class="grid grid-cols-1 items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <NumberCard
           title="Catalogs"
           :value="catalogs.length"
@@ -667,57 +650,63 @@ onMounted(() => {
           :delta-caption="'Selected: ' + syncStatusLabel"
         />
       </div>
+    </template>
 
-      <!-- State Containers (Loading / Error / Empty) -->
-      <LoadingState v-if="loading" label="Loading product catalogs…" />
-      <ErrorState v-else-if="error" :message="error" allow-retry @retry="load" />
-      <EmptyState
-        v-else-if="!catalogs.length"
-        title="No catalogs yet"
-        description="Create a catalog on this site, then send its products from a conversation."
-      />
+    <!-- State Containers (Loading / Error / Empty) -->
+    <DeskEmpty v-if="loading" kind="loading" title="Loading product catalogs…" />
+    <DeskEmpty v-else-if="error" kind="error" :message="error" allow-retry @retry="load" />
+    <DeskEmpty
+      v-else-if="!catalogs.length"
+      title="No catalogs yet"
+      description="Create a catalog on this site, then send its products from a conversation."
+    />
 
-      <!-- Master-Detail Layout -->
-      <div v-else class="nudg-split mt-6 grid min-h-0 flex-1 items-start gap-4 lg:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)]">
-        <DeskCard as="div" :padding="false" class="flex flex-col">
-          <div class="border-b border-outline-gray-2 p-4">
-            <div class="flex h-9 items-center justify-between gap-3">
-              <h2 class="text-sm font-semibold text-ink-gray-9">Collections ({{ catalogs.length }})</h2>
-              <Button variant="ghost" size="sm" label="New" @click="startCatalog()" />
+    <!-- Master-Detail Layout -->
+    <DeskSplit
+      v-else
+      surface="panel"
+      columns="minmax(16rem, 20rem) minmax(0, 1fr)"
+      class="min-h-[32rem] rounded-xl border border-outline-gray-2"
+    >
+      <template #master>
+        <div class="border-b border-outline-gray-2 p-4">
+          <div class="flex h-9 items-center justify-between gap-3">
+            <h2 class="text-sm font-semibold text-ink-gray-9">Collections ({{ catalogs.length }})</h2>
+            <Button variant="ghost" size="sm" label="New" @click="startCatalog()" />
+          </div>
+          <TextInput v-model="searchQuery" class="mt-3 w-full" placeholder="Search collections...">
+            <template #prefix>
+              <span class="lucide-search size-3.5 text-ink-gray-4" />
+            </template>
+          </TextInput>
+        </div>
+
+        <div class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">
+          <DeskCard
+            v-for="cat in filteredCatalogs"
+            :key="cat.name"
+            as="button"
+            interactive
+            :padding="false"
+            class="flex flex-col gap-1.5 px-4 py-3"
+            :class="selectedCatalogName === cat.name ? '!border-[#128C7E] !bg-[#075E54]/5' : ''"
+            @click="open(cat.name)"
+          >
+            <div class="flex items-center justify-between gap-2">
+              <span class="min-w-0 truncate text-sm font-semibold text-ink-gray-9">{{ cat.catalog_name }}</span>
+              <StatusBadge :label="cat.sync_status || 'Pending'" />
             </div>
-            <TextInput v-model="searchQuery" class="mt-3 w-full" placeholder="Search collections...">
-              <template #prefix>
-                <span class="lucide-search size-3.5 text-ink-gray-4" />
-              </template>
-            </TextInput>
-          </div>
-
-          <div class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">
-            <DeskCard
-              v-for="cat in filteredCatalogs"
-              :key="cat.name"
-              as="button"
-              interactive
-              :padding="false"
-              class="flex flex-col gap-1.5 px-4 py-3"
-              :class="selectedCatalogName === cat.name ? '!border-[#128C7E] !bg-[#075E54]/5' : ''"
-              @click="open(cat.name)"
-            >
-              <div class="flex items-center justify-between gap-2">
-                <span class="min-w-0 truncate text-sm font-semibold text-ink-gray-9">{{ cat.catalog_name }}</span>
-                <StatusBadge :label="cat.sync_status || 'Pending'" />
-              </div>
-              <p class="line-clamp-2 text-xs leading-5 text-ink-gray-6">{{ cat.description || 'No catalog description provided.' }}</p>
-              <div class="flex items-center justify-between gap-3 text-[11px] text-ink-gray-5">
-                <span class="min-w-0 truncate">{{ cat.whatsapp_account || 'No account' }}</span>
-                <span class="shrink-0 font-mono">{{ cat.name }}</span>
-              </div>
-            </DeskCard>
-          </div>
-        </DeskCard>
-
+            <p class="line-clamp-2 text-xs leading-5 text-ink-gray-6">{{ cat.description || 'No catalog description provided.' }}</p>
+            <div class="flex items-center justify-between gap-3 text-[11px] text-ink-gray-5">
+              <span class="min-w-0 truncate">{{ cat.whatsapp_account || 'No account' }}</span>
+              <span class="shrink-0 font-mono">{{ cat.name }}</span>
+            </div>
+          </DeskCard>
+        </div>
+      </template>
+      <template #detail>
         <!-- Detail Column: Catalog Products & Actions -->
-        <DeskCard v-if="selectedCatalog" as="div" class="flex min-w-0 flex-col">
+        <div v-if="selectedCatalog" class="flex min-w-0 flex-1 flex-col overflow-y-auto p-4 sm:p-5">
           <div class="flex flex-wrap items-center gap-2">
             <h2 class="min-w-0 truncate text-lg font-bold text-ink-gray-9">{{ selectedCatalog.catalog_name }}</h2>
             <StatusBadge :label="selectedCatalog.status || 'Inactive'" />
@@ -832,9 +821,9 @@ onMounted(() => {
               @click="startItem()"
             />
           </div>
-        </DeskCard>
-      </div>
-    </div>
+        </div>
+      </template>
+    </DeskSplit>
 
     <Dialog v-model="catalogEditorOpen" :title="catalogEditorMode === 'edit' ? 'Edit catalog' : 'New catalog'">
       <div class="space-y-3 py-1">
@@ -978,5 +967,5 @@ onMounted(() => {
         </div>
       </template>
     </Dialog>
-  </div>
+  </DeskPage>
 </template>

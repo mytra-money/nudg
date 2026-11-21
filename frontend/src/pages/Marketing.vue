@@ -4,9 +4,9 @@ import { useMediaQuery } from '@vueuse/core'
 import { Badge, Button, Dialog, dialog, FormControl, Select, TextInput, toast } from 'frappe-ui'
 import { NumberCard } from 'frappe-ui/charts'
 import DeskCard from '@/components/desk/DeskCard.vue'
-import EmptyState from '@/components/EmptyState.vue'
-import ErrorState from '@/components/ErrorState.vue'
-import LoadingState from '@/components/LoadingState.vue'
+import DeskEmpty from '@/components/desk/DeskEmpty.vue'
+import DeskPage from '@/components/desk/DeskPage.vue'
+import DeskSplit from '@/components/desk/DeskSplit.vue'
 import { errorText, formatDay, formatTime, initials } from '@/utils/format'
 import { formatErrorMessage } from '@/utils/errors'
 import { createCampaign, deleteCampaign, getCampaign, listCampaigns, listRecipientLists, runCampaign, updateCampaign } from '@/services/catalogApi'
@@ -458,45 +458,29 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex h-full min-w-0 flex-col overflow-hidden bg-surface-gray-1">
-    <!-- Top Action Header -->
-    <header class="flex flex-col gap-3 border-b border-outline-gray-2 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between shrink-0">
-      <div>
-        <div class="flex items-center gap-2">
-          <span class="rounded bg-[#075E54]/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-[#075E54]">
-            Outbound Marketing
-          </span>
-          <span class="text-xs text-ink-gray-5">·</span>
-          <span class="text-xs font-medium text-ink-gray-6">WhatsApp Broadcast Campaigns</span>
-        </div>
-        <h1 class="mt-1 text-xl font-bold tracking-tight text-ink-gray-9">
-          Campaign Studio & Funnels
-        </h1>
-      </div>
-
-      <div class="flex flex-wrap items-center gap-2">
-        <Button
-          variant="subtle"
-          size="sm"
-          icon="lucide-refresh-cw"
-          label="Refresh"
-          :loading="loading"
-          @click="load"
-        />
-        <Button
-          v-if="isManager"
-          variant="solid"
-          size="sm"
-          class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-          icon-left="lucide-plus"
-          label="New Campaign"
-          @click="startCreate()"
-        />
-      </div>
-    </header>
+  <DeskPage variant="studio">
+    <template #actions>
+      <Button
+        variant="subtle"
+        size="sm"
+        icon="lucide-refresh-cw"
+        label="Refresh"
+        :loading="loading"
+        @click="load"
+      />
+      <Button
+        v-if="isManager"
+        variant="solid"
+        size="sm"
+        class="bg-[#075E54] text-white hover:bg-[#128C7E]"
+        icon-left="lucide-plus"
+        label="New Campaign"
+        @click="startCreate()"
+      />
+    </template>
 
     <!-- Top KPI Performance Funnel Bar -->
-    <section class="border-b border-outline-gray-2 bg-white px-4 py-3 shrink-0">
+    <template #kpi>
       <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <NumberCard title="Broadcasts" :value="totalCampaignsCount" color="#374151" delta-caption="campaigns" />
         <NumberCard title="Messages Sent" :value="totalSent" color="#075E54" delta-caption="total volume" />
@@ -513,13 +497,14 @@ onMounted(() => {
           :delta-caption="`${totalRead} read`"
         />
       </div>
-    </section>
+    </template>
 
     <!-- Content State Handlers -->
-    <LoadingState v-if="loading && !rows.length" label="Loading campaigns…" />
-    <ErrorState v-else-if="error" :message="error" allow-retry @retry="load" />
-    <EmptyState
+    <DeskEmpty v-if="loading && !rows.length" kind="loading" title="Loading campaigns…" />
+    <DeskEmpty v-else-if="error" kind="error" :message="error" allow-retry @retry="load" />
+    <DeskEmpty
       v-else-if="!rows.length"
+      kind="empty"
       title="No broadcasts yet"
       description="Create a UTM Campaign with a WhatsApp template to broadcast offers, announcements, or notifications."
     >
@@ -531,15 +516,17 @@ onMounted(() => {
         icon-left="lucide-plus"
         @click="startCreate()"
       />
-    </EmptyState>
+    </DeskEmpty>
 
     <!-- Master-Detail Workspace Grid -->
-    <div v-else class="nudg-split nudg-master grid min-h-0 flex-1 grid-cols-1 overflow-hidden md:grid-cols-[minmax(0,380px)_1fr]">
+    <DeskSplit
+      v-else
+      :narrow="narrow"
+      :show-detail="showDetail"
+      columns="minmax(0,380px) minmax(0,1fr)"
+    >
       <!-- Left Column: Campaign List -->
-      <aside
-        class="min-h-0 flex-col overflow-hidden border-r border-outline-gray-2 bg-white"
-        :class="narrow && showDetail ? 'hidden' : 'flex'"
-      >
+      <template #master>
         <!-- Search & Filter Tabs -->
         <div class="border-b border-outline-gray-2 p-3 space-y-2.5 shrink-0">
           <TextInput
@@ -615,13 +602,11 @@ onMounted(() => {
             No campaigns found matching your search.
           </div>
         </div>
-      </aside>
+      </template>
 
       <!-- Right Column: Campaign Inspector & Recipient Audit Funnel -->
-      <main
-        class="min-h-0 flex-col overflow-y-auto bg-white"
-        :class="narrow && !showDetail ? 'hidden' : 'flex'"
-      >
+      <template #detail>
+      <div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
         <div v-if="narrow && selected" class="px-4 pt-3">
           <Button variant="ghost" icon-left="lucide-arrow-left" label="All campaigns" @click="showDetail = false" />
         </div>
@@ -828,8 +813,9 @@ onMounted(() => {
             </p>
           </div>
         </div>
-      </main>
-    </div>
+      </div>
+      </template>
+    </DeskSplit>
 
     <Dialog v-model="editorOpen" :title="editorMode === 'edit' ? 'Edit campaign' : 'New campaign'">
       <div class="space-y-3 py-1 text-sm">
@@ -934,5 +920,5 @@ onMounted(() => {
         </div>
       </template>
     </Dialog>
-  </div>
+  </DeskPage>
 </template>

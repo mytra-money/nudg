@@ -15,7 +15,7 @@ const isAccountsActive = computed(() => route.path === '/integrations' || route.
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 flex-col bg-surface-gray-2/60">
+  <div class="flex h-full min-h-0 flex-col bg-white">
     <!-- Sub-navigation Header -->
     <header class="flex flex-wrap items-center justify-between border-b border-outline-gray-2 bg-white px-4 py-2 sm:px-6">
       <div class="flex items-center gap-1 sm:gap-2">

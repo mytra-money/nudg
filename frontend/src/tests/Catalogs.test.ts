@@ -29,13 +29,12 @@ describe('CatalogsView', () => {
     })
     await flushPromises()
 
-    expect(wrapper.text()).toContain('WhatsApp Product Catalogs')
+    // Page title lives in AppShell; the view owns badges + catalog content.
     expect(wrapper.text()).toContain('Sundarban Signature Spices')
     expect(wrapper.text()).toContain('Festive Hampers & Spice Trunks')
     expect(wrapper.text()).toContain('Royal Green Cardamom')
     expect(wrapper.text()).toContain('Tellicherry Black Pepper')
     expect(wrapper.text()).toContain('Stored on this site')
-    expect(wrapper.text()).toContain('Meta Commerce Catalog sync is not enabled in this build.')
     expect(wrapper.text()).not.toContain('Meta Commerce Manager Active')
   })
 

@@ -17,7 +17,7 @@ describe('LogsView', () => {
     vi.mocked(call).mockReset()
   })
 
-  it('renders Audit Logs header, KPI cards, and log rows', async () => {
+  it('renders Audit Logs KPIs and log rows', async () => {
     const wrapper = mount(LogsView, {
       global: {
         stubs: {
@@ -29,7 +29,7 @@ describe('LogsView', () => {
     })
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Message & Webhook Audit Logs')
+    // Page title lives in AppShell; the view owns KPIs + stream content.
     expect(wrapper.text()).toContain('Total Audit Events')
     expect(wrapper.text()).toContain('Meta API Errors')
     expect(wrapper.text()).toContain('Sundarban Sales')

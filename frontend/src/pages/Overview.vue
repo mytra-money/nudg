@@ -113,25 +113,13 @@ const recentLogs = computed(() => logs.value.slice(0, 4))
 </script>
 
 <template>
-  <div class="h-full overflow-y-auto bg-surface-gray-1">
+  <div class="h-full overflow-y-auto bg-white">
     <div class="mx-auto flex min-h-full w-full max-w-7xl flex-col px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-      <!-- Top Header / Brand Hero -->
-      <header class="flex flex-col gap-4 border-b border-outline-gray-2 pb-6 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div class="flex items-center gap-2">
-            <span class="rounded bg-[#075E54]/10 px-2 py-0.5 text-[11px] font-bold tracking-wider uppercase text-[#075E54]">
-              Meta Cloud API
-            </span>
-            <span class="text-xs text-ink-gray-5">·</span>
-            <span class="text-xs font-medium text-ink-gray-6">Omnichannel Nudg</span>
-          </div>
-          <h1 class="mt-1.5 text-2xl font-bold tracking-tight text-ink-gray-9 sm:text-3xl">
-            Nudg Overview
-          </h1>
-          <p class="mt-1 text-sm text-ink-gray-6">
-            Real-time customer conversation SLAs, 24-hour service windows, and WhatsApp Business infrastructure.
-          </p>
-        </div>
+      <!-- Status / actions only — AppShell owns the page title -->
+      <header class="flex flex-col gap-3 border-b border-outline-gray-2 pb-5 sm:flex-row sm:items-center sm:justify-between">
+        <p class="text-sm text-ink-gray-6">
+          Real-time conversation SLAs, 24-hour service windows, and WhatsApp Business infrastructure.
+        </p>
 
         <div class="flex flex-wrap items-center gap-2.5">
           <!-- Live / Demo Indicator -->

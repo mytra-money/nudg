@@ -3,9 +3,10 @@ import { computed, onMounted, ref } from 'vue'
 import { Alert, Badge, Button, call, Checkbox, Dialog, dialog, FormControl, Password, TabButtons, TextInput, toast } from 'frappe-ui'
 import { NumberCard } from 'frappe-ui/charts'
 import DeskCard from '@/components/desk/DeskCard.vue'
+import DeskEmpty from '@/components/desk/DeskEmpty.vue'
+import DeskPage from '@/components/desk/DeskPage.vue'
+import DeskTable from '@/components/desk/DeskTable.vue'
 import EmptyState from '@/components/EmptyState.vue'
-import ErrorState from '@/components/ErrorState.vue'
-import LoadingState from '@/components/LoadingState.vue'
 import { errorText } from '@/utils/format'
 import { deleteQuickReply, getWhatsappSettings, listQuickReplies, saveQuickReply, saveWhatsappSettings, updateWhatsappAccount } from '@/services/catalogApi'
 import { isManager, isSiteAdmin, useDesk } from '@/stores/desk'
@@ -556,426 +557,400 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 flex-col bg-surface-gray-2/60">
-    <!-- Main Content Area -->
-    <div class="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6 sm:px-8">
-      <!-- Header Banner -->
-      <div class="flex flex-col gap-4 border-b border-outline-gray-2 pb-6 md:flex-row md:items-center md:justify-between">
-        <div>
-          <div class="flex items-center gap-2.5">
-            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-[#075E54]/10 text-[#075E54]">
-              <span class="lucide-settings size-5" />
-            </div>
-            <div>
-              <h1 class="text-2xl font-bold tracking-tight text-ink-gray-9">Nudg Settings</h1>
-              <p class="text-xs sm:text-sm text-ink-gray-6">
-                Configure canned quick replies, routing rules, and WABA profile metadata.
-              </p>
-            </div>
+  <DeskPage variant="scroll">
+    <template #actions>
+      <Button
+        variant="subtle"
+        size="sm"
+        :loading="isRefreshing"
+        icon-left="lucide-refresh-cw"
+        label="Refresh"
+        @click="handleRefresh"
+      />
+
+      <Button
+        v-if="isManager"
+        variant="solid"
+        size="sm"
+        class="bg-[#075E54] text-white hover:bg-[#128C7E]"
+        label="Integrations"
+        @click="openIntegrations"
+      />
+    </template>
+
+    <template #tabs>
+      <TabButtons
+        :model-value="activeTab"
+        :options="tabOptions"
+        variant="underline"
+        size="md"
+        @update:model-value="selectTab"
+      >
+        <template #suffix="{ button }">
+          <Badge v-if="button.value === 'replies'" theme="gray" size="sm" :label="allReplies.length" />
+          <Badge v-else-if="button.value === 'team'" theme="gray" size="sm" :label="teamMembers.length" />
+        </template>
+      </TabButtons>
+    </template>
+
+    <!-- TAB 1: QUICK REPLIES -->
+    <div v-if="activeTab === 'replies'" class="space-y-6">
+      <DeskEmpty v-if="loading" kind="loading" title="Loading quick replies…" />
+      <DeskEmpty v-else-if="error" kind="error" :message="error" allow-retry @retry="load" />
+      <template v-else>
+      <!-- KPI Metrics -->
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <NumberCard
+          title="Configured Shortcuts"
+          :value="allReplies.length"
+          color="#075E54"
+          delta-caption='Triggerable via "/" in composer'
+        />
+        <NumberCard
+          title="Most Used Shortcut"
+          :value="'/' + (mostUsedReply?.shortcut || 'greet')"
+          color="#075E54"
+          :delta-caption="`${mostUsedReply?.usage_count || 0} times · ${mostUsedReply?.title || 'Welcome Greeting'}`"
+        />
+        <NumberCard
+          title="Fast Dispatch Mode"
+          value="Freeform & Variables"
+          delta-caption="Single-click insertion in Inbox"
+        />
+      </div>
+
+      <!-- Filter & Search Toolbar -->
+      <DeskCard as="div">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <TextInput
+            v-model="searchQuery"
+            type="text"
+            class="w-full sm:w-72"
+            placeholder="Search title, /shortcut, body..."
+          >
+            <template #prefix>
+              <span class="lucide-search size-3.5 text-ink-gray-4" />
+            </template>
+          </TextInput>
+
+          <div class="flex items-center gap-2">
+            <Button
+              variant="solid"
+              size="sm"
+              class="bg-[#075E54] text-white hover:bg-[#128C7E]"
+              icon-left="lucide-plus"
+              label="New Quick Reply"
+              @click="startReply()"
+            />
           </div>
         </div>
+      </DeskCard>
 
-        <!-- Top Header Actions -->
-        <div class="flex flex-wrap items-center gap-2 sm:gap-3">
-          <Button
-            variant="subtle"
-            size="sm"
-            :loading="isRefreshing"
-            icon-left="lucide-refresh-cw"
-            label="Refresh"
-            @click="handleRefresh"
-          />
-
-          <Button
-            v-if="isManager"
-            variant="solid"
-            size="sm"
-            class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-            label="Integrations"
-            @click="openIntegrations"
-          />
-        </div>
-      </div>
-
-      <!-- Settings Navigation Tabs -->
-      <div class="mt-6 overflow-x-auto">
-        <TabButtons
-          :model-value="activeTab"
-          :options="tabOptions"
-          variant="underline"
-          size="md"
-          @update:model-value="selectTab"
+      <!-- Quick Replies Grid -->
+      <div v-if="filteredReplies.length > 0" class="grid gap-4 sm:grid-cols-2">
+        <DeskCard
+          v-for="row in filteredReplies"
+          :key="row.name"
+          as="article"
+          interactive
+          class="flex flex-col justify-between"
         >
-          <template #suffix="{ button }">
-            <Badge v-if="button.value === 'replies'" theme="gray" size="sm" :label="allReplies.length" />
-            <Badge v-else-if="button.value === 'team'" theme="gray" size="sm" :label="teamMembers.length" />
-          </template>
-        </TabButtons>
-      </div>
+          <div>
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-center gap-2">
+                <Badge v-if="row.shortcut" theme="green" variant="subtle" :label="'/' + row.shortcut" />
+                <h3 class="text-sm font-semibold text-ink-gray-9">{{ row.title }}</h3>
+              </div>
 
-      <!-- TAB 1: QUICK REPLIES -->
-      <div v-if="activeTab === 'replies'" class="mt-6 space-y-6">
-        <LoadingState v-if="loading" label="Loading quick replies…" />
-        <ErrorState v-else-if="error" :message="error" allow-retry @retry="load" />
-        <template v-else>
-        <!-- KPI Metrics -->
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <NumberCard
-            title="Configured Shortcuts"
-            :value="allReplies.length"
-            color="#075E54"
-            delta-caption='Triggerable via "/" in composer'
-          />
-          <NumberCard
-            title="Most Used Shortcut"
-            :value="'/' + (mostUsedReply?.shortcut || 'greet')"
-            color="#075E54"
-            :delta-caption="`${mostUsedReply?.usage_count || 0} times · ${mostUsedReply?.title || 'Welcome Greeting'}`"
-          />
-          <NumberCard
-            title="Fast Dispatch Mode"
-            value="Freeform & Variables"
-            delta-caption="Single-click insertion in Inbox"
-          />
-        </div>
+              <Badge :theme="statusTheme(row.status || 'Active')" :label="row.status || 'Active'" />
+            </div>
 
-        <!-- Filter & Search Toolbar -->
-        <DeskCard as="div">
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <TextInput
-              v-model="searchQuery"
-              type="text"
-              class="w-full sm:w-72"
-              placeholder="Search title, /shortcut, body..."
-            >
-              <template #prefix>
-                <span class="lucide-search size-3.5 text-ink-gray-4" />
-              </template>
-            </TextInput>
+            <p class="mt-3 text-xs text-ink-gray-7 leading-relaxed whitespace-pre-wrap bg-surface-gray-2/40 rounded-lg p-3 border border-outline-gray-1">
+              {{ row.body }}
+            </p>
+          </div>
 
-            <div class="flex items-center gap-2">
+          <div class="mt-4 flex items-center justify-between border-t border-outline-gray-1 pt-3 text-xs">
+            <div class="flex items-center gap-2 text-ink-gray-5">
+              <span>Used {{ row.usage_count || 0 }} times</span>
+              <span v-if="row.whatsapp_account">· {{ row.whatsapp_account }}</span>
+            </div>
+
+            <div class="flex items-center gap-1">
               <Button
-                variant="solid"
+                v-if="isManager"
+                variant="ghost"
                 size="sm"
-                class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-                icon-left="lucide-plus"
-                label="New Quick Reply"
-                @click="startReply()"
+                label="Edit"
+                @click="startReply(row)"
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                :label="copiedShortcut === (row.shortcut ? '/' + row.shortcut : row.title) ? 'Copied!' : 'Copy Text'"
+                @click="copyText(row.body, row.shortcut ? '/' + row.shortcut : row.title)"
               />
             </div>
           </div>
         </DeskCard>
+      </div>
 
-        <!-- Quick Replies Grid -->
-        <div v-if="filteredReplies.length > 0" class="grid gap-4 sm:grid-cols-2">
-          <DeskCard
-            v-for="row in filteredReplies"
-            :key="row.name"
-            as="article"
-            interactive
-            class="flex flex-col justify-between"
-          >
-            <div>
-              <div class="flex items-start justify-between gap-3">
-                <div class="flex items-center gap-2">
-                  <Badge v-if="row.shortcut" theme="green" variant="subtle" :label="'/' + row.shortcut" />
-                  <h3 class="text-sm font-semibold text-ink-gray-9">{{ row.title }}</h3>
-                </div>
+      <EmptyState
+        v-else
+        title="No Quick Replies Found"
+        description="No replies match the current filter or search criteria."
+      >
+        <Button
+          variant="solid"
+          size="sm"
+          class="bg-[#075E54] text-white hover:bg-[#128C7E]"
+          label="Reset Filters"
+          @click="searchQuery = ''; channelFilter = 'all'"
+        />
+      </EmptyState>
+      </template>
+    </div>
 
-                <Badge :theme="statusTheme(row.status || 'Active')" :label="row.status || 'Active'" />
-              </div>
-
-              <p class="mt-3 text-xs text-ink-gray-7 leading-relaxed whitespace-pre-wrap bg-surface-gray-2/40 rounded-lg p-3 border border-outline-gray-1">
-                {{ row.body }}
-              </p>
-            </div>
-
-            <div class="mt-4 flex items-center justify-between border-t border-outline-gray-1 pt-3 text-xs">
-              <div class="flex items-center gap-2 text-ink-gray-5">
-                <span>Used {{ row.usage_count || 0 }} times</span>
-                <span v-if="row.whatsapp_account">· {{ row.whatsapp_account }}</span>
-              </div>
-
-              <div class="flex items-center gap-1">
-                <Button
-                  v-if="isManager"
-                  variant="ghost"
-                  size="sm"
-                  label="Edit"
-                  @click="startReply(row)"
-                />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  :label="copiedShortcut === (row.shortcut ? '/' + row.shortcut : row.title) ? 'Copied!' : 'Copy Text'"
-                  @click="copyText(row.body, row.shortcut ? '/' + row.shortcut : row.title)"
-                />
-              </div>
-            </div>
-          </DeskCard>
-        </div>
-
-        <EmptyState
-          v-else
-          title="No Quick Replies Found"
-          description="No replies match the current filter or search criteria."
-        >
+    <!-- TAB 2: ROUTING & AUTO-ASSIGNMENT -->
+    <div v-else-if="activeTab === 'routing'" class="space-y-6">
+      <div class="grid gap-6 sm:grid-cols-3">
+        <DeskCard>
+          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+            <span class="lucide-users size-5" />
+          </div>
+          <h3 class="text-sm font-semibold text-ink-gray-9">Frappe Assignment Rules</h3>
+          <p class="mt-1 text-xs text-ink-gray-6 leading-relaxed">
+            Assign conversations from the inbox, and add agents from the Team tab.
+          </p>
           <Button
-            variant="solid"
+            v-if="isManager"
+            class="mt-3"
+            variant="ghost"
             size="sm"
-            class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-            label="Reset Filters"
-            @click="searchQuery = ''; channelFilter = 'all'"
+            label="Open team"
+            @click="selectTab('team')"
           />
-        </EmptyState>
-        </template>
+        </DeskCard>
+
+        <DeskCard>
+          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+            <span class="lucide-shield-check size-5" />
+          </div>
+          <h3 class="text-sm font-semibold text-ink-gray-9">Agent Role & Permissions</h3>
+          <p class="mt-1 text-xs text-ink-gray-6 leading-relaxed">
+            Users with the <code class="rounded bg-surface-gray-2 px-1 text-[11px]">WhatsApp User</code> role can chat with assigned leads and view shared inboxes. Administrators require <code class="rounded bg-surface-gray-2 px-1 text-[11px]">System Manager</code>.
+          </p>
+        </DeskCard>
+
+        <DeskCard>
+          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-purple-50 text-purple-600">
+            <span class="lucide-clock size-5" />
+          </div>
+          <h3 class="text-sm font-semibold text-ink-gray-9">24h SLA Session Window</h3>
+          <p class="mt-1 text-xs text-ink-gray-6 leading-relaxed">
+            Meta enforces a 24-hour service window per conversation. Inbound replies automatically re-open the freeform window for support agents.
+          </p>
+        </DeskCard>
       </div>
+    </div>
 
-      <!-- TAB 2: ROUTING & AUTO-ASSIGNMENT -->
-      <div v-else-if="activeTab === 'routing'" class="mt-6 space-y-6">
-        <div class="grid gap-6 sm:grid-cols-3">
-          <DeskCard>
-            <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-              <span class="lucide-users size-5" />
+    <!-- TAB 4: WABA PROFILE -->
+    <div v-else-if="activeTab === 'profile'" class="space-y-6">
+      <template v-if="desk.mode.value === 'live'">
+        <Alert
+          v-if="!(desk.inbox.value?.accounts || []).length"
+          theme="gray"
+          title="No WhatsApp account is connected yet."
+          description="Add one from Integrations."
+        />
+        <DeskCard
+          v-for="account in desk.inbox.value?.accounts || []"
+          :key="account.name"
+        >
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 class="text-lg font-bold text-ink-gray-9">{{ account.account_name || account.name }}</h2>
+              <p class="mt-1 text-xs text-ink-gray-5">{{ account.name }} · {{ account.status }}</p>
             </div>
-            <h3 class="text-sm font-semibold text-ink-gray-9">Frappe Assignment Rules</h3>
-            <p class="mt-1 text-xs text-ink-gray-6 leading-relaxed">
-              Assign conversations from the inbox, and add agents from the Team tab.
-            </p>
-            <Button
-              v-if="isManager"
-              class="mt-3"
-              variant="ghost"
-              size="sm"
-              label="Open team"
-              @click="selectTab('team')"
-            />
-          </DeskCard>
-
-          <DeskCard>
-            <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-              <span class="lucide-shield-check size-5" />
-            </div>
-            <h3 class="text-sm font-semibold text-ink-gray-9">Agent Role & Permissions</h3>
-            <p class="mt-1 text-xs text-ink-gray-6 leading-relaxed">
-              Users with the <code class="rounded bg-surface-gray-2 px-1 text-[11px]">WhatsApp User</code> role can chat with assigned leads and view shared inboxes. Administrators require <code class="rounded bg-surface-gray-2 px-1 text-[11px]">System Manager</code>.
-            </p>
-          </DeskCard>
-
-          <DeskCard>
-            <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-purple-50 text-purple-600">
-              <span class="lucide-clock size-5" />
-            </div>
-            <h3 class="text-sm font-semibold text-ink-gray-9">24h SLA Session Window</h3>
-            <p class="mt-1 text-xs text-ink-gray-6 leading-relaxed">
-              Meta enforces a 24-hour service window per conversation. Inbound replies automatically re-open the freeform window for support agents.
-            </p>
-          </DeskCard>
-        </div>
-      </div>
-
-      <!-- TAB 4: WABA PROFILE -->
-      <div v-else-if="activeTab === 'profile'" class="mt-6 space-y-6">
-        <template v-if="desk.mode.value === 'live'">
-          <Alert
-            v-if="!(desk.inbox.value?.accounts || []).length"
-            theme="gray"
-            title="No WhatsApp account is connected yet."
-            description="Add one from Integrations."
-          />
-          <DeskCard
-            v-for="account in desk.inbox.value?.accounts || []"
-            :key="account.name"
-          >
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 class="text-lg font-bold text-ink-gray-9">{{ account.account_name || account.name }}</h2>
-                <p class="mt-1 text-xs text-ink-gray-5">{{ account.name }} · {{ account.status }}</p>
-              </div>
-              <Button
-                v-if="isManager"
-                variant="subtle"
-                size="sm"
-                label="Edit"
-                @click="startAccountEdit(account)"
-              />
-            </div>
-          </DeskCard>
-          <DeskCard
-            v-if="isSiteAdmin"
-            title="WhatsApp settings"
-            :description="`Site-wide. Only an Administrator or System Manager can see this. Callback: ${siteSettings.callback_method}`"
-          >
-            <p class="text-xs leading-relaxed text-ink-gray-6">
-              Optional. Leave this empty on a multi-client site. Connecting or removing a number does not fill it.
-              It is used only when a webhook or send does not name a number and that number cannot be matched by phone id.
-              People still message only from numbers they are allowed to use.
-            </p>
-            <div class="mt-4 grid gap-3 sm:grid-cols-2">
-              <FormControl
-                v-model="siteSettings.default_account"
-                type="select"
-                label="Default account"
-                :options="defaultAccountOptions"
-              />
-              <FormControl
-                v-model="siteSettings.whatsapp_api_version"
-                type="text"
-                label="API version"
-                placeholder="v23.0"
-              />
-              <FormControl
-                v-model="siteSettings.whatsapp_api_url"
-                type="text"
-                label="API URL"
-                class="sm:col-span-2"
-                placeholder="https://graph.facebook.com"
-              />
-              <FormControl
-                v-model="siteSettings.webhook_verify_token"
-                type="text"
-                label="Webhook verify token"
-              />
-              <Password
-                v-model="siteSettings.webhook_secret"
-                label="Webhook secret"
-                :placeholder="siteSettings.has_webhook_secret ? 'Saved. Type a new secret to replace it.' : 'App secret from Meta'"
-              />
-            </div>
-            <div class="mt-4 flex justify-end">
-              <Button variant="solid" class="bg-[#075E54] text-white hover:bg-[#128C7E]" label="Save settings" :loading="savingSite" @click="saveSiteSettings" />
-            </div>
-          </DeskCard>
-        </template>
-        <DeskCard v-else>
-          <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between border-b border-outline-gray-2 pb-5">
-            <div class="flex items-start gap-4">
-              <div class="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#075E54] text-white shadow-sm font-bold text-xl">
-                SS
-              </div>
-              <div>
-                <div class="flex flex-wrap items-center gap-2">
-                  <h2 class="text-lg font-bold text-ink-gray-9">Sundarban Spices & Agri Corp</h2>
-                  <Badge theme="green" variant="subtle" label="Meta Verified Business" />
-                </div>
-                <p class="mt-1 text-xs text-ink-gray-5">Official WhatsApp Business Account (WABA ID: 9920148123901)</p>
-              </div>
-            </div>
-
             <Button
               v-if="isManager"
               variant="subtle"
               size="sm"
-              label="Connect a number"
-              @click="openIntegrations"
+              label="Edit"
+              @click="startAccountEdit(account)"
             />
           </div>
-
-          <div class="mt-5 grid gap-4 sm:grid-cols-2 text-xs">
-            <div>
-              <span class="font-semibold text-ink-gray-5">Business Category</span>
-              <p class="mt-1 text-ink-gray-9 font-medium">Food & Beverage · Organic Spices & Grocery</p>
-            </div>
-
-            <div>
-              <span class="font-semibold text-ink-gray-5">Meta Messaging Tier</span>
-              <p class="mt-1 text-emerald-700 font-bold">Tier 1 · 10,000 unique recipients / 24h</p>
-            </div>
-
-            <div class="col-span-2">
-              <span class="font-semibold text-ink-gray-5">Business Description</span>
-              <p class="mt-1 text-ink-gray-9 leading-relaxed">
-                Direct farm-to-table organic whole spices, premium single-origin cardamom, tellicherry black peppercorns, and artisanal spice gift packaging from the Sundarban valley reserves.
-              </p>
-            </div>
-
-            <div>
-              <span class="font-semibold text-ink-gray-5">Official Website</span>
-              <p class="mt-1 font-mono text-ink-gray-9">https://sundarbanspices.example.com</p>
-            </div>
-
-            <div>
-              <span class="font-semibold text-ink-gray-5">Physical Address</span>
-              <p class="mt-1 text-ink-gray-9">Sundarban Organic Estate, South 24 Parganas, West Bengal 743370, India</p>
-            </div>
-          </div>
         </DeskCard>
-      </div>
-
-      <!-- TAB 5: TEAM & AGENTS -->
-      <div v-else-if="activeTab === 'team'" class="mt-6 space-y-6">
         <DeskCard
-          title="Team Members & Agents"
-          description="Manage agent accounts, scoped roles, and WhatsApp permissions directly in Nudg without opening Desk."
+          v-if="isSiteAdmin"
+          title="WhatsApp settings"
+          :description="`Site-wide. Only an Administrator or System Manager can see this. Callback: ${siteSettings.callback_method}`"
         >
-          <template #actions>
-            <Button
-              variant="solid"
-              class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-              label="Add Team Member"
-              icon-left="lucide-user-plus"
-              @click="showAddMemberModal = true"
+          <p class="text-xs leading-relaxed text-ink-gray-6">
+            Optional. Leave this empty on a multi-client site. Connecting or removing a number does not fill it.
+            It is used only when a webhook or send does not name a number and that number cannot be matched by phone id.
+            People still message only from numbers they are allowed to use.
+          </p>
+          <div class="mt-4 grid gap-3 sm:grid-cols-2">
+            <FormControl
+              v-model="siteSettings.default_account"
+              type="select"
+              label="Default account"
+              :options="defaultAccountOptions"
             />
-          </template>
-
-          <LoadingState v-if="teamLoading" label="Loading team members…" />
-          <ErrorState v-else-if="teamError" :message="teamError" allow-retry @retry="loadTeamMembers" />
-          <EmptyState
-            v-else-if="!teamMembers.length"
-            title="No team members yet"
-            description="Add an agent to give them access to WhatsApp conversations."
-          />
-
-          <!-- Members Table -->
-          <div v-else class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-outline-gray-2 text-xs">
-              <thead>
-                <tr class="text-left text-ink-gray-5">
-                  <th class="py-3 pr-4 font-semibold uppercase tracking-wider">Agent</th>
-                  <th class="py-3 px-4 font-semibold uppercase tracking-wider">Role</th>
-                  <th class="py-3 px-4 font-semibold uppercase tracking-wider">WhatsApp Account</th>
-                  <th class="py-3 px-4 font-semibold uppercase tracking-wider">Status</th>
-                  <th class="py-3 pl-4 text-right font-semibold uppercase tracking-wider">Action</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-outline-gray-2">
-                <tr v-for="member in teamMembers" :key="member.email" class="hover:bg-surface-gray-1">
-                  <td class="py-3 pr-4">
-                    <div class="flex items-center gap-3">
-                      <div class="flex h-8 w-8 items-center justify-center rounded-full bg-[#075E54]/10 text-xs font-bold text-[#075E54]">
-                        {{ member.full_name?.charAt(0) || 'U' }}
-                      </div>
-                      <div>
-                        <p class="font-semibold text-ink-gray-9">{{ member.full_name }}</p>
-                        <p class="text-[11px] text-ink-gray-5 font-mono">{{ member.email }}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td class="py-3 px-4">
-                    <Badge :theme="member.role === 'WhatsApp Manager' ? 'violet' : 'blue'" :label="member.role" />
-                  </td>
-                  <td class="py-3 px-4 text-ink-gray-7 font-medium">
-                    {{ member.account || 'All Permitted' }}
-                  </td>
-                  <td class="py-3 px-4">
-                    <Badge :theme="member.enabled ? 'green' : 'red'" :label="member.enabled ? 'Active' : 'Disabled'" />
-                  </td>
-                  <td class="py-3 pl-4 text-right">
-                    <Button
-                      v-if="!member.is_owner"
-                      variant="ghost"
-                      size="sm"
-                      label="Edit"
-                      @click="openEditMember(member)"
-                    />
-                    <span v-else class="text-ink-gray-4 text-[11px]">Owner</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+            <FormControl
+              v-model="siteSettings.whatsapp_api_version"
+              type="text"
+              label="API version"
+              placeholder="v23.0"
+            />
+            <FormControl
+              v-model="siteSettings.whatsapp_api_url"
+              type="text"
+              label="API URL"
+              class="sm:col-span-2"
+              placeholder="https://graph.facebook.com"
+            />
+            <FormControl
+              v-model="siteSettings.webhook_verify_token"
+              type="text"
+              label="Webhook verify token"
+            />
+            <Password
+              v-model="siteSettings.webhook_secret"
+              label="Webhook secret"
+              :placeholder="siteSettings.has_webhook_secret ? 'Saved. Type a new secret to replace it.' : 'App secret from Meta'"
+            />
+          </div>
+          <div class="mt-4 flex justify-end">
+            <Button variant="solid" class="bg-[#075E54] text-white hover:bg-[#128C7E]" label="Save settings" :loading="savingSite" @click="saveSiteSettings" />
           </div>
         </DeskCard>
-      </div>
+      </template>
+      <DeskCard v-else>
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between border-b border-outline-gray-2 pb-5">
+          <div class="flex items-start gap-4">
+            <div class="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#075E54] text-white shadow-sm font-bold text-xl">
+              SS
+            </div>
+            <div>
+              <div class="flex flex-wrap items-center gap-2">
+                <h2 class="text-lg font-bold text-ink-gray-9">Sundarban Spices & Agri Corp</h2>
+                <Badge theme="green" variant="subtle" label="Meta Verified Business" />
+              </div>
+              <p class="mt-1 text-xs text-ink-gray-5">Official WhatsApp Business Account (WABA ID: 9920148123901)</p>
+            </div>
+          </div>
+
+          <Button
+            v-if="isManager"
+            variant="subtle"
+            size="sm"
+            label="Connect a number"
+            @click="openIntegrations"
+          />
+        </div>
+
+        <div class="mt-5 grid gap-4 sm:grid-cols-2 text-xs">
+          <div>
+            <span class="font-semibold text-ink-gray-5">Business Category</span>
+            <p class="mt-1 text-ink-gray-9 font-medium">Food & Beverage · Organic Spices & Grocery</p>
+          </div>
+
+          <div>
+            <span class="font-semibold text-ink-gray-5">Meta Messaging Tier</span>
+            <p class="mt-1 text-emerald-700 font-bold">Tier 1 · 10,000 unique recipients / 24h</p>
+          </div>
+
+          <div class="col-span-2">
+            <span class="font-semibold text-ink-gray-5">Business Description</span>
+            <p class="mt-1 text-ink-gray-9 leading-relaxed">
+              Direct farm-to-table organic whole spices, premium single-origin cardamom, tellicherry black peppercorns, and artisanal spice gift packaging from the Sundarban valley reserves.
+            </p>
+          </div>
+
+          <div>
+            <span class="font-semibold text-ink-gray-5">Official Website</span>
+            <p class="mt-1 font-mono text-ink-gray-9">https://sundarbanspices.example.com</p>
+          </div>
+
+          <div>
+            <span class="font-semibold text-ink-gray-5">Physical Address</span>
+            <p class="mt-1 text-ink-gray-9">Sundarban Organic Estate, South 24 Parganas, West Bengal 743370, India</p>
+          </div>
+        </div>
+      </DeskCard>
+    </div>
+
+    <!-- TAB 5: TEAM & AGENTS -->
+    <div v-else-if="activeTab === 'team'" class="space-y-6">
+      <DeskCard
+        title="Team Members & Agents"
+        description="Manage agent accounts, scoped roles, and WhatsApp permissions directly in Nudg without opening Desk."
+      >
+        <template #actions>
+          <Button
+            variant="solid"
+            class="bg-[#075E54] text-white hover:bg-[#128C7E]"
+            label="Add Team Member"
+            icon-left="lucide-user-plus"
+            @click="showAddMemberModal = true"
+          />
+        </template>
+
+        <DeskEmpty v-if="teamLoading" kind="loading" title="Loading team members…" />
+        <DeskEmpty v-else-if="teamError" kind="error" :message="teamError" allow-retry @retry="loadTeamMembers" />
+        <DeskEmpty
+          v-else-if="!teamMembers.length"
+          title="No team members yet"
+          description="Add an agent to give them access to WhatsApp conversations."
+        />
+
+        <!-- Members Table -->
+        <DeskTable v-else>
+          <template #head>
+            <tr>
+              <th class="px-4 py-3 font-semibold">Agent</th>
+              <th class="px-4 py-3 font-semibold">Role</th>
+              <th class="px-4 py-3 font-semibold">WhatsApp Account</th>
+              <th class="px-4 py-3 font-semibold">Status</th>
+              <th class="px-4 py-3 text-right font-semibold">Action</th>
+            </tr>
+          </template>
+          <tr v-for="member in teamMembers" :key="member.email" class="hover:bg-surface-gray-1">
+            <td class="px-4 py-3">
+              <div class="flex items-center gap-3">
+                <div class="flex h-8 w-8 items-center justify-center rounded-full bg-[#075E54]/10 text-xs font-bold text-[#075E54]">
+                  {{ member.full_name?.charAt(0) || 'U' }}
+                </div>
+                <div>
+                  <p class="font-semibold text-ink-gray-9">{{ member.full_name }}</p>
+                  <p class="text-[11px] text-ink-gray-5 font-mono">{{ member.email }}</p>
+                </div>
+              </div>
+            </td>
+            <td class="px-4 py-3">
+              <Badge :theme="member.role === 'WhatsApp Manager' ? 'violet' : 'blue'" :label="member.role" />
+            </td>
+            <td class="px-4 py-3 text-ink-gray-7 font-medium">
+              {{ member.account || 'All Permitted' }}
+            </td>
+            <td class="px-4 py-3">
+              <Badge :theme="member.enabled ? 'green' : 'red'" :label="member.enabled ? 'Active' : 'Disabled'" />
+            </td>
+            <td class="px-4 py-3 text-right">
+              <Button
+                v-if="!member.is_owner"
+                variant="ghost"
+                size="sm"
+                label="Edit"
+                @click="openEditMember(member)"
+              />
+              <span v-else class="text-ink-gray-4 text-[11px]">Owner</span>
+            </td>
+          </tr>
+        </DeskTable>
+      </DeskCard>
     </div>
 
     <!-- MODAL: Add Team Member -->
@@ -1186,5 +1161,5 @@ onMounted(() => {
         </div>
       </template>
     </Dialog>
-  </div>
+  </DeskPage>
 </template>

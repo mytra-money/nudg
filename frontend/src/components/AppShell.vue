@@ -5,10 +5,10 @@ import {
   Button,
   call,
   Dialog,
-  Dropdown,
   Popover,
   Sidebar,
   SidebarCollapseToggle,
+  SidebarHeader,
   SidebarItem,
   SidebarSection,
 } from 'frappe-ui'
@@ -165,7 +165,7 @@ onUnmounted(() => {
 
 <template>
   <div
-    class="nudg-shell flex h-dvh w-screen max-w-full flex-col overflow-hidden bg-surface-gray-1 text-ink-gray-9 md:flex-row"
+    class="nudg-shell flex h-dvh w-screen max-w-full flex-col overflow-hidden bg-white text-ink-gray-9 md:flex-row"
     :class="keyboardOpen ? 'keyboard-open' : ''"
   >
     <div class="relative z-20 hidden h-full shrink-0 md:flex">
@@ -175,19 +175,8 @@ onUnmounted(() => {
         width="14rem"
         collapsed-width="3rem"
       >
-        <div class="flex h-12 shrink-0 items-center px-1">
-          <div
-            class="flex h-10 min-w-0 items-center rounded-4 px-1.5"
-            :class="sidebarCollapsed ? 'w-auto' : 'w-full'"
-          >
-            <div class="size-7 shrink-0 overflow-hidden rounded-[6px]">
-              <img :src="logoUrl" alt="Nudg" class="size-full object-cover" />
-            </div>
-            <div v-show="!sidebarCollapsed" class="ml-2 min-w-0 flex-1">
-              <AccountSelect inline />
-            </div>
-          </div>
-        </div>
+        <!-- Left: profile (LYQD / LMS SidebarHeader pattern) -->
+        <SidebarHeader title="Nudg" :subtitle="userLabel" :menu-items="userMenu" :logo="logoUrl" />
         <div class="min-h-0 flex-1 overflow-y-auto px-2">
           <SidebarSection>
             <SidebarItem
@@ -232,7 +221,8 @@ onUnmounted(() => {
 
     <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <header class="flex min-h-12 items-center gap-3 border-b border-outline-gray-2 bg-white px-3 sm:px-4">
-        <div class="min-w-0">
+        <!-- Left: page title (shell owns headings — pages must not repeat them) -->
+        <div class="min-w-0 flex-1">
           <nav v-if="breadcrumb" aria-label="Breadcrumb" class="mb-0.5">
             <ol class="flex min-w-0 items-center gap-1 text-xs text-ink-gray-6">
               <li>
@@ -249,20 +239,9 @@ onUnmounted(() => {
           </nav>
           <h1 class="truncate text-base font-semibold text-ink-gray-9">{{ title }}</h1>
         </div>
-        <div v-if="sidebarCollapsed" class="hidden w-44 shrink-0 md:block">
-          <AccountSelect inline />
-        </div>
-        <div class="ml-auto flex min-w-0 items-center gap-2">
-          <div class="w-28 min-w-0 overflow-hidden sm:w-40 md:hidden">
-            <AccountSelect inline />
-          </div>
-          <div
-            v-if="selectedAccountLabel"
-            class="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-800"
-          >
-            <span class="lucide-building-2 size-3 text-emerald-600" aria-hidden="true" />
-            <span class="truncate max-w-[10rem]">{{ selectedAccountLabel }}</span>
-          </div>
+
+        <!-- Right: WhatsApp number select (profile lives in the left sidebar) -->
+        <div class="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
           <Popover align="end">
             <template #trigger>
               <Button variant="ghost" icon="lucide-bell" label="Notifications" />
@@ -276,15 +255,9 @@ onUnmounted(() => {
               />
             </div>
           </Popover>
-          <Dropdown :options="userMenu">
-            <button
-              type="button"
-              class="inline-flex h-7 max-w-[11rem] items-center gap-2 rounded-md px-2 text-sm font-medium text-ink-gray-8 hover:bg-surface-gray-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#128C7E] sm:max-w-xs"
-            >
-              <span class="lucide-user size-4 shrink-0" aria-hidden="true" />
-              <span class="hidden truncate sm:inline">{{ userLabel }}</span>
-            </button>
-          </Dropdown>
+          <div class="w-36 min-w-0 sm:w-48">
+            <AccountSelect inline />
+          </div>
         </div>
       </header>
 

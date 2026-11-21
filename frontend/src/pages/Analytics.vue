@@ -3,14 +3,19 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { Alert, Badge, Button, FormControl, Spinner, toast } from 'frappe-ui'
 import { NumberCard } from 'frappe-ui/charts'
 import DeskCard from '@/components/desk/DeskCard.vue'
-import EmptyState from '@/components/EmptyState.vue'
-import ErrorState from '@/components/ErrorState.vue'
-import LoadingState from '@/components/LoadingState.vue'
+import DeskEmpty from '@/components/desk/DeskEmpty.vue'
+import DeskPage from '@/components/desk/DeskPage.vue'
+import DeskTable from '@/components/desk/DeskTable.vue'
+import { useAccountGate } from '@/composables/useAccountGate'
 import { errorText, formatDay, formatTime } from '@/utils/format'
 import { getAnalytics, refreshAnalytics } from '@/services/catalogApi'
-import { isManager, useDesk } from '@/stores/desk'
+import { useDesk } from '@/stores/desk'
 
 const desk = useDesk()
+const { accountOptions, accountGateDescription } = useAccountGate({
+  includeAll: true,
+  allLabel: 'All Accounts',
+})
 const live = Boolean(window.csrf_token)
 
 const loading = ref(true)
@@ -165,13 +170,6 @@ const linkedAccounts = computed(() => desk.inbox.value?.accounts || [])
 const serverBlocked = ref(false)
 const needsAccount = computed(() => live && (linkedAccounts.value.length === 0 || serverBlocked.value))
 
-const accountOptions = computed(() => {
-  return [
-    { label: 'All Accounts', value: 'all' },
-    ...linkedAccounts.value.map((a) => ({ label: a.account_name || a.name, value: a.name })),
-  ]
-})
-
 async function load() {
   if (live && linkedAccounts.value.length === 0) {
     serverBlocked.value = false
@@ -290,48 +288,32 @@ onUnmounted(() => window.clearInterval(timer))
 </script>
 
 <template>
-  <div class="flex h-full min-w-0 flex-col overflow-hidden bg-surface-gray-1">
-    <!-- Top Action Header -->
-    <header class="flex flex-col gap-3 border-b border-outline-gray-2 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between shrink-0">
-      <div>
-        <div class="flex items-center gap-2">
-          <span class="rounded bg-[#075E54]/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-[#075E54]">
-            Business Intelligence
-          </span>
-          <span class="text-xs text-ink-gray-5">·</span>
-          <span class="text-xs font-medium text-ink-gray-6">Omnichannel Metric Snapshots</span>
-        </div>
-        <h1 class="mt-1 text-xl font-bold tracking-tight text-ink-gray-9">
-          WhatsApp Analytics & SLA Health
-        </h1>
-      </div>
-
-      <div v-if="!needsAccount" class="flex flex-wrap items-center gap-2">
-        <FormControl
-          type="select"
-          class="w-40"
-          :model-value="selectedAccount"
-          :options="accountOptions"
-          @update:model-value="(val: unknown) => { selectedAccount = String(val || 'all'); load(); }"
-        />
-        <Button
-          variant="subtle"
-          size="sm"
-          icon-left="lucide-download"
-          label="Export CSV"
-          @click="exportCsv"
-        />
-        <Button
-          variant="solid"
-          size="sm"
-          class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-          icon-left="lucide-refresh-cw"
-          label="Compute Snapshot"
-          :loading="busy"
-          @click="refresh"
-        />
-      </div>
-    </header>
+  <DeskPage variant="studio">
+    <template v-if="!needsAccount" #actions>
+      <FormControl
+        type="select"
+        class="w-40"
+        :model-value="selectedAccount"
+        :options="accountOptions"
+        @update:model-value="(val: unknown) => { selectedAccount = String(val || 'all'); load(); }"
+      />
+      <Button
+        variant="subtle"
+        size="sm"
+        icon-left="lucide-download"
+        label="Export CSV"
+        @click="exportCsv"
+      />
+      <Button
+        variant="solid"
+        size="sm"
+        class="bg-[#075E54] text-white hover:bg-[#128C7E]"
+        icon-left="lucide-refresh-cw"
+        label="Compute Snapshot"
+        :loading="busy"
+        @click="refresh"
+      />
+    </template>
 
     <!-- Background Refresh Notification Banner -->
     <div v-if="refreshing" class="shrink-0 border-b border-outline-gray-2 bg-white px-4 py-2">
@@ -343,14 +325,15 @@ onUnmounted(() => window.clearInterval(timer))
     </div>
 
     <!-- State Handlers -->
-    <LoadingState v-if="loading && !latest && !needsAccount" label="Loading WhatsApp metrics…" />
-    <ErrorState v-else-if="error" :message="error" allow-retry @retry="load" />
-    <EmptyState
+    <DeskEmpty v-if="loading && !latest && !needsAccount" kind="loading" title="Loading WhatsApp metrics…" />
+    <DeskEmpty v-else-if="error" kind="error" :message="error" allow-retry @retry="load" />
+    <DeskEmpty
       v-else-if="needsAccount"
+      kind="account"
       title="No WhatsApp account linked"
-      :description="isManager ? 'Connect a WhatsApp number before analytics can load. Numbers from other users stay hidden.' : 'No WhatsApp account is assigned to you yet. Ask a WhatsApp manager to link one before analytics can load.'"
+      :description="accountGateDescription"
     />
-    <EmptyState
+    <DeskEmpty
       v-else-if="!latest"
       title="No Analytics Snapshot Found"
       description="Click 'Compute Snapshot' to calculate and save your first Nudg metric record."
@@ -362,7 +345,7 @@ onUnmounted(() => window.clearInterval(timer))
         icon-left="lucide-refresh-cw"
         @click="refresh"
       />
-    </EmptyState>
+    </DeskEmpty>
 
     <!-- Main Analytics Dashboard Canvas -->
     <div v-else class="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6">
@@ -486,65 +469,61 @@ onUnmounted(() => window.clearInterval(timer))
           <span class="text-xs text-ink-gray-5">{{ history.length }} records</span>
         </template>
 
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs text-ink-gray-8">
-            <thead class="border-b border-outline-gray-2 bg-surface-gray-1 text-[11px] font-bold uppercase tracking-wider text-ink-gray-5">
-              <tr>
-                <th scope="col" class="px-4 py-3">Date</th>
-                <th scope="col" class="px-4 py-3">Status</th>
-                <th scope="col" class="px-4 py-3">Inbound</th>
-                <th scope="col" class="px-4 py-3">Outbound</th>
-                <th scope="col" class="px-4 py-3">Failed</th>
-                <th scope="col" class="px-4 py-3">Open Sessions</th>
-                <th scope="col" class="px-4 py-3">Campaigns</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-outline-gray-1">
-              <tr
-                v-for="row in history"
-                :key="row.name"
-                class="hover:bg-surface-gray-1 transition-colors"
+        <DeskTable class="rounded-none border-0 border-t border-outline-gray-1">
+          <template #head>
+            <tr>
+              <th scope="col" class="px-4 py-3">Date</th>
+              <th scope="col" class="px-4 py-3">Status</th>
+              <th scope="col" class="px-4 py-3">Inbound</th>
+              <th scope="col" class="px-4 py-3">Outbound</th>
+              <th scope="col" class="px-4 py-3">Failed</th>
+              <th scope="col" class="px-4 py-3">Open Sessions</th>
+              <th scope="col" class="px-4 py-3">Campaigns</th>
+            </tr>
+          </template>
+          <tr
+            v-for="row in history"
+            :key="row.name"
+            class="hover:bg-surface-gray-1 transition-colors"
+          >
+            <td class="px-4 py-3 font-semibold text-ink-gray-9">
+              {{ formatDay(row.snapshot_date) }}
+            </td>
+            <td class="px-4 py-3">
+              <Badge
+                :label="row.status"
+                :theme="row.status === 'Ready' ? 'green' : 'amber'"
+                size="sm"
+              />
+            </td>
+            <td class="px-4 py-3 font-medium text-blue-700">
+              {{ row.messages_in || 0 }}
+            </td>
+            <td class="px-4 py-3 font-medium text-[#075E54]">
+              {{ row.messages_out || 0 }}
+            </td>
+            <td class="px-4 py-3">
+              <span
+                :class="row.failed_messages ? 'font-semibold text-red-700' : 'text-ink-gray-5'"
               >
-                <td class="px-4 py-3 font-semibold text-ink-gray-9">
-                  {{ formatDay(row.snapshot_date) }}
-                </td>
-                <td class="px-4 py-3">
-                  <Badge
-                    :label="row.status"
-                    :theme="row.status === 'Ready' ? 'green' : 'amber'"
-                    size="sm"
-                  />
-                </td>
-                <td class="px-4 py-3 font-medium text-blue-700">
-                  {{ row.messages_in || 0 }}
-                </td>
-                <td class="px-4 py-3 font-medium text-[#075E54]">
-                  {{ row.messages_out || 0 }}
-                </td>
-                <td class="px-4 py-3">
-                  <span
-                    :class="row.failed_messages ? 'font-semibold text-red-700' : 'text-ink-gray-5'"
-                  >
-                    {{ row.failed_messages || 0 }}
-                  </span>
-                </td>
-                <td class="px-4 py-3 font-mono text-ink-gray-7">
-                  {{ row.open_conversations || 0 }}
-                </td>
-                <td class="px-4 py-3 font-mono text-ink-gray-7">
-                  {{ row.campaigns_sent || 0 }}
-                </td>
-              </tr>
+                {{ row.failed_messages || 0 }}
+              </span>
+            </td>
+            <td class="px-4 py-3 font-mono text-ink-gray-7">
+              {{ row.open_conversations || 0 }}
+            </td>
+            <td class="px-4 py-3 font-mono text-ink-gray-7">
+              {{ row.campaigns_sent || 0 }}
+            </td>
+          </tr>
 
-              <tr v-if="history.length === 0">
-                <td colspan="7" class="py-8 text-center text-xs text-ink-gray-5">
-                  No historical snapshots recorded yet.
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+          <tr v-if="history.length === 0">
+            <td colspan="7" class="py-8 text-center text-xs text-ink-gray-5">
+              No historical snapshots recorded yet.
+            </td>
+          </tr>
+        </DeskTable>
       </DeskCard>
     </div>
-  </div>
+  </DeskPage>
 </template>

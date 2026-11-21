@@ -4,7 +4,9 @@ import { useMediaQuery } from '@vueuse/core'
 import { Badge, Button, Dialog, FormControl, Select, TextInput, toast } from 'frappe-ui'
 import { NumberCard } from 'frappe-ui/charts'
 import DeskTemplatePreview from '@/components/DeskTemplatePreview.vue'
-import EmptyState from '@/components/EmptyState.vue'
+import DeskEmpty from '@/components/desk/DeskEmpty.vue'
+import DeskPage from '@/components/desk/DeskPage.vue'
+import DeskSplit from '@/components/desk/DeskSplit.vue'
 import TemplateButtonFields from '@/components/templates/TemplateButtonFields.vue'
 import { errorText, initials } from '@/utils/format'
 import {
@@ -14,6 +16,7 @@ import {
   saveWhatsappTemplate,
   syncWhatsappTemplates,
 } from '@/services/catalogApi'
+import { useAccountGate } from '@/composables/useAccountGate'
 import { isManager, useDesk } from '@/stores/desk'
 import type { Template } from '@/types'
 
@@ -121,13 +124,7 @@ const headerTypeOptions = [
 ]
 
 // Account options
-const accountOptions = computed(() => {
-  const accs = desk.inbox.value?.accounts || []
-  return [
-    { label: 'All Accounts', value: 'all' },
-    ...accs.map((a) => ({ label: a.account_name || a.name, value: a.name })),
-  ]
-})
+const { accountOptions } = useAccountGate({ includeAll: true, allLabel: 'All Accounts' })
 
 const editorAccountOptions = computed(() =>
   (desk.inbox.value?.accounts || []).map((a) => ({
@@ -424,41 +421,26 @@ function clearFilters() {
 </script>
 
 <template>
-  <div class="flex h-full min-w-0 flex-col overflow-hidden bg-surface-gray-1">
-    <!-- Top Action Header -->
-    <header class="flex flex-col gap-3 border-b border-outline-gray-2 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between shrink-0">
-      <div>
-        <div class="flex items-center gap-2">
-          <span class="rounded bg-[#075E54]/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-[#075E54]">
-            Meta Cloud API
-          </span>
-          <span class="text-xs text-ink-gray-5">·</span>
-          <span class="text-xs font-medium text-ink-gray-6">Template Studio & Library</span>
-        </div>
-        <h1 class="mt-1 text-xl font-bold tracking-tight text-ink-gray-9">
-          WhatsApp Message Templates
-        </h1>
-      </div>
-      <div v-if="isManager" class="flex flex-wrap gap-2">
-        <Button
-          variant="subtle"
-          size="sm"
-          label="Sync from Meta"
-          :loading="syncingTemplates"
-          @click="syncTemplates"
-        />
-        <Button
-          variant="solid"
-          size="sm"
-          class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-          icon-left="lucide-plus"
-          label="New Template"
-          @click="openTemplateEditor()"
-        />
-      </div>
-    </header>
+  <DeskPage variant="studio">
+    <template v-if="isManager" #actions>
+      <Button
+        variant="subtle"
+        size="sm"
+        label="Sync from Meta"
+        :loading="syncingTemplates"
+        @click="syncTemplates"
+      />
+      <Button
+        variant="solid"
+        size="sm"
+        class="bg-[#075E54] text-white hover:bg-[#128C7E]"
+        icon-left="lucide-plus"
+        label="New Template"
+        @click="openTemplateEditor()"
+      />
+    </template>
 
-    <section class="shrink-0 border-b border-outline-gray-2 bg-white px-4 py-3">
+    <template #kpi>
       <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <button type="button" class="w-full text-left" @click="applyKpiFilter('Approved')">
           <NumberCard
@@ -494,10 +476,9 @@ function clearFilters() {
           />
         </button>
       </div>
-    </section>
+    </template>
 
-    <!-- Filters & Search Toolbar -->
-    <section class="border-b border-outline-gray-2 bg-white px-4 py-2.5 space-y-2 shrink-0">
+    <template #toolbar>
       <div class="flex flex-wrap items-center gap-2.5">
         <!-- Search Input -->
         <div class="template-search relative">
@@ -539,17 +520,20 @@ function clearFilters() {
           />
         </div>
       </div>
-    </section>
+    </template>
 
     <!-- Master-Detail Studio Grid -->
-    <div class="nudg-split nudg-master grid min-h-0 flex-1 grid-cols-1 overflow-hidden md:grid-cols-[minmax(200px,260px)_minmax(0,1fr)]">
+    <DeskSplit
+      :narrow="narrow"
+      :show-detail="showDetail"
+      columns="minmax(200px,260px) minmax(0,1fr)"
+    >
       <!-- Left Column: Template Library List -->
-      <aside
-        class="min-h-0 flex-col divide-y divide-outline-gray-1 overflow-y-auto border-r border-outline-gray-2 bg-white"
-        :class="narrow && showDetail ? 'hidden' : 'flex'"
-      >
-        <EmptyState
+      <template #master>
+      <div class="flex min-h-0 flex-1 flex-col divide-y divide-outline-gray-1 overflow-y-auto">
+        <DeskEmpty
           v-if="templates.length === 0"
+          kind="empty"
           title="No templates yet"
           description="Sync from Meta or create a template. Approved templates can be sent from the inbox."
         />
@@ -617,13 +601,12 @@ function clearFilters() {
             </span>
           </div>
         </button>
-      </aside>
+      </div>
+      </template>
 
       <!-- Right Column: Interactive Studio Inspector Canvas -->
-      <main
-        class="min-h-0 flex-col gap-3 overflow-y-auto bg-white p-4"
-        :class="narrow && !showDetail ? 'hidden' : 'flex'"
-      >
+      <template #detail>
+      <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
         <button
           v-if="narrow"
           type="button"
@@ -660,8 +643,9 @@ function clearFilters() {
         <div v-else class="grid flex-1 place-items-center p-8 text-center text-xs text-ink-gray-5">
           Select a template from the library on the left.
         </div>
-      </main>
-    </div>
+      </div>
+      </template>
+    </DeskSplit>
 
     <!-- Send Template Modal Dialog -->
     <Dialog
@@ -900,7 +884,7 @@ function clearFilters() {
         </div>
       </template>
     </Dialog>
-  </div>
+  </DeskPage>
 </template>
 
 <style scoped>

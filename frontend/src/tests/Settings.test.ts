@@ -21,7 +21,7 @@ describe('SettingsView', () => {
     const wrapper = mount(SettingsView)
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Nudg Settings')
+    // Page title lives in AppShell; the view owns tabs + reply content.
     expect(wrapper.text()).toContain('Quick Replies')
     expect(wrapper.text()).toContain('Routing & Assignment')
     expect(wrapper.text()).toContain('WABA Profile')
