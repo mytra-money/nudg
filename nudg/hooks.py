@@ -16,6 +16,7 @@ doctype_js = {
 	"WA Bulk Message": "public/js/wa_bulk_message.js",
 	"WA Recipient List": "public/js/wa_recipient_list.js",
 	"WA Chatbot": "public/js/wa_chatbot.js",
+	"User Invitation": "public/js/user_invitation.js",
 }
 
 # Frappe v16+ target with official frappe/whatsapp integration
@@ -39,11 +40,23 @@ website_route_rules = [
 after_install = "nudg.install.after_install"
 after_migrate = ["nudg.install.after_migrate"]
 
+# Standard Frappe invitation. WhatsApp Manager may invite either WhatsApp role.
+# The invitee sets their own password from the email. No password is chosen here.
+user_invitation = {
+	"allowed_roles": {
+		"System Manager": ["WhatsApp Manager", "WhatsApp User"],
+		"WhatsApp Manager": ["WhatsApp Manager", "WhatsApp User"],
+	},
+	"extra_invite_params": ["nudg_account"],
+	"after_accept": ["nudg.invitations.after_accept"],
+}
+
 permission_query_conditions = {
 	"WA Profile": "nudg.security.get_tenant_conversation_query",
 	"UTM Campaign": "nudg.security.get_tenant_campaign_query",
 	"WA Quick Reply": "nudg.security.get_tenant_quick_reply_query",
 	"WA Catalog": "nudg.security.get_tenant_catalog_query",
+	"WA Template": "nudg.security.get_tenant_template_query",
 	"WA Bulk Message": "nudg.security.get_tenant_bulk_query",
 	"WA Recipient List": "nudg.security.get_tenant_recipient_list_query",
 	"WA Chatbot": "nudg.security.get_tenant_chatbot_query",
@@ -59,6 +72,7 @@ has_permission = {
 	"UTM Campaign": "nudg.security.has_tenant_permission",
 	"WA Quick Reply": "nudg.security.has_tenant_permission",
 	"WA Catalog": "nudg.security.has_tenant_permission",
+	"WA Template": "nudg.security.has_tenant_permission",
 	"WA Bulk Message": "nudg.security.has_tenant_permission",
 	"WA Recipient List": "nudg.security.has_tenant_permission",
 	"WA Chatbot": "nudg.security.has_tenant_permission",
@@ -90,7 +104,10 @@ doc_events = {
 	},
 	"WA Account": {
 		"validate": "nudg.integrations.erpnext.service.validate_account_site",
-		"after_insert": "nudg.security.undo_autoselected_default",
+		"after_insert": [
+			"nudg.security.undo_autoselected_default",
+			"nudg.security.mark_first_account_default",
+		],
 		"on_update": "nudg.security.on_wa_account_change",
 		"on_trash": "nudg.security.on_wa_account_change",
 	},
@@ -101,6 +118,9 @@ doc_events = {
 	"User Permission": {
 		"on_update": "nudg.security.on_user_permission_change",
 		"on_trash": "nudg.security.on_user_permission_change",
+	},
+	"User Invitation": {
+		"before_insert": "nudg.invitations.prepare_nudg_invitation",
 	},
 	"WA Profile": {
 		"on_update": "nudg.services.assignments.on_conversation_update",

@@ -1,4 +1,7 @@
-# Development setup
+---
+title: Development setup
+sidebar_position: 5
+---
 
 The app source is in `frontend/`.
 
@@ -43,4 +46,8 @@ Or, from the bench root:
 bench build --app nudg
 ```
 
-Either command writes the files the site serves for `/nudg`.
+Either command writes the files the site serves for `/nudg`. After a build, clear the site cache if the page still shows the previous files:
+
+```bash
+bench --site <site> clear-cache
+```

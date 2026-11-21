@@ -571,6 +571,13 @@ def get_user_account_status() -> dict:
 	}
 
 
+def _wa_account_fields() -> list[str]:
+	fields = ["name", "account_name", "status", "phone_id", "business_id", "app_id", "auto_read_receipts"]
+	if frappe.db.has_column("WA Account", "is_default"):
+		fields.append("is_default")
+	return fields
+
+
 @frappe.whitelist()
 def list_user_accounts() -> list[dict]:
 	"""Return WA Accounts the current user has permission to access."""
@@ -583,7 +590,7 @@ def list_user_accounts() -> list[dict]:
 	return frappe.get_all(
 		"WA Account",
 		filters={"name": ["in", accounts]},
-		fields=["name", "account_name", "status", "phone_id", "business_id", "app_id", "auto_read_receipts"],
+		fields=_wa_account_fields(),
 		order_by="account_name asc",
 	)
 
@@ -658,6 +665,7 @@ def update_whatsapp_account(
 	business_id: str | None = None,
 	app_id: str | None = None,
 	access_token: str | None = None,
+	is_default: int | None = None,
 ) -> dict:
 	"""Update a connected number from Nudg. A blank credential is left unchanged."""
 	_require_manager()
@@ -680,6 +688,13 @@ def update_whatsapp_account(
 	if token:
 		doc.access_token = token
 	doc.save(ignore_permissions=True)
+	if is_default is not None:
+		from nudg.security import set_account_default
+
+		set_account_default(doc.name, int(is_default))
+	marked = 0
+	if frappe.db.has_column("WA Account", "is_default"):
+		marked = 1 if frappe.db.get_value("WA Account", doc.name, "is_default") else 0
 	return {
 		"name": doc.name,
 		"account_name": doc.account_name,
@@ -688,6 +703,7 @@ def update_whatsapp_account(
 		"business_id": doc.business_id,
 		"app_id": doc.app_id,
 		"auto_read_receipts": doc.auto_read_receipts,
+		"is_default": marked,
 	}
 
 
@@ -810,6 +826,7 @@ def save_whatsapp_template(
 	footer: str | None = None,
 	header_text: str | None = None,
 	header_type: str | None = None,
+	header_media: str | None = None,
 	buttons: str | list | None = None,
 	name: str | None = None,
 	submit_to_meta: int | str | bool | None = 1,
@@ -850,7 +867,14 @@ def save_whatsapp_template(
 	header_kinds = ("Text", "Image", "Document", "GIF", "Video")
 	doc.header_type = header_type if header_type in header_kinds else (doc.header_type or "Text")
 	doc.header_text = (header_text or "").strip()
+	_apply_template_header_media(doc, header_media)
 	_apply_template_buttons(doc, buttons)
+	# Meta stores template_name, not the label. WA Template derives the name in
+	# validate(), but only when from_sync is unset. Draft saves set that flag
+	# before insert so Meta is skipped, which also skips the derivation and
+	# then validate throws "Template name is required".
+	if not doc.whatsapp_template_id:
+		_assign_local_template_name(doc, label)
 	# WA Template.before_save skips Meta when from_sync is set (also used by Meta sync).
 	if not publish:
 		doc.flags.from_sync = True
@@ -858,6 +882,7 @@ def save_whatsapp_template(
 		doc.insert(ignore_permissions=True)
 	else:
 		doc.save(ignore_permissions=True)
+	_link_template_header_file(doc)
 	return {
 		"name": doc.name,
 		"template_label": doc.template_label,
@@ -867,6 +892,59 @@ def save_whatsapp_template(
 		"whatsapp_template_id": doc.whatsapp_template_id,
 		"submitted_to_meta": publish,
 	}
+
+
+def _apply_template_header_media(doc, header_media: str | None) -> None:
+	"""Store a local sample file. Text headers do not keep a file."""
+	if doc.header_type == "Text":
+		doc.header_media = None
+		doc.header_media_handle = None
+		doc.mime_type = None
+		return
+	media = (header_media or "").strip()
+	if media and not (media.startswith("/files/") or media.startswith("/private/files/")):
+		frappe.throw(_("Upload the sample from this page. A file address outside this site cannot be used."))
+	if media != (doc.header_media or ""):
+		doc.header_media_handle = None
+		doc.mime_type = None
+	doc.header_media = media or None
+	doc.header_text = ""
+
+
+def _link_template_header_file(doc) -> None:
+	url = (doc.header_media or "").strip()
+	if not url:
+		return
+	file_name = frappe.db.get_value("File", {"file_url": url}, "name")
+	if not file_name:
+		return
+	frappe.db.set_value(
+		"File",
+		file_name,
+		{
+			"attached_to_doctype": "WA Template",
+			"attached_to_name": doc.name,
+			"attached_to_field": "header_media",
+		},
+		update_modified=False,
+	)
+
+
+def _assign_local_template_name(doc, label: str) -> None:
+	"""Copy the label into Meta's template name before a local insert.
+
+	Locked once the template has a Meta id. ``from_sync`` must not be set yet.
+	"""
+	import re
+
+	from whatsapp.whatsapp.doctype.wa_template.wa_template import normalize_string
+
+	derived = normalize_string(label)
+	if not derived or not re.match(r"^[a-zA-Z0-9_]+$", derived):
+		frappe.throw(
+			_("Template label must use letters, numbers, or spaces. Meta stores it as the template name.")
+		)
+	doc.template_name = derived
 
 
 def _apply_template_buttons(doc, buttons: str | list | None) -> None:
@@ -918,6 +996,7 @@ def get_whatsapp_template(name: str) -> dict:
 		"status": doc.status,
 		"header_type": doc.header_type,
 		"header_text": doc.header_text,
+		"header_media": doc.header_media,
 		"message": doc.message,
 		"footer": doc.footer,
 		"whatsapp_account": doc.whatsapp_account,
@@ -1106,72 +1185,124 @@ def list_team_members(account: str | None = None) -> list:
 
 
 @frappe.whitelist()
-def create_team_member(
-	account: str,
-	full_name: str,
-	email: str,
-	password: str,
-	role: str = "WhatsApp User",
+def invite_team_members(
+	emails: str,
+	role: str = "WhatsApp Manager",
+	account: str | None = None,
 ) -> dict:
-	"""Create a new team user directly in Nudg with email, name, password, and scoped WA Account permission."""
+	"""Invite teammates by email. They set their own password from the invitation.
+
+	Same flow as Frappe CRM: a User Invitation, no password chosen by the manager.
+	The WhatsApp number is granted when the invitation is accepted.
+	"""
 	_require_manager()
-	user = frappe.session.user
-	from nudg.security import is_account_manager, ensure_account_user_permission, _get_roles
-
-	if not is_account_manager(account, user) and "System Manager" not in _get_roles(user):
-		frappe.throw(_("Only managers of account '{0}' can add team members.").format(account), frappe.PermissionError)
-
-	email = (email or "").strip().lower()
-	full_name = (full_name or "").strip()
-	password = (password or "").strip()
-
-	if not email or "@" not in email:
-		frappe.throw(_("A valid email address is required."))
-	if not full_name:
-		frappe.throw(_("Full name is required."))
-	if not password or len(password) < 6:
-		frappe.throw(_("Password must be at least 6 characters."))
-
+	account = (account or "").strip()
+	if not account or not frappe.db.exists("WA Account", account):
+		frappe.throw(_("Choose a WhatsApp account for this invitation."))
+	_assert_account_access(account)
 	target_role = "WhatsApp Manager" if role == "WhatsApp Manager" else "WhatsApp User"
+	if not frappe.db.exists("DocType", "User Invitation"):
+		frappe.throw(_("User invitations are not available on this site."))
+	if not frappe.db.has_column("User Invitation", "nudg_account"):
+		from nudg.install import setup_standard_custom_fields
 
-	if frappe.db.exists("User", email):
-		u = frappe.get_doc("User", email)
-		u.first_name = full_name
-	else:
-		u = frappe.get_doc({
-			"doctype": "User",
-			"email": email,
-			"first_name": full_name,
-			"send_welcome_email": 0,
-			"enabled": 1,
-			"user_type": "System User",
-		})
-		u.insert(ignore_permissions=True)
+		setup_standard_custom_fields()
+	if not frappe.db.has_column("User Invitation", "nudg_account"):
+		frappe.throw(_("Reload the site so team invitations can store the WhatsApp account."))
+	from frappe.core.api.user_invitation import invite_by_email
 
-	from frappe.utils.password import update_password
-	update_password(email, password)
-
-	u.roles = [r for r in u.roles if r.role not in ("WhatsApp User", "WhatsApp Manager")]
-	u.append("roles", {"role": target_role})
-	if u.name not in ("Administrator", "Guest"):
-		from nudg.desk_access import profile_name_for_roles
-
-		profile = profile_name_for_roles({row.role for row in u.roles})
-		if profile:
-			u.module_profile = profile
-	u.flags.nudg_profile_set = True
-	u.save(ignore_permissions=True)
-
-	# Grant User Permission for this WA Account
-	ensure_account_user_permission(account, email)
-
-	return {
-		"status": "success",
-		"message": _("Team member {0} added successfully.").format(full_name),
-		"email": email,
-		"role": target_role,
-		"account": account,
+	result = invite_by_email(
+		emails,
+		[target_role],
+		"/nudg",
+		app_name="nudg",
+		nudg_account=account,
+	)
+	return result or {
+		"disabled_user_emails": [],
+		"accepted_invite_emails": [],
+		"pending_invite_emails": [],
+		"invited_emails": [],
 	}
+
+
+@frappe.whitelist()
+def list_team_invitations(account: str | None = None) -> list:
+	"""Pending Nudg invitations for numbers this manager can see."""
+	_require_manager()
+	if not frappe.db.exists("DocType", "User Invitation"):
+		return []
+	filters: dict = {"status": "Pending", "app_name": "nudg"}
+	fields = ["name", "email", "creation"]
+	if frappe.db.has_column("User Invitation", "nudg_account"):
+		fields.append("nudg_account")
+		if (account or "").strip():
+			filters["nudg_account"] = account.strip()
+	rows = frappe.get_all(
+		"User Invitation",
+		filters=filters,
+		fields=fields,
+		order_by="creation desc",
+		limit_page_length=100,
+	)
+	from nudg.security import _get_roles, get_user_wa_accounts
+
+	user = frappe.session.user
+	see_all = user == "Administrator" or "System Manager" in _get_roles(user)
+	allowed = set(get_user_wa_accounts(user))
+	pending = []
+	for row in rows or []:
+		number = row.get("nudg_account") or ""
+		if number and not see_all and number not in allowed:
+			continue
+		roles = frappe.get_all(
+			"User Role",
+			filters={"parent": row.name, "parenttype": "User Invitation"},
+			pluck="role",
+		)
+		role = "WhatsApp Manager" if "WhatsApp Manager" in (roles or []) else "WhatsApp User"
+		pending.append({
+			"name": row.name,
+			"email": row.email,
+			"role": role,
+			"account": number,
+			"creation": row.creation,
+		})
+	return pending
+
+
+def _invitation_for_manager(name: str):
+	name = (name or "").strip()
+	if not name or not frappe.db.exists("User Invitation", name):
+		frappe.throw(_("Invitation not found."))
+	invitation = frappe.get_doc("User Invitation", name)
+	if invitation.app_name != "nudg":
+		frappe.throw(_("Invitation not found."))
+	account = (invitation.get("nudg_account") or "").strip()
+	if account:
+		_assert_account_access(account)
+	return invitation
+
+
+@frappe.whitelist()
+def resend_team_invitation(name: str) -> dict:
+	_require_manager()
+	invitation = _invitation_for_manager(name)
+	if invitation.status != "Pending":
+		frappe.throw(_("Only a pending invitation can be resent."))
+	invitation.send_invitation_mail()
+	return {"status": "success", "email": invitation.email}
+
+
+@frappe.whitelist()
+def cancel_team_invitation(name: str) -> dict:
+	_require_manager()
+	invitation = _invitation_for_manager(name)
+	if invitation.status != "Pending":
+		frappe.throw(_("Only a pending invitation can be cancelled."))
+	invitation.flags.ignore_permissions = True
+	invitation.cancel_invite()
+	return {"status": "success", "email": invitation.email}
 
 
 @frappe.whitelist()
@@ -1180,9 +1311,8 @@ def update_team_member(
 	email: str,
 	role: str | None = None,
 	enabled: int | None = None,
-	new_password: str | None = None,
 ) -> dict:
-	"""Update role, status, or password of a team member."""
+	"""Update role or status of a team member. Passwords stay with the user."""
 	_require_manager()
 	user = frappe.session.user
 	from nudg.security import is_account_manager, _get_roles
@@ -1215,10 +1345,6 @@ def update_team_member(
 		u.enabled = 1 if enabled else 0
 
 	u.save(ignore_permissions=True)
-
-	if new_password and len(new_password.strip()) >= 6:
-		from frappe.utils.password import update_password
-		update_password(email, new_password.strip())
 
 	return {
 		"status": "success",

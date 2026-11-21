@@ -109,7 +109,8 @@ export default defineConfig(({ command, mode }) => {
         buildConfig: frappeBuild
           ? {
               outDir: '../nudg/public/frontend',
-              indexHtmlPath: '../nudg/www/nudg.html',
+              // Same as CRM: the build copies index.html onto www/nudg.html,
+              // hashed script and style tags included.
               baseUrl: '/assets/nudg/frontend/',
             }
           : false,

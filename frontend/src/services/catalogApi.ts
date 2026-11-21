@@ -158,6 +158,7 @@ export async function updateWhatsappAccount(payload: {
   business_id?: string
   app_id?: string
   access_token?: string
+  is_default?: number
 }) {
   return call<any>('nudg.desk_api.update_whatsapp_account', payload)
 }
@@ -200,6 +201,7 @@ export async function saveWhatsappTemplate(payload: {
   footer?: string
   header_text?: string
   header_type?: string
+  header_media?: string
   buttons?: Array<{ button_type: string; button_text: string; url?: string; phone_number?: string }>
   name?: string
   /** When false, keep a local draft and skip the Meta create/update call. */

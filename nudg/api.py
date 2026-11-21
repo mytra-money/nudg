@@ -979,10 +979,13 @@ def _accounts(default_account: str | None) -> list:
 		rows = [dict(row) for row in cached]
 	else:
 		assigned = set(get_assigned_wa_accounts(user))
+		fields = list(ACCOUNT_FIELDS)
+		if frappe.db.has_column("WA Account", "is_default"):
+			fields.append("is_default")
 		rows = frappe.get_all(
 			"WA Account",
 			filters={"name": ["in", user_accounts]},
-			fields=ACCOUNT_FIELDS,
+			fields=fields,
 			order_by="account_name asc",
 			limit_page_length=50,
 		)
@@ -994,7 +997,10 @@ def _accounts(default_account: str | None) -> list:
 		cache_set(cache_key, [dict(row) for row in rows], 120)
 		rows = [dict(row) for row in rows]
 	for row in rows:
-		row["is_default"] = row.get("name") == default_account
+		if "is_default" in row:
+			row["is_default"] = bool(row.get("is_default"))
+		else:
+			row["is_default"] = row.get("name") == default_account
 	return rows
 
 
@@ -1008,7 +1014,7 @@ def get_templates(account: str | None = None, start: int | None = 0, limit: int 
 	offset = page_start(start)
 	page_size = page_limit(limit, default=TEMPLATE_PAGE, maximum=100)
 	user = getattr(frappe.session, "user", None) or "Guest"
-	cache_key = f"nudg:templates:{user}:{account or 'all'}:{offset}:{page_size}"
+	cache_key = f"nudg:templates:scoped:{user}:{account or 'all'}:{offset}:{page_size}"
 	from nudg.security import cache_get, cache_set
 
 	cached = cache_get(cache_key)
@@ -1022,14 +1028,23 @@ def get_templates(account: str | None = None, start: int | None = 0, limit: int 
 def _templates(account: str | None = None, start: int = 0, limit: int = TEMPLATE_PAGE) -> list:
 	if not frappe.has_permission("WA Template", "read"):
 		return []
+	# None means this user may read every account (Administrator / System Manager).
+	# An empty list means they have no WA Account assignment, so they see nothing.
+	allowed = _readable_accounts()
+	filters: dict = {}
+	if allowed is not None:
+		if not allowed or (account and account not in allowed):
+			return []
+		filters["whatsapp_account"] = account or ["in", allowed]
 	window = start + limit
 	rows = frappe.get_list(
 		"WA Template",
 		fields=TEMPLATE_FIELDS,
+		filters=filters or None,
 		order_by="modified desc",
 		limit_page_length=window,
 	)
-	if account:
+	if account and allowed is None:
 		rows = [row for row in rows if not row.whatsapp_account or row.whatsapp_account == account]
 	rows = rows[start:window]
 	_attach_template_buttons(rows)

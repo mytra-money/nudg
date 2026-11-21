@@ -42,7 +42,7 @@ withDefaults(
         </div>
       </div>
 
-      <div v-if="$slots.tabs" class="mb-5 overflow-x-auto">
+      <div v-if="$slots.tabs" class="mb-5 shrink-0 overflow-x-auto">
         <slot name="tabs" />
       </div>
 

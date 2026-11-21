@@ -34,24 +34,27 @@ export interface TeamMember {
   account?: string
 }
 
+interface PendingInvite {
+  name: string
+  email: string
+  role: string
+  account?: string
+}
+
 const teamMembers = ref<TeamMember[]>([])
+const pendingInvites = ref<PendingInvite[]>([])
 const teamLoading = ref(false)
 const teamError = ref<string | null>(null)
 const showAddMemberModal = ref(false)
 const showEditMemberModal = ref(false)
 const editingMember = ref<TeamMember | null>(null)
 
-// Add Team Member Form
-const newMemberName = ref('')
-const newMemberEmail = ref('')
-const newMemberPassword = ref('')
-const newMemberRole = ref<'WhatsApp User' | 'WhatsApp Manager'>('WhatsApp User')
+const inviteEmails = ref('')
+const newMemberRole = ref<'WhatsApp User' | 'WhatsApp Manager'>('WhatsApp Manager')
 const isSubmittingMember = ref(false)
 
-// Edit Team Member Form
 const editRole = ref<'WhatsApp User' | 'WhatsApp Manager'>('WhatsApp User')
 const editEnabled = ref(true)
-const editNewPassword = ref('')
 
 const fallbackTeamMembers: TeamMember[] = [
   {
@@ -89,6 +92,7 @@ const accountEditor = ref<{
   account_name: string
   status: string
   auto_read_receipts: boolean
+  is_default: boolean
   phone_id: string
   business_id: string
   app_id: string
@@ -191,8 +195,8 @@ function statusTheme(label: string): 'green' | 'red' | 'gray' {
 }
 
 const roleOptions = [
+  { label: 'WhatsApp Manager', value: 'WhatsApp Manager' },
   { label: 'WhatsApp User (Agent)', value: 'WhatsApp User' },
-  { label: 'WhatsApp Manager (Admin)', value: 'WhatsApp Manager' },
 ]
 const editRoleOptions = [
   { label: 'WhatsApp User', value: 'WhatsApp User' },
@@ -243,6 +247,7 @@ async function startAccountEdit(account: any) {
     account_name: source.account_name || source.name,
     status: source.status || 'Active',
     auto_read_receipts: Boolean(source.auto_read_receipts),
+    is_default: Boolean(source.is_default),
     phone_id: source.phone_id || '',
     business_id: source.business_id || '',
     app_id: source.app_id || '',
@@ -285,6 +290,7 @@ async function saveAccount() {
       name: accountEditor.value.name,
       status: accountEditor.value.status,
       auto_read_receipts: accountEditor.value.auto_read_receipts ? 1 : 0,
+      is_default: accountEditor.value.is_default ? 1 : 0,
       phone_id: accountEditor.value.phone_id.trim() || undefined,
       business_id: accountEditor.value.business_id.trim() || undefined,
       app_id: accountEditor.value.app_id.trim() || undefined,
@@ -413,18 +419,24 @@ async function loadTeamMembers() {
   teamError.value = null
   if (!isLive) {
     teamMembers.value = fallbackTeamMembers
+    pendingInvites.value = []
     return
   }
   teamLoading.value = true
   try {
-    const res = await call('nudg.desk_api.list_team_members')
+    const [res, invites] = await Promise.all([
+      call('nudg.desk_api.list_team_members'),
+      call('nudg.desk_api.list_team_invitations'),
+    ])
     teamMembers.value = Array.isArray(res) ? res : []
+    pendingInvites.value = Array.isArray(invites) ? invites : []
     if (!Array.isArray(res)) {
       teamError.value = 'Could not load team members.'
       toast.error(teamError.value)
     }
   } catch (caught) {
     teamMembers.value = []
+    pendingInvites.value = []
     teamError.value = errorText(caught)
     toast.error(teamError.value)
   } finally {
@@ -434,39 +446,81 @@ async function loadTeamMembers() {
 
 const selectedTeamAccount = ref('')
 
-async function handleCreateMember() {
-  if (!newMemberName.value.trim() || !newMemberEmail.value.trim() || !newMemberPassword.value.trim()) {
-    showToast('Please fill in name, email, and password.', true)
+function openInviteModal() {
+  inviteEmails.value = ''
+  newMemberRole.value = 'WhatsApp Manager'
+  if (!selectedTeamAccount.value) {
+    selectedTeamAccount.value = accountOptions.value[0]?.value || ''
+  }
+  showAddMemberModal.value = true
+}
+
+async function handleInviteMembers() {
+  const emails = inviteEmails.value.trim()
+  if (!emails) {
+    showToast('Enter at least one email address.', true)
+    return
+  }
+  const account = selectedTeamAccount.value || desk.inbox.value?.accounts?.[0]?.name || ''
+  if (!account) {
+    showToast('Choose a WhatsApp account for this invitation.', true)
     return
   }
   isSubmittingMember.value = true
   try {
-    const acc = selectedTeamAccount.value || desk.inbox.value?.accounts?.[0]?.name || ''
-    await call('nudg.desk_api.create_team_member', {
-      account: acc,
-      full_name: newMemberName.value.trim(),
-      email: newMemberEmail.value.trim(),
-      password: newMemberPassword.value.trim(),
+    const result = await call<any>('nudg.desk_api.invite_team_members', {
+      emails,
       role: newMemberRole.value,
+      account,
     })
-    showToast('Team member added successfully!')
-    showAddMemberModal.value = false
-    newMemberName.value = ''
-    newMemberEmail.value = ''
-    newMemberPassword.value = ''
+    const invited = result?.invited_emails || []
+    const pending = result?.pending_invite_emails || []
+    const accepted = result?.accepted_invite_emails || []
+    const disabled = result?.disabled_user_emails || []
+    if (invited.length) showToast(`Invitation sent to ${invited.join(', ')}. They set their own password from the email.`)
+    if (pending.length) showToast(`Already invited: ${pending.join(', ')}`, true)
+    if (accepted.length) showToast(`Already joined: ${accepted.join(', ')}`, true)
+    if (disabled.length) showToast(`Disabled user: ${disabled.join(', ')}`, true)
+    if (!invited.length && !pending.length && !accepted.length && !disabled.length) {
+      showToast('No invitations were sent.', true)
+    }
+    if (invited.length) {
+      showAddMemberModal.value = false
+      inviteEmails.value = ''
+    }
     await loadTeamMembers()
   } catch (err: any) {
-    showToast(err?.message || 'Failed to add team member', true)
+    showToast(err?.message || 'Failed to send invitation', true)
   } finally {
     isSubmittingMember.value = false
   }
+}
+
+async function resendInvite(invite: PendingInvite) {
+  try {
+    await call('nudg.desk_api.resend_team_invitation', { name: invite.name })
+    showToast(`Invitation resent to ${invite.email}.`)
+  } catch (err: any) {
+    showToast(err?.message || 'Failed to resend invitation', true)
+  }
+}
+
+function cancelInvite(invite: PendingInvite) {
+  dialog.danger({
+    title: 'Cancel invitation?',
+    message: `Cancel the invitation to ${invite.email}?`,
+    onConfirm: async () => {
+      await call('nudg.desk_api.cancel_team_invitation', { name: invite.name })
+      showToast('Invitation cancelled.')
+      await loadTeamMembers()
+    },
+  })
 }
 
 function openEditMember(member: TeamMember) {
   editingMember.value = member
   editRole.value = member.role
   editEnabled.value = member.enabled
-  editNewPassword.value = ''
   showEditMemberModal.value = true
 }
 
@@ -479,11 +533,9 @@ async function handleUpdateMember() {
       email: editingMember.value.email,
       role: editRole.value,
       enabled: editEnabled.value ? 1 : 0,
-      new_password: editNewPassword.value.trim() || undefined,
     })
     showToast('Team member updated successfully!')
     showEditMemberModal.value = false
-    editNewPassword.value = ''
     await loadTeamMembers()
   } catch (err: any) {
     showToast(err?.message || 'Failed to update member', true)
@@ -771,6 +823,7 @@ onMounted(() => {
             <div>
               <h2 class="text-lg font-bold text-ink-gray-9">{{ account.account_name || account.name }}</h2>
               <p class="mt-1 text-xs text-ink-gray-5">{{ account.name }} · {{ account.status }}</p>
+              <p v-if="account.is_default" class="mt-1 text-xs font-medium text-[#075E54]">Default number</p>
             </div>
             <Button
               v-if="isManager"
@@ -886,24 +939,42 @@ onMounted(() => {
     <div v-else-if="activeTab === 'team'" class="space-y-6">
       <DeskCard
         title="Team Members & Agents"
-        description="Manage agent accounts, scoped roles, and WhatsApp permissions directly in Nudg without opening Desk."
+        description="Invite people by email. They set their own password from the invitation, the same way Frappe CRM does."
       >
         <template #actions>
           <Button
             variant="solid"
             class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-            label="Add Team Member"
+            label="Invite"
             icon-left="lucide-user-plus"
-            @click="showAddMemberModal = true"
+            @click="openInviteModal"
           />
         </template>
+
+        <div v-if="pendingInvites.length" class="mb-4">
+          <p class="mb-2 text-xs font-semibold text-ink-gray-5">Pending invitations</p>
+          <div
+            v-for="invite in pendingInvites"
+            :key="invite.name"
+            class="flex items-center justify-between gap-3 border-b border-outline-gray-1 py-2 last:border-b-0"
+          >
+            <div class="min-w-0">
+              <p class="truncate text-sm font-medium text-ink-gray-9">{{ invite.email }}</p>
+              <p class="text-[11px] text-ink-gray-5">{{ invite.role }}<span v-if="invite.account"> · {{ invite.account }}</span></p>
+            </div>
+            <div class="flex shrink-0 gap-1">
+              <Button variant="subtle" size="sm" label="Resend" @click="resendInvite(invite)" />
+              <Button variant="subtle" size="sm" label="Cancel" @click="cancelInvite(invite)" />
+            </div>
+          </div>
+        </div>
 
         <DeskEmpty v-if="teamLoading" kind="loading" title="Loading team members…" />
         <DeskEmpty v-else-if="teamError" kind="error" :message="teamError" allow-retry @retry="loadTeamMembers" />
         <DeskEmpty
           v-else-if="!teamMembers.length"
           title="No team members yet"
-          description="Add an agent to give them access to WhatsApp conversations."
+          description="Invite an agent. They join from the email and choose their own password."
         />
 
         <!-- Members Table -->
@@ -953,35 +1024,21 @@ onMounted(() => {
       </DeskCard>
     </div>
 
-    <!-- MODAL: Add Team Member -->
     <Dialog
       v-model="showAddMemberModal"
-      title="Add Team Member"
+      title="Invite users"
       size="xl"
     >
       <div class="space-y-4 py-1">
         <p class="-mt-2 text-xs text-ink-gray-6">
-          Create a team member account and automatically grant them WhatsApp access.
+          Send an invitation email. They set their own password from that email and land in Nudg. Separate multiple addresses with commas. WhatsApp Manager is the default, and that role also includes WhatsApp User.
         </p>
 
         <FormControl
-          v-model="newMemberName"
-          type="text"
-          label="Full Name"
-          placeholder="e.g. John Doe"
-          required
-        />
-        <FormControl
-          v-model="newMemberEmail"
-          type="email"
-          label="Email Address"
-          placeholder="agent@example.com"
-          required
-        />
-        <Password
-          v-model="newMemberPassword"
-          label="Password"
-          placeholder="Min 6 characters"
+          v-model="inviteEmails"
+          type="textarea"
+          label="Email addresses"
+          placeholder="agent@example.com, manager@example.com"
           required
         />
 
@@ -1012,8 +1069,8 @@ onMounted(() => {
             variant="solid"
             class="bg-[#075E54] text-white hover:bg-[#128C7E]"
             :loading="isSubmittingMember"
-            label="Create Team Member"
-            @click="handleCreateMember"
+            label="Send invitation"
+            @click="handleInviteMembers"
           />
         </div>
       </template>
@@ -1031,11 +1088,6 @@ onMounted(() => {
           type="select"
           label="Role"
           :options="editRoleOptions"
-        />
-        <Password
-          v-model="editNewPassword"
-          label="Reset Password (Optional)"
-          placeholder="Leave empty to keep current password"
         />
         <Checkbox v-model="editEnabled" label="Account Enabled" />
       </div>
@@ -1075,6 +1127,8 @@ onMounted(() => {
           label="Status"
           :options="statusOptions"
         />
+        <Checkbox v-model="accountEditor.is_default" label="Default account" />
+        <p class="-mt-2 text-xs text-ink-gray-6">The first number you connect is the default. Later numbers stay optional until you check this. Inbox and assignment use the default among the numbers assigned to each person.</p>
         <Checkbox v-model="accountEditor.auto_read_receipts" label="Send read receipts" />
       </div>
       <template #actions>

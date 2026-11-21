@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
-import { Badge, Button, Dialog, FormControl, Select, TextInput, toast } from 'frappe-ui'
+import { Badge, Button, Dialog, FileUploader, FormControl, Select, TextInput, toast } from 'frappe-ui'
 import { NumberCard } from 'frappe-ui/charts'
 import DeskTemplatePreview from '@/components/DeskTemplatePreview.vue'
 import DeskEmpty from '@/components/desk/DeskEmpty.vue'
@@ -9,6 +9,7 @@ import DeskPage from '@/components/desk/DeskPage.vue'
 import DeskSplit from '@/components/desk/DeskSplit.vue'
 import TemplateButtonFields from '@/components/templates/TemplateButtonFields.vue'
 import { errorText, initials } from '@/utils/format'
+import { mediaFileName } from '@/utils/templatePreview'
 import {
   deleteWhatsappTemplate,
   getWhatsappTemplate,
@@ -215,6 +216,7 @@ const templateForm = ref({
   footer: '',
   header_text: '',
   header_type: 'Text',
+  header_media: '',
   language: 'en_US',
   whatsapp_account: '',
   status: '',
@@ -241,6 +243,7 @@ const editorPreview = computed<Template>(() => ({
   status: templateForm.value.status || (templateForm.value.whatsapp_template_id ? 'Pending' : 'Draft'),
   header_type: templateForm.value.header_type,
   header_text: templateForm.value.header_text,
+  header_media: templateForm.value.header_media,
   message: templateForm.value.message || 'Message body will appear here…',
   footer: templateForm.value.footer,
   whatsapp_account: templateForm.value.whatsapp_account,
@@ -255,6 +258,31 @@ function blankButton() {
   return { button_type: 'Quick Reply', button_text: '', url: '', phone_number: '' }
 }
 
+const headerFileTypes = computed(() => {
+  switch (templateForm.value.header_type) {
+    case 'Image':
+      return 'image/jpeg,image/png'
+    case 'GIF':
+      return 'image/gif'
+    case 'Video':
+      return 'video/mp4'
+    case 'Document':
+      return 'application/pdf'
+    default:
+      return ''
+  }
+})
+
+const headerFileLabel = computed(() => mediaFileName(templateForm.value.header_media))
+
+function onHeaderUploaded(file: { file_url?: string }) {
+  if (!file?.file_url) {
+    toast.error('Upload finished without a file address.')
+    return
+  }
+  templateForm.value.header_media = file.file_url
+}
+
 function validateTemplateForm(forMeta: boolean): string | null {
   if (!templateForm.value.template_label.trim() || !templateForm.value.message.trim()) {
     return 'Label and message are required.'
@@ -265,6 +293,9 @@ function validateTemplateForm(forMeta: boolean): string | null {
   const buttons = templateForm.value.buttons.filter((row) => row.button_text.trim())
   if (buttons.length > 3) {
     return 'Meta allows at most 3 buttons on a template.'
+  }
+  if (forMeta && templateForm.value.header_type !== 'Text' && !templateForm.value.header_media) {
+    return `Upload a sample ${templateForm.value.header_type.toLowerCase()} before submitting to Meta.`
   }
   if (!forMeta) return null
   for (const button of buttons) {
@@ -289,6 +320,7 @@ async function openTemplateEditor(template?: Template) {
     footer: template?.footer || '',
     header_text: template?.header_text || '',
     header_type: template?.header_type || 'Text',
+    header_media: template?.header_media || '',
     language: template?.language || defaultLanguageCode(),
     whatsapp_account: template?.whatsapp_account || accounts[0]?.name || '',
     status: template?.status || '',
@@ -309,6 +341,7 @@ async function openTemplateEditor(template?: Template) {
     templateForm.value.header_type = full.header_type || templateForm.value.header_type
     templateForm.value.language = full.language || templateForm.value.language
     templateForm.value.header_text = full.header_text || ''
+    templateForm.value.header_media = full.header_media || ''
     templateForm.value.message = full.message || templateForm.value.message
     templateForm.value.footer = full.footer || ''
     templateForm.value.status = full.status || templateForm.value.status
@@ -353,6 +386,7 @@ async function persistTemplate(submitToMeta: boolean) {
       footer: templateForm.value.footer.trim() || undefined,
       header_text: templateForm.value.header_text.trim() || undefined,
       header_type: templateForm.value.header_type,
+      header_media: templateForm.value.header_type === 'Text' ? undefined : templateForm.value.header_media || undefined,
       buttons: buttonsReady.value ? templateForm.value.buttons.filter((row) => row.button_text.trim()) : undefined,
       submit_to_meta: submitToMeta,
     })
@@ -725,6 +759,7 @@ function clearFilters() {
       v-model="templateEditorOpen"
       :title="templateForm.name ? 'Edit template' : 'New template'"
       size="7xl"
+      :dismissible="false"
     >
       <div class="grid max-h-[min(70vh,40rem)] min-h-0 grid-cols-1 gap-4 md:grid-cols-2">
         <div class="min-h-0 space-y-3 overflow-y-auto py-1 text-xs pr-1">
@@ -792,9 +827,34 @@ function clearFilters() {
             label="Header text"
             :disabled="editorLocked"
           />
-          <p v-else class="rounded-lg border border-outline-gray-2 bg-surface-gray-1 px-3 py-2 text-ink-gray-6">
-            Header media upload for {{ templateForm.header_type }} samples is coming next. You can still draft body and buttons.
-          </p>
+          <FileUploader
+            v-else
+            :file-types="headerFileTypes"
+            :private="false"
+            @success="onHeaderUploaded"
+          >
+            <template #default="{ uploading, progress, openFileSelector, error }">
+              <div class="rounded-lg border border-outline-gray-2 bg-surface-gray-1 px-3 py-2">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="font-medium text-ink-gray-7">Sample {{ templateForm.header_type.toLowerCase() }}</span>
+                  <Button
+                    size="sm"
+                    variant="subtle"
+                    :label="templateForm.header_media ? 'Replace' : 'Upload'"
+                    :loading="uploading"
+                    :disabled="editorLocked"
+                    @click="openFileSelector"
+                  />
+                </div>
+                <p v-if="uploading" class="mt-1 text-ink-gray-5">Uploading {{ progress }}%</p>
+                <p v-else-if="templateForm.header_media" class="mt-1 truncate text-ink-gray-6">{{ headerFileLabel }}</p>
+                <p v-else class="mt-1 text-ink-gray-5">
+                  A draft can be saved without a file. Meta needs this sample before the template is submitted.
+                </p>
+                <p v-if="error" class="mt-1 text-red-700">{{ error }}</p>
+              </div>
+            </template>
+          </FileUploader>
           <FormControl
             v-model="templateForm.message"
             type="textarea"

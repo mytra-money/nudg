@@ -86,6 +86,9 @@ def after_migrate():
 	setup_standard_custom_fields()
 	_ensure_desk_modules()
 	ensure_performance_indexes()
+	from nudg.security import backfill_default_accounts
+
+	backfill_default_accounts()
 
 
 def ensure_performance_indexes() -> None:
@@ -349,6 +352,14 @@ def setup_standard_custom_fields():
 	if frappe.db.exists("DocType", "WA Account"):
 		custom_fields["WA Account"] = [
 			{
+				"fieldname": "is_default",
+				"label": "Default",
+				"fieldtype": "Check",
+				"insert_after": "status",
+				"in_list_view": 1,
+				"description": "The first number a user connects is the default. Later numbers stay off until this is checked. Inbox and assignment use the default among the numbers assigned to that user.",
+			},
+			{
 				"fieldname": "two_step_pin",
 				"label": "Two-step PIN",
 				"fieldtype": "Password",
@@ -395,6 +406,30 @@ def setup_standard_custom_fields():
 				"read_only": 1,
 			},
 			*account_site_fields(),
+		]
+
+	if frappe.db.exists("DocType", "User Invitation"):
+		custom_fields["User Invitation"] = [
+			{
+				"fieldname": "nudg_role",
+				"label": "Role",
+				"fieldtype": "Select",
+				"options": "\nWhatsApp User\nWhatsApp Manager",
+				"insert_after": "redirect_to_path",
+				"depends_on": "eval:doc.app_name=='nudg'",
+				"mandatory_depends_on": "eval:doc.app_name=='nudg'",
+				"in_list_view": 1,
+				"description": "Same as Frappe CRM: WhatsApp Manager also receives WhatsApp User when the invitation is accepted.",
+			},
+			{
+				"fieldname": "nudg_account",
+				"label": "WhatsApp Account",
+				"fieldtype": "Link",
+				"options": "WA Account",
+				"insert_after": "nudg_role",
+				"depends_on": "eval:doc.app_name=='nudg'",
+				"description": "Number granted when the invitation is accepted.",
+			},
 		]
 
 	if frappe.db.exists("DocType", "WA Message"):
@@ -510,6 +545,28 @@ def ensure_role():
 	_apply_grants(GRANTS, role_name=ROLE_MANAGER, require_whatsapp=True)
 	_apply_grants(MANAGER_GRANTS, role_name=ROLE_MANAGER, require_whatsapp=False)
 	_lock_agent_manager_only()
+	ensure_signup_role()
+
+
+def ensure_signup_role() -> None:
+	"""Website sign-up grants WhatsApp Manager.
+
+	On a hosted Nudg site this replaces whatever portal role was there. On a
+	self-hosted site that already uses another portal role, such as Customer,
+	that role is left in place.
+	"""
+	if not frappe.db.exists("DocType", "Portal Settings"):
+		return
+	if not frappe.db.exists("Role", ROLE_MANAGER):
+		return
+	current = frappe.db.get_single_value("Portal Settings", "default_role") or ""
+	if current == ROLE_MANAGER:
+		return
+	from nudg.desk_access import is_saas_site
+
+	if current and current not in (ROLE, ROLE_MANAGER) and not is_saas_site():
+		return
+	frappe.db.set_single_value("Portal Settings", "default_role", ROLE_MANAGER)
 
 
 def _apply_grants(grants: dict, role_name: str = ROLE, require_whatsapp: bool = False):

@@ -78,6 +78,7 @@ def clear_account_caches(user: str | None = None) -> None:
 			f"nudg:accounts-meta:{user}",
 			f"nudg:analytics:{user}",
 			f"nudg:templates:{user}",
+			f"nudg:templates:scoped:{user}",
 		):
 			cache_delete_prefix(prefix)
 		return
@@ -195,7 +196,7 @@ def undo_autoselected_default(doc, method=None) -> None:
 	The official WA Account controller fills this field on insert whenever it is
 	blank, so clearing it and then connecting another number puts that number
 	back. Each client has their own number, so a new account must not claim the
-	site fallback.
+	site fallback. The per-account Default checkbox is the assignment default.
 	"""
 	name = getattr(doc, "name", None)
 	if not name or not frappe.db.exists("DocType", "WA Settings"):
@@ -205,19 +206,105 @@ def undo_autoselected_default(doc, method=None) -> None:
 	frappe.db.set_single_value("WA Settings", "default_account", "")
 
 
+def _account_default_supported() -> bool:
+	try:
+		return bool(frappe.db.has_column("WA Account", "is_default"))
+	except Exception:
+		return False
+
+
+def mark_first_account_default(doc, method=None) -> None:
+	"""The first number a user connects is their default. Later ones stay optional."""
+	if not _account_default_supported():
+		return
+	name = getattr(doc, "name", None)
+	if not name:
+		return
+	if int(getattr(doc, "is_default", 0) or 0):
+		set_account_default(name, 1)
+		return
+	owner = getattr(doc, "owner", None) or getattr(getattr(frappe, "session", None), "user", None)
+	if owner and frappe.db.exists("WA Account", {"owner": owner, "name": ["!=", name]}):
+		return
+	frappe.db.set_value("WA Account", name, "is_default", 1, update_modified=False)
+	clear_account_caches()
+
+
+def set_account_default(name: str, is_default: int) -> None:
+	"""Check or clear Default. Only one default per owner, so assignments stay unambiguous."""
+	if not name or not _account_default_supported():
+		return
+	enabled = 1 if int(is_default or 0) else 0
+	if enabled:
+		owner = frappe.db.get_value("WA Account", name, "owner")
+		if owner:
+			others = frappe.get_all(
+				"WA Account",
+				filters={"owner": owner, "is_default": 1, "name": ["!=", name]},
+				pluck="name",
+			)
+			for other in others or []:
+				frappe.db.set_value("WA Account", other, "is_default", 0, update_modified=False)
+	frappe.db.set_value("WA Account", name, "is_default", enabled, update_modified=False)
+	clear_account_caches()
+
+
+def backfill_default_accounts() -> None:
+	"""Give each owner a default when none of their numbers is marked yet."""
+	if not _account_default_supported():
+		return
+	rows = frappe.get_all(
+		"WA Account",
+		fields=["name", "owner", "is_default", "creation"],
+		order_by="creation asc",
+		limit_page_length=0,
+	)
+	grouped: dict[str, list] = {}
+	for row in rows or []:
+		grouped.setdefault(row.get("owner") or "", []).append(row)
+	for bucket in grouped.values():
+		if any(int(row.get("is_default") or 0) for row in bucket):
+			continue
+		frappe.db.set_value("WA Account", bucket[0]["name"], "is_default", 1, update_modified=False)
+
+
+def _marked_default(names: list[str]) -> str | None:
+	if not names or not _account_default_supported():
+		return None
+	rows = frappe.get_all(
+		"WA Account",
+		filters={"name": ["in", names], "is_default": 1},
+		pluck="name",
+		order_by="creation asc",
+		limit_page_length=1,
+	)
+	return rows[0] if rows else None
+
+
 def get_default_account(user: str | None = None) -> str | None:
-	"""Return default WA Account for the user."""
+	"""Default number among the accounts assigned to this user.
+
+	A checked Default wins. The site-wide WhatsApp setting is only a fallback
+	when none of the assigned numbers is marked.
+	"""
+	assigned = get_assigned_wa_accounts(user)
+	marked = _marked_default(assigned)
+	if marked:
+		return marked
+
 	user_accounts = get_user_wa_accounts(user)
 	if not user_accounts:
 		return None
+	marked = _marked_default(user_accounts)
+	if marked:
+		return marked
 
-	# Check global default in WA Settings
 	if frappe.db.exists("DocType", "WA Settings"):
 		default_acc = frappe.db.get_single_value("WA Settings", "default_account")
 		if default_acc and default_acc in user_accounts:
 			return default_acc
 
-	return user_accounts[0]
+	return (assigned or user_accounts)[0]
 
 
 def is_account_manager(account: str, user: str | None = None) -> bool:
@@ -244,13 +331,47 @@ def is_account_manager(account: str, user: str | None = None) -> bool:
 
 
 def on_user_created(doc, method=None):
-	"""Leave new users alone.
+	"""Give the site's signup user WhatsApp Manager.
 
-	WhatsApp Manager is granted when someone creates a WA Account, and team
-	APIs set WhatsApp User or WhatsApp Manager explicitly. Auto-promoting every
-	ERPNext user would give the whole company the desk manager role.
+	That is the first real user. People invited from Team & Agents already have
+	a role on the invitation, and later users created in Desk are left alone.
+	Website sign-up also receives WhatsApp Manager from Portal Settings when
+	this site is a hosted Nudg site.
 	"""
-	return
+	if not getattr(frappe, "db", None):
+		return
+	name = getattr(doc, "name", None)
+	if not name or name in ("Administrator", "Guest"):
+		return
+	email = getattr(doc, "email", None) or name
+	if _nudg_invitation_exists(email):
+		return
+	roles = {row.role for row in (doc.roles or [])}
+	if "WhatsApp Manager" in roles or "WhatsApp User" in roles:
+		return
+	if not _is_signup_user(name):
+		return
+	if not frappe.db.exists("Role", "WhatsApp Manager"):
+		return
+	doc.append("roles", {"role": "WhatsApp Manager"})
+	from nudg.desk_access import profile_name_for_roles
+
+	profile = profile_name_for_roles(roles | {"WhatsApp Manager"})
+	if profile and frappe.db.exists("Module Profile", profile):
+		doc.module_profile = profile
+	doc.flags.nudg_profile_set = True
+	doc.save(ignore_permissions=True)
+
+
+def _nudg_invitation_exists(email: str) -> bool:
+	if not email or not frappe.db.exists("DocType", "User Invitation"):
+		return False
+	return bool(frappe.db.exists("User Invitation", {"email": email, "app_name": "nudg"}))
+
+
+def _is_signup_user(name: str) -> bool:
+	others = frappe.db.count("User", {"name": ["not in", ["Administrator", "Guest", name]], "enabled": 1})
+	return not others
 
 
 def ensure_account_user_permission(account: str, user: str | None = None) -> bool:
@@ -345,6 +466,16 @@ def get_tenant_quick_reply_query(user: str | None = None) -> str:
 
 def get_tenant_catalog_query(user: str | None = None) -> str:
 	return _account_query_for("WA Catalog", "whatsapp_account", user)
+
+
+def get_tenant_template_query(user: str | None = None) -> str:
+	"""Limit WA Template rows to accounts this user may see.
+
+	A user with no User Permission on WA Account matches nothing. Frappe would
+	otherwise show every template, because an empty User Permission set does
+	not filter linked documents.
+	"""
+	return _account_query_for("WA Template", "whatsapp_account", user)
 
 
 def _optional_account_query(doctype: str, user: str | None = None) -> str:

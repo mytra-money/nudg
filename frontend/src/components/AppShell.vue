@@ -64,6 +64,11 @@ async function loadAccounts() {
   }
 }
 
+async function signOut() {
+  await call('logout')
+  window.location.href = '/login'
+}
+
 const title = computed(() => route.meta.title || 'Nudg')
 const breadcrumb = computed(() => route.meta.parent || null)
 const userLabel = sessionLive ? sessionUser || 'Signed in' : 'Local preview'
@@ -83,7 +88,7 @@ const userMenu = computed<DropdownOptions>(() =>
             {
               label: 'Sign out',
               onClick: () => {
-                window.location.href = '/api/method/logout'
+                void signOut()
               },
             },
           ],
