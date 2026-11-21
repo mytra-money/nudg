@@ -27,6 +27,24 @@ def _redact_token_string(s: Any) -> str:
 	return re.sub(r"EAAB\w+", "EAAB[REDACTED]", str(s))
 
 
+def list_recipient_lists(account: str | None = None) -> list[dict]:
+	"""Recipient lists the marketing form can attach to a campaign."""
+	if not frappe.db.exists("DocType", "WA Recipient List"):
+		return []
+	frappe.has_permission("WA Recipient List", "read", throw=True)
+	filters = {}
+	if account:
+		filters["whatsapp_account"] = account
+	rows = frappe.get_list(
+		"WA Recipient List",
+		filters=filters,
+		fields=["name", "list_name", "whatsapp_account"],
+		order_by="modified desc",
+		limit_page_length=100,
+	)
+	return rows if isinstance(rows, list) else []
+
+
 def list_campaigns(account: str | None = None, start: int | None = 0, limit: int | None = None) -> list[dict]:
 	"""Retrieve list of campaigns with funnel metrics."""
 	from nudg.paging import page_limit, page_start
@@ -574,6 +592,9 @@ def create_campaign(
 	whatsapp_template: str | None = None,
 	scheduled_at: str | None = None,
 	recipients: Any = None,
+	whatsapp_start_date: str | None = None,
+	whatsapp_recipient_list: str | None = None,
+	schedules: Any = None,
 ) -> dict:
 	"""Create a draft UTM Campaign without leaving Nudg."""
 	frappe.has_permission("UTM Campaign", "create", throw=True)
@@ -594,9 +615,15 @@ def create_campaign(
 			"whatsapp_status": "Draft",
 		}
 	)
-	_apply_schedule(doc, scheduled_at)
-	_apply_recipients(doc, recipients)
-	_apply_template(doc, template)
+	_apply_campaign_plan(
+		doc,
+		whatsapp_start_date=whatsapp_start_date,
+		scheduled_at=scheduled_at,
+		whatsapp_recipient_list=whatsapp_recipient_list,
+		recipients=recipients,
+		schedules=schedules,
+		whatsapp_template=template,
+	)
 	doc.insert()
 	return get_campaign(doc.name)
 
@@ -609,6 +636,9 @@ def update_campaign(
 	whatsapp_template: str | None = None,
 	scheduled_at: str | None = None,
 	recipients: Any = None,
+	whatsapp_start_date: str | None = None,
+	whatsapp_recipient_list: str | None = None,
+	schedules: Any = None,
 ) -> dict:
 	"""Update a draft or scheduled campaign from Nudg."""
 	doc = frappe.get_doc("UTM Campaign", name)
@@ -629,9 +659,15 @@ def update_campaign(
 		doc.slug = _unique_slug(new_name, ignore=new_name)
 	doc.campaign_description = (campaign_description or "").strip()
 	doc.whatsapp_account = account
-	_apply_schedule(doc, scheduled_at)
-	_apply_recipients(doc, recipients)
-	_apply_template(doc, template)
+	_apply_campaign_plan(
+		doc,
+		whatsapp_start_date=whatsapp_start_date,
+		scheduled_at=scheduled_at,
+		whatsapp_recipient_list=whatsapp_recipient_list,
+		recipients=recipients,
+		schedules=schedules,
+		whatsapp_template=template,
+	)
 	doc.save()
 	return get_campaign(doc.name)
 
@@ -706,6 +742,71 @@ def _recipient_rows(doc) -> list:
 			)
 		)
 	return loaded
+
+
+def _parse_schedules(raw: Any) -> list[dict] | None:
+	if raw is None:
+		return None
+	if isinstance(raw, str):
+		text = raw.strip()
+		if not text:
+			return []
+		raw = json.loads(text)
+	if not isinstance(raw, (list, tuple)):
+		return []
+	return [row for row in raw if isinstance(row, dict)]
+
+
+def _apply_recipient_list(doc, list_name: str | None) -> None:
+	list_name = (list_name or "").strip()
+	if not list_name:
+		doc.whatsapp_recipient_list = None
+		return
+	if not frappe.db.exists("WA Recipient List", list_name):
+		frappe.throw(_("Recipient List {0} was not found.").format(list_name))
+	doc.whatsapp_recipient_list = list_name
+
+
+def _apply_schedules(doc, schedules: list[dict]) -> None:
+	doc.set("whatsapp_schedules", [])
+	for row in schedules:
+		template = (row.get("whatsapp_template") or row.get("template") or "").strip()
+		if not template:
+			continue
+		doc.append(
+			"whatsapp_schedules",
+			{
+				"whatsapp_template": template,
+				"send_after_days": int(row.get("send_after_days") or 0),
+				"whatsapp_account": row.get("whatsapp_account") or doc.get("whatsapp_account"),
+				"recipient_list": row.get("recipient_list") or doc.get("whatsapp_recipient_list"),
+				"variable_type": row.get("variable_type") or "Common",
+				"template_variables": row.get("template_variables"),
+			},
+		)
+
+
+def _apply_campaign_plan(
+	doc,
+	whatsapp_start_date: str | None,
+	scheduled_at: str | None,
+	whatsapp_recipient_list: str | None,
+	recipients: Any,
+	schedules: Any,
+	whatsapp_template: str | None,
+) -> None:
+	"""Write the schedule, start date, and recipient list. Phone blobs stay a fallback."""
+	start = whatsapp_start_date if whatsapp_start_date is not None else scheduled_at
+	_apply_schedule(doc, start)
+	parsed = _parse_schedules(schedules)
+	if whatsapp_recipient_list is not None:
+		_apply_recipient_list(doc, whatsapp_recipient_list)
+	elif recipients is not None:
+		_apply_recipients(doc, recipients)
+	if parsed is not None:
+		_apply_schedules(doc, parsed)
+	elif whatsapp_template:
+		_apply_template(doc, whatsapp_template)
 
 
 def _apply_schedule(doc, scheduled_at: str | None) -> None:

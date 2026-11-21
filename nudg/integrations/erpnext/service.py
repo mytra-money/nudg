@@ -50,12 +50,6 @@ def connect_site(
 		canonical = validate_site_url(site_url, allow_http=_allow_http(), allow_loopback=_allow_http())
 	except SiteURLError as exc:
 		frappe.throw(str(exc))
-	client = _client(canonical, api_key, api_secret)
-	try:
-		remote_user = client.get_logged_user()
-	except (ERPNextClientError, SiteURLError) as exc:
-		frappe.throw(_("Could not sign in to that ERPNext site: {0}").format(exc))
-
 	doc = frappe.get_doc("WA Account", whatsapp_account)
 	other = frappe.db.get_value(
 		"WA Account",
@@ -70,11 +64,18 @@ def connect_site(
 	doc.erp_site_url = canonical
 	doc.erp_api_key = api_key.strip()
 	doc.erp_api_secret = api_secret
-	doc.erp_status = "Connected"
-	doc.erp_remote_user = remote_user
-	doc.erp_last_error = ""
-	doc.save(ignore_permissions=True)
-	return _public_site(_site_view(doc))
+	# Saving runs the site check and sets Connected or Error.
+	frappe.flags.nudg_skip_site_popup = True
+	try:
+		doc.save(ignore_permissions=True)
+	finally:
+		frappe.flags.nudg_skip_site_popup = False
+	public = _public_site(_site_view(doc))
+	check = getattr(doc.flags, "nudg_site_check", None) or {}
+	public["ok"] = bool(check.get("ok"))
+	public["reason"] = check.get("reason") or ""
+	public["checks"] = list(check.get("checks") or [])
+	return public
 
 
 def set_site_enabled(site: str, enabled: bool) -> dict:
@@ -164,11 +165,15 @@ def accept_event(raw: bytes, site_header: str | None, signature: str | None, bea
 
 
 def _writeback_once(site, remote_doctype: str, remote_name: str, template: str, phone: str, message_id: str) -> None:
-	"""One attempt. A down ERPNext site does not hold the WhatsApp message back."""
+	"""Tell the client site a template was sent. A down site does not hold the WhatsApp message back."""
+	from nudg.integrations.site_sync import call_with_retry, is_site_down, mark_site_unreachable
+
 	client = _client_for_site(site)
 	if client is None:
+		mark_site_unreachable(site.account, "Could not sign in to the ERPNext site.")
 		return
-	try:
+
+	def send():
 		client.create_communication(
 			reference_doctype=remote_doctype,
 			reference_name=remote_name,
@@ -176,8 +181,14 @@ def _writeback_once(site, remote_doctype: str, remote_name: str, template: str, 
 			content=f"Nudge sent template {template} to {phone}. Message {message_id}."[:1000],
 			phone=phone,
 		)
-	except (ERPNextClientError, SiteURLError):
+
+	try:
+		_, error = call_with_retry(send)
+	except SiteURLError as exc:
+		mark_site_unreachable(site.account, str(exc))
 		return
+	if error is not None and is_site_down(error):
+		mark_site_unreachable(site.account, str(error))
 
 
 def _remember(site: str, fingerprint: str) -> bool:
@@ -279,6 +290,33 @@ def validate_account_site(doc, method=None):
 		doc.erp_inbound_secret = secrets.token_urlsafe(32)
 	if not doc.get("erp_status"):
 		doc.erp_status = "Pending"
+	if not _should_check_site(doc):
+		return
+	key = _password(doc, "erp_api_key")
+	secret = _password(doc, "erp_api_secret")
+	if not key or not secret:
+		reason = "An API key and API secret are required."
+		doc.erp_status = "Pending"
+		doc.erp_last_error = reason
+		_announce_site_check(
+			{
+				"ok": False,
+				"status": "Pending",
+				"remote_user": "",
+				"reason": reason,
+				"checks": [{"name": "API credentials", "ok": False, "detail": reason}],
+			}
+		)
+		return
+	outcome = _check_saved_site(doc, key, secret)
+	doc.flags.nudg_site_check = outcome
+	doc.erp_status = outcome["status"]
+	if outcome.get("remote_user"):
+		doc.erp_remote_user = outcome["remote_user"]
+	doc.erp_last_error = (outcome.get("reason") or "")[:1000]
+	_announce_site_check(outcome)
+	if outcome.get("ok") and doc.name:
+		_flush_after_save(doc.name)
 
 
 class _SiteView:
@@ -309,6 +347,104 @@ def _site_view(account) -> _SiteView:
 
 def _allow_http() -> bool:
 	return bool(getattr(frappe.conf, "developer_mode", False))
+
+
+def _should_check_site(doc) -> bool:
+	"""Run the remote check when credentials are saved, or while the site is not healthy."""
+	if frappe.flags.in_migrate or frappe.flags.in_install or frappe.flags.in_patch or frappe.flags.in_import:
+		return False
+	if frappe.flags.in_test and not frappe.flags.get("nudg_verify_remote_site"):
+		return False
+	if not (doc.get("erp_site_url") or "").strip():
+		return False
+	changed = _site_fields_changed(doc)
+	status = doc.get("erp_status") or "Pending"
+	if status == "Disabled" and not changed:
+		return False
+	if status == "Connected" and not changed and not doc.has_value_changed("erp_status"):
+		return False
+	return True
+
+
+def _site_fields_changed(doc) -> bool:
+	return any(
+		doc.has_value_changed(field)
+		for field in ("erp_site_url", "erp_site_name", "erp_api_key", "erp_api_secret")
+	)
+
+
+def _password(doc, field: str) -> str:
+	if not doc.get(field):
+		return ""
+	try:
+		return doc.get_password(field) or ""
+	except Exception:
+		return str(doc.get(field) or "")
+
+
+def _check_saved_site(doc, api_key: str, api_secret: str) -> dict:
+	from nudg.integrations.erpnext.verify import verify_remote_site
+
+	try:
+		client = _client(doc.erp_site_url, api_key, api_secret)
+		return verify_remote_site(client)
+	except (ERPNextClientError, SiteURLError) as exc:
+		reason = str(exc)[:1000]
+		return {
+			"ok": False,
+			"status": "Error",
+			"remote_user": "",
+			"reason": reason,
+			"checks": [{"name": "Sign in", "ok": False, "detail": reason}],
+		}
+	except Exception:
+		frappe.log_error(title="Nudg site verification")
+		reason = "The site check could not be finished. Save again after the site is reachable."
+		return {
+			"ok": False,
+			"status": "Error",
+			"remote_user": "",
+			"reason": reason,
+			"checks": [{"name": "Sign in", "ok": False, "detail": reason}],
+		}
+
+
+def _announce_site_check(outcome: dict) -> None:
+	if getattr(frappe.flags, "nudg_skip_site_popup", False):
+		return
+	from frappe.utils import escape_html
+
+	ok = bool(outcome.get("ok"))
+	checks = outcome.get("checks") or []
+	items = "".join(
+		f"<li><b>{escape_html(check.get('name') or '')}.</b> {escape_html(check.get('detail') or '')}</li>"
+		for check in checks
+	)
+	if ok:
+		user = escape_html(outcome.get("remote_user") or "")
+		lead = _(
+			"Everything is fine. Signed in as {0}. WhatsApp is installed on that site and this user has the permissions Nudg needs. Site status is Connected."
+		).format(user)
+	else:
+		lead = _("The site was not connected. Fix these, then save again.")
+	message = f"<p>{lead}</p><ul>{items}</ul>"
+	frappe.msgprint(
+		message,
+		title=_("Site verified") if ok else _("Could not verify the ERPNext site"),
+		indicator="green" if ok else "red",
+	)
+
+
+def _flush_after_save(account: str) -> None:
+	try:
+		frappe.enqueue(
+			"nudg.integrations.site_sync.flush_account",
+			queue="short",
+			account=account,
+			enqueue_after_commit=True,
+		)
+	except Exception:
+		pass
 
 
 def _public_site(doc) -> dict:

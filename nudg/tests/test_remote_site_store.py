@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 import frappe
 
 from nudg.integrations import site_store, webhook
+from nudg.integrations.erpnext.client import ERPNextClientError
 
 
 class _Client:
@@ -132,3 +133,56 @@ class TestRemoteSiteStore(unittest.TestCase):
 		verify.assert_called_once()
 		ingest.assert_called_once_with(payload)
 		official.assert_not_called()
+
+	def test_unreachable_client_reads_messages_on_this_site(self):
+		client = _Client()
+
+		def unreachable(*_args, **_kwargs):
+			raise ERPNextClientError("could not reach the site", retryable=True)
+
+		client.get_resources = unreachable
+		store = site_store.RemoteStore("WA-REMOTE", object(), client)
+		profile = {"name": "PROF-1", "whatsapp_account": "WA-REMOTE", "phone_number": "+15551230000"}
+		with patch.object(site_store, "stores_remotely", return_value=True), \
+			patch.object(site_store, "_profile_account", return_value=("WA-REMOTE", "+15551230000")), \
+			patch.object(site_store.RemoteStore, "for_account", return_value=store), \
+			patch.object(site_store.frappe, "log_error"):
+			thread = site_store.thread_messages("PROF-1", None, 20)
+			window = site_store.last_incoming_at("PROF-1")
+			found, local_names = site_store.previews([profile])
+			counts, unread_local = site_store.unread_counts([profile])
+
+		self.assertIsNone(thread)
+		self.assertIsNone(window)
+		self.assertEqual(found, {})
+		self.assertEqual(local_names, ["PROF-1"])
+		self.assertEqual(counts, {})
+		self.assertEqual(unread_local, ["PROF-1"])
+
+	def test_cloudflare_error_still_reads_messages_on_this_site(self):
+		client = _Client()
+
+		def refused(*_args, **_kwargs):
+			raise ERPNextClientError("ERPNext returned HTTP 530.", status_code=530, retryable=False)
+
+		client.get_resources = refused
+		store = site_store.RemoteStore("WA-REMOTE", object(), client)
+		with patch.object(site_store, "stores_remotely", return_value=True), \
+			patch.object(site_store, "_profile_account", return_value=("WA-REMOTE", "+15551230000")), \
+			patch.object(site_store.RemoteStore, "for_account", return_value=store), \
+			patch.object(site_store.frappe, "log_error"):
+			thread = site_store.thread_messages("PROF-1", None, 20)
+
+		self.assertIsNone(thread)
+		self.assertTrue(store.site_blocked)
+		self.assertIsNotNone(store.last_push_error)
+
+	def test_cloudflare_tunnel_error_stays_queued(self):
+		from nudg.integrations.site_sync import is_site_down
+
+		exc = ERPNextClientError(
+			'{"title":"Error 1033: Cloudflare Tunnel error","status":530}',
+			status_code=530,
+			retryable=False,
+		)
+		self.assertTrue(is_site_down(exc))

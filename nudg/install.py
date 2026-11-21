@@ -169,6 +169,7 @@ def account_site_fields() -> list[dict]:
 			"default": "Pending",
 			"insert_after": "erp_site_name",
 			"in_list_view": 1,
+			"description": "Set when the site is checked. Connected means the API user can use WA Account. Error means the site or API could not be used.",
 		},
 		{
 			"fieldname": "erp_site_url",
@@ -195,6 +196,7 @@ def account_site_fields() -> list[dict]:
 			"fieldtype": "Password",
 			"length": 500,
 			"insert_after": "erp_credentials_col",
+			"description": "On save, Nudg signs in with this key and checks that WA Account, WA Profile, and WA Message exist on the site.",
 		},
 		{
 			"fieldname": "erp_api_secret",
@@ -202,6 +204,7 @@ def account_site_fields() -> list[dict]:
 			"fieldtype": "Password",
 			"length": 500,
 			"insert_after": "erp_api_key",
+			"description": "A message lists each check. Fix anything that failed, then save again. Site status becomes Connected or Error.",
 		},
 		{
 			"fieldname": "erp_inbound_secret",
@@ -373,6 +376,24 @@ def setup_standard_custom_fields():
 				"options": "JSON",
 				"insert_after": "bulk_message",
 				"hidden": 1,
+				"read_only": 1,
+			},
+			{
+				"fieldname": "client_sync",
+				"label": "Client Sync",
+				"fieldtype": "Select",
+				"options": "\nPending\nSynced\nError",
+				"insert_after": "nudg_flow_response",
+				"read_only": 1,
+				"in_list_view": 1,
+				"in_standard_filter": 1,
+				"description": "Pending until this message is copied to the client site. Synced after that copy succeeds.",
+			},
+			{
+				"fieldname": "client_sync_error",
+				"label": "Client Sync Error",
+				"fieldtype": "Small Text",
+				"insert_after": "client_sync",
 				"read_only": 1,
 			},
 		]

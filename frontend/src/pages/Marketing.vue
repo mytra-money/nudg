@@ -7,7 +7,7 @@ import ErrorState from '@/components/ErrorState.vue'
 import LoadingState from '@/components/LoadingState.vue'
 import { errorText, formatDay, formatTime, initials } from '@/utils/format'
 import { formatErrorMessage } from '@/utils/errors'
-import { createCampaign, deleteCampaign, getCampaign, listCampaigns, runCampaign, updateCampaign } from '@/services/catalogApi'
+import { createCampaign, deleteCampaign, getCampaign, listCampaigns, listRecipientLists, runCampaign, updateCampaign } from '@/services/catalogApi'
 import { isManager, useDesk } from '@/stores/desk'
 
 const desk = useDesk()
@@ -30,13 +30,15 @@ const editorMode = ref<'create' | 'edit'>('create')
 const editingName = ref('')
 const saving = ref(false)
 const recipientsReady = ref(true)
+const recipientLists = ref<any[]>([])
 const form = ref({
   name: '',
   description: '',
   whatsapp_account: '',
+  whatsapp_recipient_list: '',
   whatsapp_template: '',
-  scheduled_at: '',
-  recipients: '',
+  whatsapp_start_date: '',
+  send_after_days: '0',
 })
 const recipientQuery = ref('')
 const recipientStatusFilter = ref<'all' | 'Read' | 'Delivered' | 'Failed' | 'Pending'>('all')
@@ -48,8 +50,10 @@ const sampleCampaigns: any[] = [
     whatsapp_channel: 'Sundarban Sales',
     whatsapp_account: 'Sundarban Sales',
     template: 'festive_allocation',
+    whatsapp_recipient_list: 'Sales opted-in',
+    whatsapp_start_date: new Date(Date.now() - 3600000 * 24).toISOString().slice(0, 10),
+    send_after_days: 0,
     status: 'Completed',
-    scheduled_at: new Date(Date.now() - 3600000 * 24).toISOString(),
     sent_count: 240,
     delivered_count: 236,
     read_count: 218,
@@ -68,8 +72,10 @@ const sampleCampaigns: any[] = [
     whatsapp_channel: 'Sundarban Dispatch',
     whatsapp_account: 'Sundarban Dispatch',
     template: 'dispatch_notice',
+    whatsapp_recipient_list: 'Dispatch customers',
+    whatsapp_start_date: new Date(Date.now() - 3600000 * 48).toISOString().slice(0, 10),
+    send_after_days: 0,
     status: 'Completed',
-    scheduled_at: new Date(Date.now() - 3600000 * 48).toISOString(),
     sent_count: 120,
     delivered_count: 118,
     read_count: 112,
@@ -86,8 +92,10 @@ const sampleCampaigns: any[] = [
     whatsapp_channel: 'Sundarban Sales',
     whatsapp_account: 'Sundarban Sales',
     template: 'price_list',
+    whatsapp_recipient_list: 'Sales opted-in',
+    whatsapp_start_date: '',
+    send_after_days: 1,
     status: 'Draft',
-    scheduled_at: null,
     sent_count: 0,
     delivered_count: 0,
     read_count: 0,
@@ -107,12 +115,17 @@ async function load() {
   error.value = null
   try {
     if (!live) {
+      recipientLists.value = [
+        { name: 'Sales opted-in', list_name: 'Sales opted-in', whatsapp_account: 'Sundarban Sales' },
+        { name: 'Dispatch customers', list_name: 'Dispatch customers', whatsapp_account: 'Sundarban Dispatch' },
+      ]
       rows.value = sampleCampaigns
       if (!selected.value && rows.value.length) {
         selected.value = rows.value[0]
       }
       return
     }
+    recipientLists.value = (await listRecipientLists().catch(() => [])) || []
     const result = await listCampaigns()
     rows.value = result || []
     if (selected.value) {
@@ -190,45 +203,74 @@ const templateOptions = computed(() => {
     }))
 })
 
+const recipientListOptions = computed(() => {
+  const account = form.value.whatsapp_account
+  return recipientLists.value
+    .filter((row) => !account || !row.whatsapp_account || row.whatsapp_account === account)
+    .map((row) => ({
+      label: row.list_name || row.name,
+      value: row.name,
+    }))
+})
+
+function blankForm() {
+  return {
+    name: '',
+    description: '',
+    whatsapp_account: accountOptions.value[0]?.value || '',
+    whatsapp_recipient_list: '',
+    whatsapp_template: '',
+    whatsapp_start_date: '',
+    send_after_days: '0',
+  }
+}
+
+function firstSchedule(row: any) {
+  const schedules = row?.whatsapp_schedules
+  if (Array.isArray(schedules) && schedules.length) return schedules[0]
+  return null
+}
+
 function canEdit(row: any) {
   const status = row?.status || 'Draft'
   return status === 'Draft' || status === 'Scheduled'
 }
 
-function recipientLines(recipients: any) {
-  if (!recipients) return ''
-  if (typeof recipients === 'string') return recipients
-  if (!Array.isArray(recipients)) return ''
-  return recipients
-    .map((row) => (typeof row === 'string' ? row : row?.phone_number || ''))
-    .filter(Boolean)
-    .join('\n')
-}
-
-function toDatetimeLocal(value: string | null | undefined) {
+function dateOnly(value: string | null | undefined) {
   if (!value) return ''
-  return String(value).replace(' ', 'T').slice(0, 16)
+  return String(value).slice(0, 10)
 }
 
-function fromDatetimeLocal(value: string) {
-  const trimmed = value.trim()
-  if (!trimmed) return ''
-  if (trimmed.length === 16) return `${trimmed.replace('T', ' ')}:00`
-  return trimmed.replace('T', ' ')
+function fillForm(row: any) {
+  const schedule = firstSchedule(row)
+  form.value = {
+    name: row.campaign_name || row.name || '',
+    description: row.description || row.campaign_description || '',
+    whatsapp_account: row.whatsapp_account || '',
+    whatsapp_recipient_list: row.whatsapp_recipient_list || schedule?.recipient_list || '',
+    whatsapp_template: schedule?.whatsapp_template || row.whatsapp_template || row.template || '',
+    whatsapp_start_date: dateOnly(row.whatsapp_start_date || row.scheduled_at),
+    send_after_days: String(schedule?.send_after_days ?? row.send_after_days ?? 0),
+  }
+}
+
+function schedulePayload() {
+  if (!form.value.whatsapp_template) return []
+  return [
+    {
+      whatsapp_template: form.value.whatsapp_template,
+      send_after_days: Number(form.value.send_after_days || 0),
+      whatsapp_account: form.value.whatsapp_account || undefined,
+      recipient_list: form.value.whatsapp_recipient_list || undefined,
+    },
+  ]
 }
 
 function startCreate() {
   editorMode.value = 'create'
   editingName.value = ''
   recipientsReady.value = true
-  form.value = {
-    name: '',
-    description: '',
-    whatsapp_account: accountOptions.value[0]?.value || '',
-    whatsapp_template: '',
-    scheduled_at: '',
-    recipients: '',
-  }
+  form.value = blankForm()
   editorOpen.value = true
 }
 
@@ -236,22 +278,13 @@ async function startEdit(row: any) {
   editorMode.value = 'edit'
   editingName.value = row.name
   recipientsReady.value = !live
-  form.value = {
-    name: row.campaign_name || row.name || '',
-    description: row.description || row.campaign_description || '',
-    whatsapp_account: row.whatsapp_account || '',
-    whatsapp_template: row.whatsapp_template || row.template || '',
-    scheduled_at: toDatetimeLocal(row.scheduled_at),
-    recipients: recipientLines(row.recipients),
-  }
+  fillForm(row)
   editorOpen.value = true
   if (!live || !row.name) return
   try {
     const full = await getCampaign(row.name)
     if (editingName.value !== row.name) return
-    form.value.description = full.campaign_description || full.description || form.value.description
-    form.value.scheduled_at = toDatetimeLocal(full.scheduled_at)
-    form.value.recipients = recipientLines(full.recipients)
+    fillForm(full)
     recipientsReady.value = true
   } catch {
     recipientsReady.value = false
@@ -290,11 +323,13 @@ async function saveCampaign() {
         campaign_description: form.value.description.trim(),
         whatsapp_channel: form.value.whatsapp_account,
         whatsapp_account: form.value.whatsapp_account,
+        whatsapp_recipient_list: form.value.whatsapp_recipient_list,
         template: form.value.whatsapp_template,
         whatsapp_template: form.value.whatsapp_template,
-        status: form.value.scheduled_at ? 'Scheduled' : 'Draft',
-        scheduled_at: fromDatetimeLocal(form.value.scheduled_at) || null,
-        recipients: form.value.recipients,
+        send_after_days: Number(form.value.send_after_days || 0),
+        status: form.value.whatsapp_start_date ? 'Scheduled' : 'Draft',
+        whatsapp_start_date: form.value.whatsapp_start_date || null,
+        scheduled_at: form.value.whatsapp_start_date || null,
         sent_count: 0,
         delivered_count: 0,
         read_count: 0,
@@ -320,17 +355,17 @@ async function saveCampaign() {
             campaign_name: name,
             campaign_description: form.value.description.trim(),
             whatsapp_account: form.value.whatsapp_account || undefined,
-            whatsapp_template: form.value.whatsapp_template || undefined,
-            scheduled_at: fromDatetimeLocal(form.value.scheduled_at),
-            recipients: recipientsReady.value ? form.value.recipients : undefined,
+            whatsapp_start_date: form.value.whatsapp_start_date,
+            whatsapp_recipient_list: form.value.whatsapp_recipient_list,
+            schedules: schedulePayload(),
           })
         : await createCampaign({
             name,
             campaign_description: form.value.description.trim(),
             whatsapp_account: form.value.whatsapp_account || undefined,
-            whatsapp_template: form.value.whatsapp_template || undefined,
-            scheduled_at: fromDatetimeLocal(form.value.scheduled_at),
-            recipients: form.value.recipients,
+            whatsapp_start_date: form.value.whatsapp_start_date,
+            whatsapp_recipient_list: form.value.whatsapp_recipient_list,
+            schedules: schedulePayload(),
           })
     editorOpen.value = false
     toast.success(editorMode.value === 'edit' ? 'Campaign updated' : 'Campaign created')
@@ -642,8 +677,11 @@ onMounted(() => {
                 {{ selected.campaign_name }}
               </h2>
               <p class="text-xs text-ink-gray-5 mt-0.5">
-                Template: <strong class="font-mono text-[#075E54]">{{ selected.template }}</strong>
-                <span v-if="selected.scheduled_at"> · Scheduled: {{ formatDay(selected.scheduled_at) }}</span>
+                Template: <strong class="font-mono text-[#075E54]">{{ selected.template || '—' }}</strong>
+                <span v-if="selected.whatsapp_start_date || selected.scheduled_at">
+                  · Starts {{ formatDay(selected.whatsapp_start_date || selected.scheduled_at) }}
+                </span>
+                <span v-if="selected.whatsapp_recipient_list"> · {{ selected.whatsapp_recipient_list }}</span>
               </p>
             </div>
 
@@ -838,7 +876,7 @@ onMounted(() => {
     <Dialog v-model="editorOpen" :title="editorMode === 'edit' ? 'Edit campaign' : 'New campaign'">
       <div class="space-y-3 py-1 text-sm">
         <p class="text-xs text-ink-gray-6">
-          Save the broadcast here. A schedule keeps it as Scheduled until it runs. One phone number per line becomes the audience.
+          A campaign starts on a date, uses a recipient list, and sends the template that many days later.
         </p>
         <label class="block text-xs font-medium text-ink-gray-7">
           Name
@@ -863,6 +901,15 @@ onMounted(() => {
           />
         </label>
         <label class="block text-xs font-medium text-ink-gray-7">
+          Recipient list
+          <Select
+            class="mt-1"
+            :model-value="form.whatsapp_recipient_list"
+            :options="recipientListOptions"
+            @update:model-value="(val) => (form.whatsapp_recipient_list = String(val || ''))"
+          />
+        </label>
+        <label class="block text-xs font-medium text-ink-gray-7">
           WhatsApp template
           <Select
             class="mt-1"
@@ -871,19 +918,16 @@ onMounted(() => {
             @update:model-value="(val) => (form.whatsapp_template = String(val || ''))"
           />
         </label>
-        <label class="block text-xs font-medium text-ink-gray-7">
-          Schedule
-          <input v-model="form.scheduled_at" type="datetime-local" class="mt-1 w-full rounded border border-outline-gray-2 px-2 py-1.5 text-sm" />
-        </label>
-        <label class="block text-xs font-medium text-ink-gray-7">
-          Recipients
-          <textarea
-            v-model="form.recipients"
-            rows="4"
-            class="mt-1 w-full rounded border border-outline-gray-2 px-2 py-1.5 font-mono text-sm text-ink-gray-9"
-            placeholder="9198XXXXXXXX&#10;One number per line"
-          />
-        </label>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="block text-xs font-medium text-ink-gray-7">
+            Start date
+            <input v-model="form.whatsapp_start_date" type="date" class="mt-1 w-full rounded border border-outline-gray-2 px-2 py-1.5 text-sm" />
+          </label>
+          <label class="block text-xs font-medium text-ink-gray-7">
+            Send after (days)
+            <input v-model="form.send_after_days" type="number" min="0" class="mt-1 w-full rounded border border-outline-gray-2 px-2 py-1.5 text-sm" />
+          </label>
+        </div>
       </div>
       <template #actions>
         <div class="flex justify-end gap-2">

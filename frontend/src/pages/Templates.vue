@@ -27,7 +27,6 @@ const selectedStatus = ref<string>('All')
 const selectedAccount = ref<string>('all')
 
 const selected = ref<string | null>(null)
-const studioMode = ref<'preview' | 'raw'>('preview')
 
 const sending = ref<Template | null>(null)
 const recipient = ref('')
@@ -458,64 +457,34 @@ function clearFilters() {
       </div>
     </header>
 
-    <!-- Top KPI Performance Bar -->
-    <section class="border-b border-outline-gray-2 bg-white px-4 py-3 shrink-0">
-      <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <button
-          type="button"
-          class="rounded-lg border border-outline-gray-2 bg-surface-gray-1/50 p-2.5 text-left transition-colors hover:border-[#128C7E]"
-          @click="applyKpiFilter('Approved')"
-        >
-          <span class="text-[11px] font-medium uppercase tracking-wider text-ink-gray-5">Approved Templates</span>
-          <div class="mt-1 flex items-baseline gap-1.5">
-            <span class="text-xl font-bold text-emerald-700">{{ countApproved }}</span>
-            <span class="text-[11px] text-ink-gray-5">/ {{ countTotal }} total</span>
-          </div>
-        </button>
-
-        <button
-          type="button"
-          class="rounded-lg border border-outline-gray-2 bg-surface-gray-1/50 p-2.5 text-left transition-colors hover:border-[#128C7E]"
-          @click="applyKpiFilter('Pending')"
-        >
-          <span class="text-[11px] font-medium uppercase tracking-wider text-ink-gray-5">Pending Review</span>
-          <div class="mt-1 flex items-baseline gap-1.5">
-            <span class="text-xl font-bold text-amber-700">{{ countPending }}</span>
-            <span class="text-[11px] font-medium text-amber-600">with Meta</span>
-          </div>
-        </button>
-
-        <button
-          type="button"
-          class="rounded-lg border border-outline-gray-2 bg-surface-gray-1/50 p-2.5 text-left transition-colors hover:border-[#128C7E]"
-          @click="applyKpiFilter('Utility')"
-        >
-          <span class="text-[11px] font-medium uppercase tracking-wider text-ink-gray-5">Utility Alerts</span>
-          <div class="mt-1 flex items-baseline gap-1.5">
-            <span class="text-xl font-bold text-[#075E54]">{{ countUtility }}</span>
-            <span class="text-[11px] text-ink-gray-5">operational</span>
-          </div>
-        </button>
-
-        <button
-          type="button"
-          class="rounded-lg border border-outline-gray-2 bg-surface-gray-1/50 p-2.5 text-left transition-colors hover:border-[#128C7E]"
-          @click="applyKpiFilter('Marketing')"
-        >
-          <span class="text-[11px] font-medium uppercase tracking-wider text-ink-gray-5">Marketing Broadcasts</span>
-          <div class="mt-1 flex items-baseline gap-1.5">
-            <span class="text-xl font-bold text-purple-700">{{ countMarketing }}</span>
-            <span class="text-[11px] text-ink-gray-5">promotional</span>
-          </div>
-        </button>
-      </div>
+    <section class="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-outline-gray-2 bg-white px-4 py-1.5 text-xs">
+      <button type="button" class="inline-flex items-baseline gap-1 rounded px-1 hover:bg-surface-gray-2" @click="applyKpiFilter('Approved')">
+        <span class="font-semibold text-emerald-700">{{ countApproved }}</span>
+        <span class="text-ink-gray-5">approved</span>
+        <span class="text-ink-gray-4">/ {{ countTotal }}</span>
+      </button>
+      <span class="text-ink-gray-3" aria-hidden="true">·</span>
+      <button type="button" class="inline-flex items-baseline gap-1 rounded px-1 hover:bg-surface-gray-2" @click="applyKpiFilter('Pending')">
+        <span class="font-semibold text-amber-700">{{ countPending }}</span>
+        <span class="text-ink-gray-5">pending</span>
+      </button>
+      <span class="text-ink-gray-3" aria-hidden="true">·</span>
+      <button type="button" class="inline-flex items-baseline gap-1 rounded px-1 hover:bg-surface-gray-2" @click="applyKpiFilter('Utility')">
+        <span class="font-semibold text-[#075E54]">{{ countUtility }}</span>
+        <span class="text-ink-gray-5">utility</span>
+      </button>
+      <span class="text-ink-gray-3" aria-hidden="true">·</span>
+      <button type="button" class="inline-flex items-baseline gap-1 rounded px-1 hover:bg-surface-gray-2" @click="applyKpiFilter('Marketing')">
+        <span class="font-semibold text-purple-700">{{ countMarketing }}</span>
+        <span class="text-ink-gray-5">marketing</span>
+      </button>
     </section>
 
     <!-- Filters & Search Toolbar -->
     <section class="border-b border-outline-gray-2 bg-white px-4 py-2.5 space-y-2 shrink-0">
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
+      <div class="flex flex-wrap items-center gap-2.5">
         <!-- Search Input -->
-        <div class="relative flex-1 max-w-sm">
+        <div class="template-search relative">
           <TextInput
             v-model="query"
             placeholder="Search templates by label, body, or doctype…"
@@ -557,7 +526,7 @@ function clearFilters() {
     </section>
 
     <!-- Master-Detail Studio Grid -->
-    <div class="nudg-split nudg-master grid min-h-0 flex-1 grid-cols-1 overflow-hidden md:grid-cols-[minmax(0,1fr)_minmax(0,480px)]">
+    <div class="nudg-split nudg-master grid min-h-0 flex-1 grid-cols-1 overflow-hidden md:grid-cols-[minmax(200px,260px)_minmax(0,1fr)]">
       <!-- Left Column: Template Library List -->
       <aside
         class="min-h-0 flex-col divide-y divide-outline-gray-1 overflow-y-auto border-r border-outline-gray-2 bg-white"
@@ -596,14 +565,9 @@ function clearFilters() {
           @click="selectTemplate(template)"
         >
           <div class="flex items-start justify-between gap-2">
-            <div>
-              <span class="font-bold text-sm text-ink-gray-9 leading-tight">
-                {{ template.template_label || template.name }}
-              </span>
-              <p class="font-mono text-xs text-ink-gray-5 mt-0.5">
-                {{ template.template_name || template.name }}
-              </p>
-            </div>
+            <span class="font-bold text-sm text-ink-gray-9 leading-tight">
+              {{ template.template_label || template.name }}
+            </span>
             <Badge
               :label="template.status"
               :theme="theme[template.status] || 'gray'"
@@ -641,7 +605,7 @@ function clearFilters() {
 
       <!-- Right Column: Interactive Studio Inspector Canvas -->
       <main
-        class="min-h-0 flex-col space-y-5 overflow-y-auto bg-white p-5 sm:p-6"
+        class="min-h-0 flex-col gap-3 overflow-y-auto bg-white p-4"
         :class="narrow && !showDetail ? 'hidden' : 'flex'"
       >
         <button
@@ -653,138 +617,28 @@ function clearFilters() {
           <span class="lucide-arrow-left size-4" aria-hidden="true" />
           All templates
         </button>
-        <div v-if="current" class="space-y-5">
-          <!-- Template Header & Metadata -->
-          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-outline-gray-2 pb-4">
-            <div>
-              <div class="flex items-center gap-2">
-                <Badge
-                  :label="current.status"
-                  :theme="theme[current.status] || 'gray'"
-                />
-                <span class="rounded bg-surface-gray-2 px-2 py-0.5 text-xs font-medium text-ink-gray-7">
-                  {{ current.template_type }}
-                </span>
-                <span class="rounded bg-surface-gray-2 px-2 py-0.5 text-xs font-mono text-ink-gray-6">
-                  {{ current.language }}
-                </span>
-              </div>
-              <h2 class="mt-2 text-xl font-bold text-ink-gray-9 leading-tight">
-                {{ current.template_label || current.name }}
-              </h2>
-              <p class="font-mono text-xs text-ink-gray-5 mt-0.5">
-                {{ current.template_name || current.name }}
-                <span v-if="current.whatsapp_account"> · Channel: {{ current.whatsapp_account }}</span>
-              </p>
-            </div>
-
-            <div class="flex flex-wrap items-center gap-2">
-              <Button
-                v-if="isManager"
-                variant="subtle"
-                label="Edit"
-                icon-left="lucide-pencil"
-                @click="openTemplateEditor(current)"
-              />
-              <Button
-                variant="solid"
-                class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-                label="Send to Customer"
-                icon-left="lucide-send"
-                :disabled="current.status !== 'Approved'"
-                @click="startSending(current)"
-              />
-            </div>
+        <div v-if="current" class="flex flex-col gap-3">
+          <div class="flex flex-wrap items-center gap-2">
+            <Button
+              v-if="isManager"
+              variant="subtle"
+              size="sm"
+              label="Edit"
+              icon-left="lucide-pencil"
+              @click="openTemplateEditor(current)"
+            />
+            <Button
+              variant="solid"
+              size="sm"
+              class="bg-[#075E54] text-white hover:bg-[#128C7E]"
+              label="Send to Customer"
+              icon-left="lucide-send"
+              :disabled="current.status !== 'Approved'"
+              @click="startSending(current)"
+            />
           </div>
 
-          <!-- Mode Toggle (Preview vs Technical Raw Payload) -->
-          <div class="flex flex-col gap-2 border-b border-outline-gray-2 pb-3 sm:flex-row sm:items-center sm:justify-between">
-            <div class="flex flex-wrap items-center gap-1 text-xs">
-              <button
-                type="button"
-                class="rounded-lg px-3 py-1 font-semibold transition-colors"
-                :class="studioMode === 'preview' ? 'bg-[#075E54] text-white' : 'bg-surface-gray-2 text-ink-gray-7 hover:bg-surface-gray-3'"
-                @click="studioMode = 'preview'"
-              >
-                Interactive Preview
-              </button>
-              <button
-                type="button"
-                class="rounded-lg px-3 py-1 font-semibold transition-colors"
-                :class="studioMode === 'raw' ? 'bg-[#075E54] text-white' : 'bg-surface-gray-2 text-ink-gray-7 hover:bg-surface-gray-3'"
-                @click="studioMode = 'raw'"
-              >
-                Raw Meta Specification
-              </button>
-            </div>
-
-            <span class="text-[11px] leading-relaxed text-ink-gray-5">
-              {{ current.status === 'Approved' ? 'Ready for chats and broadcasts' : 'Needs Meta approval before sending' }}
-            </span>
-          </div>
-
-          <!-- Interactive WhatsApp Canvas Bubble -->
-          <div class="rounded-xl border border-outline-gray-2 bg-[#efeae2]/40 p-4 shadow-inner">
-            <p class="text-[11px] font-bold uppercase tracking-wider text-ink-gray-5 mb-3 flex items-center gap-1.5">
-              <span class="lucide-smartphone size-3.5 text-[#075E54]" />
-              WhatsApp Message Preview
-            </p>
-            <DeskTemplatePreview :template="current" :mode="studioMode" :editable="true" />
-          </div>
-
-          <!-- Variable Inspector (if parameters exist) -->
-          <div v-if="current.template_variables?.length" class="rounded-xl border border-outline-gray-2 p-4 bg-white space-y-2.5">
-            <h3 class="text-xs font-bold uppercase tracking-wider text-ink-gray-6 flex items-center gap-1.5">
-              <span class="lucide-variable size-3.5 text-[#075E54]" />
-              Dynamic Parameters & Sample Values
-            </h3>
-            <p class="text-xs text-ink-gray-5">
-              These placeholders are dynamically replaced by Frappe DocType fields or API arguments:
-            </p>
-            <div class="divide-y divide-outline-gray-1 border rounded-lg border-outline-gray-2 overflow-hidden text-xs">
-              <div
-                v-for="v in current.template_variables"
-                :key="v.variable_name"
-                class="flex flex-wrap items-center gap-2 bg-white p-2.5"
-              >
-                <span class="font-mono font-bold text-[#075E54]">&#123;&#123;{{ v.variable_name }}&#125;&#125;</span>
-                <span class="text-ink-gray-7">
-                  Example: <strong>{{ v.variable_example || 'Sample Value' }}</strong>
-                </span>
-                <span v-if="v.variable_field" class="rounded bg-surface-gray-2 px-1.5 py-0.5 font-mono text-[11px] text-ink-gray-6">
-                  {{ v.variable_field }}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Interactive Action Buttons Specification -->
-          <div v-if="current.buttons?.length" class="rounded-xl border border-outline-gray-2 p-4 bg-white space-y-2">
-            <h3 class="text-xs font-bold uppercase tracking-wider text-ink-gray-6 flex items-center gap-1.5">
-              <span class="lucide-mouse-pointer-click size-3.5 text-blue-600" />
-              Quick Action Buttons ({{ current.buttons.length }})
-            </h3>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-              <div
-                v-for="btn in current.buttons"
-                :key="btn.button_text"
-                class="rounded-lg border border-outline-gray-2 p-2.5 bg-surface-gray-1/40"
-              >
-                <div class="flex items-center justify-between">
-                  <span class="font-semibold text-ink-gray-9">{{ btn.button_text }}</span>
-                  <span class="rounded bg-blue-50 text-blue-700 px-1.5 py-0.2 text-[10px] font-medium">
-                    {{ btn.button_type }}
-                  </span>
-                </div>
-                <p v-if="btn.url" class="mt-1 font-mono text-[11px] text-ink-gray-5 truncate">
-                  {{ btn.url }}
-                </p>
-                <p v-if="btn.phone_number" class="mt-1 font-mono text-[11px] text-ink-gray-5">
-                  {{ btn.phone_number }}
-                </p>
-              </div>
-            </div>
-          </div>
+          <DeskTemplatePreview :template="current" mode="preview" :editable="true" chrome="phone" />
         </div>
 
         <div v-else class="grid flex-1 place-items-center p-8 text-center text-xs text-ink-gray-5">
@@ -1032,3 +886,10 @@ function clearFilters() {
     </Dialog>
   </div>
 </template>
+
+<style scoped>
+.template-search {
+  flex: 1 1 16rem !important;
+  min-width: 16rem !important;
+}
+</style>

@@ -829,6 +829,8 @@ def _latest_previews(profile_names: list[str]) -> tuple[dict, dict]:
 	from nudg.integrations.site_store import previews, split_profiles
 
 	local_names, remote_profiles = split_profiles(profile_names)
+	remote_found, remote_local = previews(remote_profiles)
+	local_names = list(local_names) + [name for name in remote_local if name not in local_names]
 	for row in (_preview_rows(local_names) if local_names else []):
 		stamped = _stamp(row)
 		if stamped.get("reaction"):
@@ -844,7 +846,7 @@ def _latest_previews(profile_names: list[str]) -> tuple[dict, dict]:
 		created = row.get("creation")
 		if key and created and key not in last_incoming:
 			last_incoming[key] = _iso(created)
-	for name, (preview, incoming) in previews(remote_profiles).items():
+	for name, (preview, incoming) in remote_found.items():
 		latest[name] = _stamp(preview)
 		if incoming:
 			last_incoming[name] = _iso(incoming)
@@ -1276,7 +1278,8 @@ def _unread_counts(profile_names: list[str]) -> dict[str, int]:
 	from nudg.integrations.site_store import split_profiles, unread_counts
 
 	local_names, remote_profiles = split_profiles(profile_names)
-	remote_unread = unread_counts(remote_profiles)
+	remote_unread, remote_local = unread_counts(remote_profiles)
+	local_names = list(local_names) + [name for name in remote_local if name not in local_names]
 	if not local_names:
 		return remote_unread
 	profile_names = local_names

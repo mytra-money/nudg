@@ -128,10 +128,11 @@ def ingest(payload: dict) -> None:
 			value = change.get("value") or {}
 			phone_id = (value.get("metadata") or {}).get("phone_number_id")
 			account = account_for_phone(phone_id)
-			if field == "messages" and account and stores_remotely(account):
-				RemoteStore.for_account(account).take(value)
-			else:
-				apply_local_webhook(field, value)
+			if field == "messages" and account and _client_delivery(account) and _deliver_remote(account, value):
+				continue
+			apply_local_webhook(field, value)
+			if field == "messages" and account and _client_delivery(account):
+				_remember_statuses(account, value)
 
 
 @frappe.whitelist()
@@ -236,7 +237,7 @@ def send_text(phone: str, account: str, message: str) -> str | None:
 	store = RemoteStore.for_account(account)
 	profile = store.ensure_profile(phone, phone)
 	message_id = adapter.deliver_text(account, phone, message)
-	return store.save_outgoing(profile, message, message_id)
+	return store.save_outgoing(profile, message, message_id, phone)
 
 
 def send_buttons(phone: str, account: str, message: str, rows: list[dict]) -> str | None:
@@ -246,7 +247,7 @@ def send_buttons(phone: str, account: str, message: str, rows: list[dict]) -> st
 	profile = store.ensure_profile(phone, phone)
 	buttons = [{"id": row["button_id"], "title": row["title"]} for row in rows]
 	message_id = adapter.deliver_buttons(account, phone, message, buttons)
-	return store.save_outgoing(profile, message, message_id)
+	return store.save_outgoing(profile, message, message_id, phone)
 
 
 def send_template(phone: str, account: str, template: str, parameters: dict | None) -> str | None:
@@ -256,7 +257,7 @@ def send_template(phone: str, account: str, template: str, parameters: dict | No
 	profile = store.ensure_profile(phone, phone)
 	message_id = adapter.deliver_template(account, phone, template, parameters)
 	label = f"Template {template}"
-	return store.save_outgoing(profile, label, message_id)
+	return store.save_outgoing(profile, label, message_id, phone)
 
 
 def split_profiles(profile_names: list[str]) -> tuple[list[str], list[dict]]:
@@ -288,19 +289,44 @@ def split_profiles(profile_names: list[str]) -> tuple[list[str], list[dict]]:
 
 
 def thread_messages(profile: str, before: str | None, limit: int) -> list[dict] | None:
-	"""Messages for a connected profile, newest last. None when the profile is local."""
+	"""Messages for a connected profile, newest last.
+
+	None means the caller should read WA Message on this site: the account is
+	local, or the client site could not be read.
+	"""
 	account, phone = _profile_account(profile)
 	if not account or not stores_remotely(account):
 		return None
-	return RemoteStore.for_account(account).thread(profile, phone, before, limit)
+	try:
+		store = RemoteStore.for_account(account)
+		rows = store.thread(profile, phone, before, limit)
+	except Exception:
+		frappe.log_error(title="Remote thread")
+		return None
+	if _client_unreadable(store):
+		return None
+	return rows
 
 
 def last_incoming_at(profile: str) -> str | None:
-	"""Last incoming time, or '' when the connected thread has none. None when local."""
+	"""Last incoming time, or '' when the connected thread has none. None when local or unreachable."""
 	account, phone = _profile_account(profile)
 	if not account or not stores_remotely(account):
 		return None
-	return RemoteStore.for_account(account).last_incoming(phone) or ""
+	try:
+		store = RemoteStore.for_account(account)
+		found = store.last_incoming(phone)
+	except Exception:
+		frappe.log_error(title="Remote thread window")
+		return None
+	if _client_unreadable(store):
+		return None
+	return found or ""
+
+
+def _client_unreadable(store) -> bool:
+	"""True when the client site did not answer this read."""
+	return bool(getattr(store, "site_blocked", False) or getattr(store, "last_push_error", None))
 
 
 def _by_account(remote_profiles: list[dict]) -> dict[str, list[dict]]:
@@ -312,28 +338,46 @@ def _by_account(remote_profiles: list[dict]) -> dict[str, list[dict]]:
 	return grouped
 
 
-def previews(remote_profiles: list[dict]) -> dict[str, tuple[dict, str | None]]:
-	"""Latest message and last incoming time, keyed by the local profile name."""
+def previews(remote_profiles: list[dict]) -> tuple[dict[str, tuple[dict, str | None]], list[str]]:
+	"""Latest remote message per profile, plus profiles that must be read locally.
+
+	The second list is the local profile names whose client site could not be
+	read. Their WA Message rows on this site are the ones to show.
+	"""
 	found: dict[str, tuple[dict, str | None]] = {}
+	local_names: list[str] = []
 	for account, rows in _by_account(remote_profiles).items():
+		names = [row["name"] for row in rows if row.get("name")]
 		try:
-			found.update(RemoteStore.for_account(account).preview_map(rows))
+			store = RemoteStore.for_account(account)
+			mapped = store.preview_map(rows)
+			if _client_unreadable(store):
+				local_names.extend(names)
+				continue
+			found.update(mapped)
 		except Exception:
 			frappe.log_error(title="Remote inbox preview")
-	return found
+			local_names.extend(names)
+	return found, local_names
 
 
-def unread_counts(remote_profiles: list[dict]) -> dict[str, int]:
+def unread_counts(remote_profiles: list[dict]) -> tuple[dict[str, int], list[str]]:
+	"""Unread counts from the client site, plus profiles that must be counted locally."""
 	counts: dict[str, int] = {}
+	local_names: list[str] = []
 	for account, rows in _by_account(remote_profiles).items():
+		names = [row["name"] for row in rows if row.get("name")]
 		try:
-			counts.update(RemoteStore.for_account(account).unread_map(rows))
+			store = RemoteStore.for_account(account)
+			mapped = store.unread_map(rows)
+			if _client_unreadable(store):
+				local_names.extend(names)
+				continue
+			counts.update(mapped)
 		except Exception:
 			frappe.log_error(title="Remote unread count")
-			for row in rows:
-				if row.get("name"):
-					counts[row["name"]] = 0
-	return counts
+			local_names.extend(names)
+	return counts, local_names
 
 
 def history(phone: str, account: str, limit: int) -> list[dict] | None:
@@ -352,6 +396,68 @@ def mark_thread_read(profile: str) -> list[str] | None:
 	if not account or not stores_remotely(account):
 		return None
 	return RemoteStore.for_account(account).mark_read(phone, tell_meta=False, account=account)
+
+
+def _client_delivery(account: str) -> bool:
+	"""True when this account should keep chats on a client site, including while that site is down."""
+	try:
+		status = frappe.db.get_value("WA Account", account, "erp_status")
+		url = frappe.db.get_value("WA Account", account, "erp_site_url")
+	except Exception:
+		return False
+	return status in ("Connected", "Error") and isinstance(url, str) and bool(url.strip())
+
+
+def _deliver_remote(account: str, value: dict) -> bool:
+	"""Write to the client site. False means the caller should keep the webhook on Nudg."""
+	from nudg.integrations.site_sync import flush_account, recently_unreachable, site_responds
+
+	try:
+		status = frappe.db.get_value("WA Account", account, "erp_status")
+		if status == "Error":
+			if recently_unreachable(account) or not site_responds(account):
+				return False
+			flush_account(account)
+		if not stores_remotely(account):
+			return False
+		RemoteStore.for_account(account).take(value)
+		return True
+	except Exception:
+		frappe.log_error(title="Remote webhook store")
+		return False
+
+
+def _remember_statuses(account: str, value: dict) -> None:
+	"""Mark the local WA Message so a later sync copies the delivery update."""
+	from nudg.integrations.site_sync import remember_message
+
+	contacts = value.get("contacts") or []
+	contact_name = ""
+	if contacts and isinstance(contacts[0], dict):
+		contact_name = ((contacts[0].get("profile") or {}).get("name")) or ""
+	for msg in value.get("messages") or []:
+		if not isinstance(msg, dict) or not msg.get("id"):
+			continue
+		remember_message(
+			account,
+			str(msg.get("from") or ""),
+			contact_name,
+			"Incoming",
+			str(msg.get("id")),
+			pending=True,
+		)
+	for status in value.get("statuses") or []:
+		if not isinstance(status, dict) or not status.get("id"):
+			continue
+		remember_message(
+			account,
+			str(status.get("recipient_id") or ""),
+			"",
+			"Incoming",
+			str(status.get("id")),
+			status=_STATUS.get(str(status.get("status") or "").lower(), "Pending"),
+			pending=True,
+		)
 
 
 def _profile_account(profile: str) -> tuple[str | None, str | None]:
@@ -376,6 +482,9 @@ class RemoteStore:
 		self.site = site
 		self.client = client
 		self._remote_account: str | None = None
+		self._remote_account_failed = False
+		self.last_push_error = None
+		self.site_blocked = False
 
 	@classmethod
 	def for_account(cls, account: str) -> RemoteStore:
@@ -396,6 +505,19 @@ class RemoteStore:
 		cache[account] = store
 		return store
 
+	@classmethod
+	def for_delivery(cls, account: str) -> RemoteStore:
+		"""A store that can push held messages while the site status is still Error."""
+		from nudg.integrations.erpnext.service import _client_for_site, _load_site
+
+		site = _load_site(account)
+		if site is None or not (site.site_url or "").strip() or site.status == "Disabled":
+			frappe.throw(f"WhatsApp account {account} is not connected to an external site.")
+		client = _client_for_site(site)
+		if client is None:
+			frappe.throw(f"Could not sign in to the site connected on {account}.")
+		return cls(account, site, client)
+
 	def take(self, value: dict) -> None:
 		contacts = value.get("contacts") or []
 		contact_profile = contacts[0].get("profile") if contacts and isinstance(contacts[0], dict) else {}
@@ -411,6 +533,8 @@ class RemoteStore:
 		"""Return the WA Profile name on the connected site."""
 		number = _display_phone(phone)
 		remote_account = self.remote_account()
+		if not remote_account:
+			return ""
 		found = self._first(
 			"WA Profile",
 			["name"],
@@ -418,8 +542,8 @@ class RemoteStore:
 		)
 		if found and found.get("name"):
 			return str(found["name"])
-		try:
-			saved = self.client.insert_resource(
+		saved, error = self._attempt(
+			lambda: self.client.insert_resource(
 				"WA Profile",
 				{
 					"doctype": "WA Profile",
@@ -429,8 +553,10 @@ class RemoteStore:
 					"wa_id": _digits(phone),
 					"status": "Active",
 				},
-			)
-		except ERPNextClientError:
+			),
+			down_on_not_found=True,
+		)
+		if error or not isinstance(saved, dict):
 			found = self._first(
 				"WA Profile",
 				["name"],
@@ -438,12 +564,14 @@ class RemoteStore:
 			)
 			if found and found.get("name"):
 				return str(found["name"])
-			raise
+			return ""
 		return str(saved.get("name") or "")
 
 	def remote_account(self) -> str:
 		if self._remote_account:
 			return self._remote_account
+		if self._remote_account_failed:
+			return ""
 		phone_id = frappe.db.get_value("WA Account", self.account, "phone_id")
 		account_name = frappe.db.get_value("WA Account", self.account, "account_name") or self.account
 		found = None
@@ -454,33 +582,49 @@ class RemoteStore:
 		if found and found.get("name"):
 			self._remote_account = str(found["name"])
 			return self._remote_account
-		saved = self.client.insert_resource(
-			"WA Account",
-			{
-				"doctype": "WA Account",
-				"account_name": account_name,
-				"status": "Active",
-				"phone_id": phone_id or "",
-			},
+		saved, error = self._attempt(
+			lambda: self.client.insert_resource(
+				"WA Account",
+				{
+					"doctype": "WA Account",
+					"account_name": account_name,
+					"status": "Active",
+					"phone_id": phone_id or "",
+				},
+			),
+			down_on_not_found=True,
 		)
+		if error or not isinstance(saved, dict):
+			self._remote_account_failed = True
+			return ""
 		self._remote_account = str(saved.get("name") or account_name)
 		return self._remote_account
 
-	def save_outgoing(self, remote_profile: str, message: str, message_id: str) -> str:
+	def save_outgoing(self, remote_profile: str, message: str, message_id: str, phone: str | None = None) -> str:
 		"""Record a message this site already sent. Their document is not submitted, so they do not send it again."""
-		saved = self.client.insert_resource(
-			"WA Message",
-			{
-				"doctype": "WA Message",
-				"to": remote_profile,
-				"message": message,
-				"whatsapp_account": self.remote_account(),
-				"direction": "Outgoing",
-				"status": "Sent",
-				"message_id": message_id,
-				"timestamp": _now(),
-			},
+		remote_account = self.remote_account()
+		if not remote_account:
+			self._hold_outgoing(phone or "", message, message_id)
+			return message_id
+		saved, error = self._attempt(
+			lambda: self.client.insert_resource(
+				"WA Message",
+				{
+					"doctype": "WA Message",
+					"to": remote_profile,
+					"message": message,
+					"whatsapp_account": remote_account,
+					"direction": "Outgoing",
+					"status": "Sent",
+					"message_id": message_id,
+					"timestamp": _now(),
+				},
+			),
+			down_on_not_found=True,
 		)
+		if error or not isinstance(saved, dict):
+			self._hold_outgoing(phone or "", message, message_id)
+			return message_id
 		name = str(saved.get("name") or message_id)
 		# Mark the row submitted without their before_submit, which would send it to Meta again.
 		if saved.get("name"):
@@ -668,15 +812,19 @@ class RemoteStore:
 			return []
 		import json
 
-		self.client.call_method(
-			"frappe.client.bulk_update",
-			{
-				"docs": json.dumps([
-					{"doctype": "WA Message", "docname": row["name"], "status": "Read"}
-					for row in pending
-				])
-			},
+		_, error = self._attempt(
+			lambda: self.client.call_method(
+				"frappe.client.bulk_update",
+				{
+					"docs": json.dumps([
+						{"doctype": "WA Message", "docname": row["name"], "status": "Read"}
+						for row in pending
+					])
+				},
+			)
 		)
+		if error:
+			return []
 		message_ids = [str(row["message_id"]) for row in pending if row.get("message_id")]
 		if tell_meta:
 			for message_id in message_ids:
@@ -692,12 +840,16 @@ class RemoteStore:
 		phone = str(msg.get("from") or "")
 		parsed = _parse_message(msg)
 		remote_profile = self.ensure_profile(phone, contact_name or phone)
+		remote_account = self.remote_account()
+		if not remote_profile or not remote_account:
+			self._hold_incoming(msg, contact_name, phone, str(message_id), parsed)
+			return
 		doc = {
 			"doctype": "WA Message",
 			"to": remote_profile,
 			"from": msg.get("to") or "",
 			"message": parsed["content"],
-			"whatsapp_account": self.remote_account(),
+			"whatsapp_account": remote_account,
 			"direction": "Incoming",
 			"status": "Sent",
 			"message_id": message_id,
@@ -706,7 +858,13 @@ class RemoteStore:
 			"reaction": parsed["reaction"],
 		}
 		doc.update(parsed["media"])
-		saved = self.client.insert_resource("WA Message", doc)
+		saved, error = self._attempt(
+			lambda: self.client.insert_resource("WA Message", doc),
+			down_on_not_found=True,
+		)
+		if error or not isinstance(saved, dict):
+			self._hold_incoming(msg, contact_name, phone, str(message_id), parsed)
+			return
 		name = str(saved.get("name") or "")
 		try:
 			self.client.call_method("frappe.client.submit", {"doc": saved})
@@ -720,9 +878,12 @@ class RemoteStore:
 		message_id = status.get("id")
 		if not message_id:
 			return
+		self.last_push_error = None
 		current = self._message_by_id(str(message_id))
 		if not current or not current.get("name"):
 			self._status_on_nudg(status)
+			if self.last_push_error or self._account_is_holding():
+				self._hold_status(status)
 			return
 		new_status = _STATUS.get(str(status.get("status") or "").lower(), "Pending")
 		if current.get("status") == new_status:
@@ -733,7 +894,69 @@ class RemoteStore:
 			import json
 
 			values["error_message"] = json.dumps(errors)
-		_set_remote_values(self.client, str(current["name"]), values)
+		_, error = self._attempt(lambda: _set_remote_values(self.client, str(current["name"]), values))
+		if error:
+			self._status_on_nudg(status)
+			self._hold_status(status)
+
+	def push_message(self, row: dict) -> bool:
+		"""Copy one local WA Message onto the client site. Does not run chatbot again."""
+		if not isinstance(row, dict):
+			return False
+		message_id = str(row.get("message_id") or "")
+		phone = str(row.get("phone") or "")
+		if not message_id or not phone:
+			return False
+		current = self._message_by_id(message_id)
+		if current and current.get("name"):
+			new_status = row.get("status") or "Sent"
+			if current.get("status") == new_status:
+				return True
+			_, error = self._attempt(
+				lambda: _set_remote_values(self.client, str(current["name"]), {"status": new_status})
+			)
+			return error is None
+		profile = self.ensure_profile(phone, row.get("profile_name") or phone)
+		remote_account = self.remote_account()
+		if not profile or not remote_account:
+			return False
+		saved, error = self._attempt(
+			lambda: self.client.insert_resource(
+				"WA Message",
+				{
+					"doctype": "WA Message",
+					"to": profile,
+					"message": row.get("message") or "",
+					"whatsapp_account": remote_account,
+					"direction": row.get("direction") or "Incoming",
+					"status": row.get("status") or "Sent",
+					"message_id": message_id,
+					"timestamp": row.get("timestamp") or _now(),
+					"context_message_id": row.get("context_message_id"),
+					"reaction": row.get("reaction"),
+				},
+			),
+			down_on_not_found=True,
+		)
+		if error or not isinstance(saved, dict):
+			return False
+		name = str(saved.get("name") or "")
+		if not name:
+			return True
+		if row.get("direction") == "Incoming":
+			try:
+				self.client.call_method("frappe.client.submit", {"doc": saved})
+			except ERPNextClientError:
+				frappe.log_error(title="Remote incoming message submit")
+		else:
+			try:
+				self.client.call_method(
+					"frappe.client.set_value",
+					{"doctype": "WA Message", "name": name, "fieldname": "docstatus", "value": 1},
+				)
+			except ERPNextClientError:
+				frappe.log_error(title="Remote outgoing submit flag")
+		return True
 
 	def _message_by_id(self, message_id: str) -> dict | None:
 		return self._first("WA Message", ["name", "status", "message_id"], {"message_id": message_id})
@@ -750,8 +973,101 @@ class RemoteStore:
 		return None
 
 	def _first(self, doctype: str, fields: list[str], filters: dict) -> dict | None:
-		rows = self.client.get_resources(doctype, fields=fields, filters=filters, limit=1)
+		try:
+			rows = self.client.get_resources(doctype, fields=fields, filters=filters, limit=1)
+		except ERPNextClientError as exc:
+			self._note_push_error(exc, down_on_not_found=False)
+			return None
 		return rows[0] if rows else None
+
+	def _attempt(self, fn, *, down_on_not_found: bool = False):
+		from nudg.integrations.site_sync import call_with_retry, is_site_down, mark_site_unreachable
+
+		result, error = call_with_retry(fn)
+		self.last_push_error = error
+		if error is None:
+			self.site_blocked = False
+			self._clear_error()
+			return result, None
+		self.site_blocked = is_site_down(error, down_on_not_found=down_on_not_found)
+		if self.site_blocked:
+			mark_site_unreachable(self.account, str(error))
+		return None, error
+
+	def _note_push_error(self, exc: ERPNextClientError, *, down_on_not_found: bool) -> None:
+		from nudg.integrations.site_sync import is_site_down, mark_site_unreachable
+
+		self.last_push_error = exc
+		self.site_blocked = is_site_down(exc, down_on_not_found=down_on_not_found)
+		if self.site_blocked:
+			mark_site_unreachable(self.account, str(exc))
+
+	def _hold_incoming(self, msg: dict, contact_name: str, phone: str, message_id: str, parsed: dict) -> None:
+		from nudg.integrations.site_sync import is_site_down, remember_message
+
+		error = self.last_push_error
+		down = error is None or is_site_down(error, down_on_not_found=True)
+		if down:
+			try:
+				from whatsapp.whatsapp.webhook import _create_incoming_message
+
+				_create_incoming_message(msg, self.account, {"name": contact_name} if contact_name else None)
+			except Exception:
+				frappe.log_error(title="Nudg local message hold")
+		remember_message(
+			self.account,
+			phone,
+			contact_name or phone,
+			"Incoming",
+			message_id,
+			message=parsed.get("content") or "",
+			status="Sent",
+			error=str(error or ""),
+			pending=down,
+			timestamp=_timestamp(msg.get("timestamp")),
+			context_message_id=parsed.get("context_id"),
+			reaction=parsed.get("reaction"),
+		)
+
+	def _hold_outgoing(self, phone: str, message: str, message_id: str) -> None:
+		from nudg.integrations.site_sync import is_site_down, remember_message
+
+		error = self.last_push_error
+		down = error is None or is_site_down(error, down_on_not_found=True)
+		remember_message(
+			self.account,
+			phone,
+			phone,
+			"Outgoing",
+			message_id,
+			message=message,
+			status="Sent",
+			error=str(error or ""),
+			pending=down,
+		)
+
+	def _account_is_holding(self) -> bool:
+		try:
+			return frappe.db.get_value("WA Account", self.account, "erp_status") == "Error"
+		except Exception:
+			return False
+
+	def _hold_status(self, status: dict) -> None:
+		from nudg.integrations.site_sync import remember_message
+
+		message_id = status.get("id")
+		if not message_id:
+			return
+		remember_message(
+			self.account,
+			str(status.get("recipient_id") or ""),
+			"",
+			"Incoming",
+			str(message_id),
+			status=_STATUS.get(str(status.get("status") or "").lower(), "Pending"),
+			error=str(self.last_push_error or ""),
+			pending=True,
+		)
 
 	def _mirror_profile(self, phone: str, contact_name: str) -> str | None:
 		"""The inbox addresses a conversation by a profile on this site."""

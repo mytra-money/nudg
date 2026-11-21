@@ -9,8 +9,9 @@ const props = withDefaults(
     mode?: 'preview' | 'raw'
     editable?: boolean
     large?: boolean
+    chrome?: 'plain' | 'phone' | 'desktop'
   }>(),
-  { mode: 'preview', editable: true, large: false },
+  { mode: 'preview', editable: true, large: false, chrome: 'plain' },
 )
 
 const rawRows = computed(() => {
@@ -48,5 +49,5 @@ const rawRows = computed(() => {
       </div>
     </dl>
   </div>
-  <WhatsAppTemplatePreview v-else :template="template" :editable="editable" :large="large" />
+  <WhatsAppTemplatePreview v-else :template="template" :editable="editable" :large="large" :chrome="chrome" />
 </template>

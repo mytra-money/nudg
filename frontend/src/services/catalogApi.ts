@@ -109,13 +109,17 @@ export async function runCampaign(name: string) {
   return call<any>('nudg.desk_api.run_campaign', { name })
 }
 
+export async function listRecipientLists(account?: string) {
+  return call<any[]>('nudg.desk_api.list_recipient_lists', { account })
+}
+
 export async function createCampaign(payload: {
   name: string
   campaign_description?: string
   whatsapp_account?: string
-  whatsapp_template?: string
-  scheduled_at?: string
-  recipients?: string
+  whatsapp_start_date?: string
+  whatsapp_recipient_list?: string
+  schedules?: Array<{ whatsapp_template: string; send_after_days?: number }>
 }) {
   return call<any>('nudg.desk_api.create_campaign', payload)
 }
@@ -125,9 +129,9 @@ export async function updateCampaign(payload: {
   campaign_name?: string
   campaign_description?: string
   whatsapp_account?: string
-  whatsapp_template?: string
-  scheduled_at?: string
-  recipients?: string
+  whatsapp_start_date?: string
+  whatsapp_recipient_list?: string
+  schedules?: Array<{ whatsapp_template: string; send_after_days?: number }>
 }) {
   return call<any>('nudg.desk_api.update_campaign', payload)
 }

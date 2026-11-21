@@ -389,18 +389,29 @@ def run_campaign(name: str) -> dict:
 
 
 @frappe.whitelist()
+def list_recipient_lists(account: str | None = None) -> list:
+	_require_manager()
+	return campaigns.list_recipient_lists(account)
+
+
+@frappe.whitelist()
 def create_campaign(
 	name: str,
 	campaign_description: str | None = None,
 	whatsapp_account: str | None = None,
-	whatsapp_template: str | None = None,
-	scheduled_at: str | None = None,
-	recipients: str | list | None = None,
+	whatsapp_start_date: str | None = None,
+	whatsapp_recipient_list: str | None = None,
+	schedules: str | list | None = None,
 ) -> dict:
 	"""Create a draft broadcast from the Marketing screen."""
 	_require_manager()
 	return campaigns.create_campaign(
-		name, campaign_description, whatsapp_account, whatsapp_template, scheduled_at, recipients
+		name,
+		campaign_description,
+		whatsapp_account,
+		whatsapp_start_date=whatsapp_start_date,
+		whatsapp_recipient_list=whatsapp_recipient_list,
+		schedules=schedules,
 	)
 
 
@@ -410,13 +421,19 @@ def update_campaign(
 	campaign_name: str | None = None,
 	campaign_description: str | None = None,
 	whatsapp_account: str | None = None,
-	whatsapp_template: str | None = None,
-	scheduled_at: str | None = None,
-	recipients: str | list | None = None,
+	whatsapp_start_date: str | None = None,
+	whatsapp_recipient_list: str | None = None,
+	schedules: str | list | None = None,
 ) -> dict:
 	_require_manager()
 	return campaigns.update_campaign(
-		name, campaign_name, campaign_description, whatsapp_account, whatsapp_template, scheduled_at, recipients
+		name,
+		campaign_name,
+		campaign_description,
+		whatsapp_account,
+		whatsapp_start_date=whatsapp_start_date,
+		whatsapp_recipient_list=whatsapp_recipient_list,
+		schedules=schedules,
 	)
 
 

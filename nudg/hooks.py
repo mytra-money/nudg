@@ -111,7 +111,9 @@ doc_events = {
 		"after_insert": [
 			"nudg.services.automation.on_wa_message",
 			"nudg.chatbot.processor.process_incoming_message",
+			"nudg.integrations.site_sync.flag_message_for_client",
 		],
+		"on_submit": "nudg.integrations.site_sync.flag_message_for_client",
 		"on_update": [
 			"nudg.services.automation.on_wa_message",
 			"nudg.services.bulk.sync_message_status",
@@ -127,6 +129,7 @@ scheduler_events = {
 		],
 		"*/5 * * * *": [
 			"nudg.services.delivery.enqueue_fail_stuck_outgoing",
+			"nudg.integrations.site_sync.sync_client_sites",
 		],
 	},
 	"hourly": [

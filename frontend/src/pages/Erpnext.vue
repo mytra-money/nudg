@@ -25,6 +25,10 @@ const alerts = ref<Record<string, any[]>>({})
 const alertErrors = ref<Record<string, string>>({})
 const alertsLoading = ref<Record<string, boolean>>({})
 const confirmDelete = ref('')
+const verifyOpen = ref(false)
+const verifyOk = ref(false)
+const verifyReason = ref('')
+const verifyChecks = ref<{ name: string; ok: boolean; detail: string }[]>([])
 
 const siteForm = ref({
   site_name: '',
@@ -198,11 +202,19 @@ async function loadAlerts(site: any) {
 async function connect() {
   busy.value = true
   try {
-    await call('nudg.integrations.erpnext.api.connect_site', { ...siteForm.value })
+    const result = await call<any>('nudg.integrations.erpnext.api.connect_site', { ...siteForm.value })
     siteForm.value.api_key = ''
     siteForm.value.api_secret = ''
-    toast.success('ERPNext site connected.')
     await load()
+    verifyOk.value = Boolean(result?.ok) && result?.status !== 'Error'
+    verifyChecks.value = Array.isArray(result?.checks) ? result.checks : []
+    if (verifyOk.value) {
+      const user = result?.remote_user ? ` Signed in as ${result.remote_user}.` : ''
+      verifyReason.value = `Everything is fine.${user} WhatsApp is installed on that site and this user has the permissions Nudg needs. Site status is Connected.`
+    } else {
+      verifyReason.value = result?.reason || result?.last_error || 'The site could not be verified.'
+    }
+    verifyOpen.value = true
   } catch (err) {
     toast.error(errorText(err))
   } finally {
@@ -515,6 +527,9 @@ onMounted(load)
         />
         <section v-else class="rounded-xl border border-outline-gray-2 bg-white p-4">
           <h2 class="text-sm font-semibold text-ink-gray-9">Connect a site</h2>
+          <p class="mt-1 text-sm text-ink-gray-6">
+            Saving checks that this site is reachable, that WA Account, WA Profile, and WA Message are installed, and that this API user can use them. A failed check is shown so you can fix it. Site status becomes Connected after the checks pass, or Error when the site or API cannot be used.
+          </p>
           <p v-if="!live" class="mt-2 text-sm text-ink-gray-6">Open Nudg on a signed-in site to connect ERPNext.</p>
           <form v-else class="mt-3 grid gap-3 sm:grid-cols-2" @submit.prevent="connect">
             <TextInput v-model="siteForm.site_name" label="Site name" placeholder="Acme" required />
@@ -583,6 +598,23 @@ onMounted(load)
         </section>
       </div>
     </div>
+
+    <Dialog v-model="verifyOpen" :title="verifyOk ? 'Site verified' : 'Could not verify this site'">
+      <div class="space-y-3 py-1 text-sm">
+        <p class="text-ink-gray-7">{{ verifyReason }}</p>
+        <ul v-if="verifyChecks.length" class="space-y-2">
+          <li v-for="check in verifyChecks" :key="check.name">
+            <div :class="check.ok ? 'font-medium text-[#075E54]' : 'font-medium text-red-600'">{{ check.name }}</div>
+            <div class="text-ink-gray-6">{{ check.detail }}</div>
+          </li>
+        </ul>
+        <p v-if="verifyOk" class="text-ink-gray-6">Nudg can store chats on this site.</p>
+        <p v-else class="text-ink-gray-6">Fix the items above on the client site, then connect again. Messages Nudg cannot deliver are kept here and sent when the site is back.</p>
+      </div>
+      <template #actions>
+        <Button variant="solid" class="bg-[#075E54] text-white hover:bg-[#128C7E]" label="Close" @click="verifyOpen = false" />
+      </template>
+    </Dialog>
 
     <Dialog v-model="alertOpen" :title="editing ? 'Edit alert' : 'Add alert'">
       <div class="max-h-[70vh] space-y-3 overflow-auto py-1 text-sm">
