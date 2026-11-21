@@ -50,14 +50,20 @@ def handler() -> Response | str:
 
 	if payload_is_remote(payload):
 		_verify_meta_signature()
+		from nudg.integrations.coexistence import consume
 		from nudg.integrations.site_store import ingest
 
+		consume(payload)
 		ingest(payload)
 		response = getattr(frappe.local, "response", None)
 		if response is not None:
 			response.http_status_code = 200
 			response["content_type"] = "text/plain"
 		return "ok"
+	_verify_meta_signature()
+	from nudg.integrations.coexistence import consume
+
+	consume(payload)
 	try:
 		from whatsapp.whatsapp.webhook import handler as wa_handler
 		return wa_handler()

@@ -37,6 +37,7 @@ const pin = ref('')
 const busy = ref(false)
 
 let sessionInfo: SessionInfo = { waba_id: '', phone_number_id: '' }
+let sessionEvent = ''
 let pendingCode = ''
 let finishing = false
 
@@ -81,6 +82,7 @@ function onFacebookMessage(event: MessageEvent) {
   }
   if (!data || data.type !== 'WA_EMBEDDED_SIGNUP') return
   const name = String(data.event || '').toUpperCase()
+  if (name) sessionEvent = name
   if (data.data?.waba_id) {
     sessionInfo = {
       waba_id: String(data.data.waba_id),
@@ -107,6 +109,7 @@ async function launchSignup() {
   status.value = ''
   pendingCode = ''
   finishing = false
+  sessionEvent = ''
   sessionInfo = { waba_id: '', phone_number_id: '' }
   if (!config.value?.ready) {
     error.value = 'Save the App ID, configuration ID, and app secret first.'
@@ -133,6 +136,7 @@ async function launchSignup() {
         override_default_response_type: true,
         extras: {
           setup: {},
+          featureType: 'whatsapp_business_app_onboarding',
           sessionInfoVersion: '3',
         },
       },
@@ -155,8 +159,9 @@ async function finishSignup() {
       code: pendingCode,
       waba_id: sessionInfo.waba_id || undefined,
       phone_number_id: sessionInfo.phone_number_id || undefined,
-    })) as { account_name?: string; pin?: string; warnings?: string[] }
-    pin.value = result.pin || ''
+      business_app: sessionEvent === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING' ? 1 : 0,
+    })) as { account_name?: string; pin?: string; warnings?: string[]; coexistence?: boolean }
+    pin.value = result.coexistence ? '' : result.pin || ''
     const warning = (result.warnings || [])
       .map((item) => userFacingError(item, 'WhatsApp could not finish setup. Try connecting again.'))
       .find(Boolean)
@@ -165,7 +170,9 @@ async function finishSignup() {
       error.value = warning
       toast.error(warning)
     } else {
-      status.value = `Connected ${result.account_name}.`
+      status.value = result.coexistence
+        ? `Connected ${result.account_name}. Chats from the WhatsApp Business app are copying in. This can take a few minutes.`
+        : `Connected ${result.account_name}.`
       toast.success(status.value)
     }
     emit('connected')
@@ -210,6 +217,9 @@ function loadFacebookSdk(app: string, version: string) {
         label="Login with Facebook"
         @click="launchSignup"
       />
+      <p class="max-w-xs text-center text-xs text-ink-gray-6">
+        A number already on the WhatsApp Business app can stay on the phone. New Cloud API numbers are registered here.
+      </p>
       <Button
         variant="solid"
         class="w-full max-w-xs justify-center !bg-[#e5e7eb] !text-[#111827] hover:!bg-[#d1d5db]"

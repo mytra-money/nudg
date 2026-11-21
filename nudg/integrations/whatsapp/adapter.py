@@ -277,6 +277,9 @@ def apply_local_webhook(field: str | None, value: dict) -> None:
 
 
 def _deliver(account: str, payload: dict) -> str:
+	from nudg.integrations.coexistence import pace
+
+	pace(account)
 	from whatsapp.whatsapp.doctype.wa_message.wa_message import _get_whatsapp_client
 
 	account_doc = frappe.get_doc("WA Account", account)

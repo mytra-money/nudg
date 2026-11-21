@@ -124,6 +124,7 @@ def complete_signup(
 	waba_id: str | None = None,
 	phone_number_id: str | None = None,
 	account_name: str | None = None,
+	business_app: bool | int | str | None = False,
 ) -> dict[str, Any]:
 	code = (code or "").strip()
 	waba_id = (waba_id or "").strip()
@@ -143,14 +144,31 @@ def complete_signup(
 	if not waba_id.isdigit() or not phone_number_id.isdigit():
 		frappe.throw(_("Embedded Signup did not return a WhatsApp account ID and phone number ID."))
 
-	pin = make_pin()
-	subscribed, registered, warnings = _finish_cloud(waba_id, phone_number_id, token, pin, version)
+	from nudg.integrations.coexistence import on_business_app, start_sync
+
+	phone_mode = _phone_mode(phone_number_id, token, version)
+	coexistence = on_business_app(
+		phone_mode.get("is_on_biz_app"),
+		phone_mode.get("platform_type"),
+		signup_event=bool(frappe.utils.cint(business_app)),
+	)
+	pin = "" if coexistence else make_pin()
+	subscribed, registered, warnings = _finish_cloud(
+		waba_id,
+		phone_number_id,
+		token,
+		pin,
+		version,
+		skip_register=coexistence,
+	)
 	if warnings:
 		if not found:
 			found = _discover_or_empty(token, settings["app_id"], settings["app_secret"], version)
 		alt_waba, alt_phone = _alternate_ids(waba_id, phone_number_id, found)
 		if alt_waba and alt_phone:
-			alt_subscribed, alt_registered, alt_warnings = _finish_cloud(alt_waba, alt_phone, token, pin, version)
+			alt_subscribed, alt_registered, alt_warnings = _finish_cloud(
+				alt_waba, alt_phone, token, pin, version, skip_register=coexistence
+			)
 			if not alt_warnings:
 				waba_id, phone_number_id = alt_waba, alt_phone
 				subscribed, registered, warnings = alt_subscribed, alt_registered, alt_warnings
@@ -162,8 +180,13 @@ def complete_signup(
 		business_id=waba_id,
 		access_token=token,
 		app_id=settings["app_id"],
-		pin=pin if registered else "",
+		pin=pin if registered and not coexistence else "",
+		coexistence=coexistence,
+		platform_type=str(phone_mode.get("platform_type") or ""),
 	)
+	sync_warnings: list[str] = []
+	if coexistence:
+		sync_warnings = start_sync(phone_number_id, token, version, account)
 	stored_name = frappe.db.get_value("WA Account", account, "account_name") or title
 	return {
 		"status": "success",
@@ -171,9 +194,10 @@ def complete_signup(
 		"account_name": stored_name,
 		"phone_number_id": phone_number_id,
 		"waba_id": waba_id,
-		"pin": pin if registered else "",
-		"ready": bool(subscribed and registered),
-		"warnings": warnings,
+		"pin": pin if registered and not coexistence else "",
+		"coexistence": coexistence,
+		"ready": bool(subscribed and (registered or coexistence)),
+		"warnings": warnings + sync_warnings,
 	}
 
 
@@ -402,7 +426,29 @@ def _alternate_ids(waba_id: str, phone_number_id: str, found: dict[str, Any]) ->
 	return alt_waba, alt_phone
 
 
-def _finish_cloud(waba_id: str, phone_number_id: str, token: str, pin: str, version: str) -> tuple[bool, bool, list[str]]:
+def _phone_mode(phone_number_id: str, token: str, version: str) -> dict[str, Any]:
+	"""is_on_biz_app true with CLOUD_API means the Business app and Cloud API together."""
+	try:
+		body = _graph(
+			"GET",
+			f"https://graph.facebook.com/{version}/{phone_number_id}",
+			params={"fields": "is_on_biz_app,platform_type,display_phone_number"},
+			token=token,
+		)
+	except EmbeddedSignupError as exc:
+		_log_meta(exc.detail)
+		return {}
+	return body or {}
+
+
+def _finish_cloud(
+	waba_id: str,
+	phone_number_id: str,
+	token: str,
+	pin: str,
+	version: str,
+	skip_register: bool = False,
+) -> tuple[bool, bool, list[str]]:
 	subscribed = False
 	registered = False
 	warnings: list[str] = []
@@ -412,12 +458,15 @@ def _finish_cloud(waba_id: str, phone_number_id: str, token: str, pin: str, vers
 	except EmbeddedSignupError as exc:
 		_log_meta(exc.detail)
 		warnings.append(str(exc))
-	try:
-		register_phone(phone_number_id, token, pin, version)
+	if skip_register:
 		registered = True
-	except EmbeddedSignupError as exc:
-		_log_meta(exc.detail)
-		warnings.append(str(exc))
+	else:
+		try:
+			register_phone(phone_number_id, token, pin, version)
+			registered = True
+		except EmbeddedSignupError as exc:
+			_log_meta(exc.detail)
+			warnings.append(str(exc))
 	unique: list[str] = []
 	for warning in warnings:
 		if warning not in unique:
@@ -465,7 +514,16 @@ def _log_meta(detail: str) -> None:
 		return
 
 
-def _upsert_account(account_name: str, phone_id: str, business_id: str, access_token: str, app_id: str, pin: str) -> str:
+def _upsert_account(
+	account_name: str,
+	phone_id: str,
+	business_id: str,
+	access_token: str,
+	app_id: str,
+	pin: str,
+	coexistence: bool = False,
+	platform_type: str = "",
+) -> str:
 	existing = frappe.db.get_value("WA Account", {"phone_id": phone_id}, "name")
 	if existing:
 		doc = frappe.get_doc("WA Account", existing)
@@ -482,6 +540,11 @@ def _upsert_account(account_name: str, phone_id: str, business_id: str, access_t
 	doc.status = "Active"
 	if pin and frappe.get_meta("WA Account").get_field("two_step_pin"):
 		doc.two_step_pin = pin
+	meta = frappe.get_meta("WA Account")
+	if meta.get_field("coexistence"):
+		doc.coexistence = 1 if coexistence else 0
+	if platform_type and meta.get_field("platform_type"):
+		doc.platform_type = platform_type
 	if existing:
 		doc.save(ignore_permissions=True)
 	else:

@@ -51,7 +51,9 @@ def on_wa_message(doc, method=None):
 			except Exception:
 				pass
 
-			# Check consent keywords
+			# History and phone echoes must not opt someone out from an old STOP.
+			if getattr(getattr(doc, "flags", None), "nudg_mirrored", False):
+				return
 			try:
 				from nudg.services import consent
 				channel_doc = frappe.get_cached_doc("WA Account", doc.whatsapp_account) if doc.whatsapp_account else None

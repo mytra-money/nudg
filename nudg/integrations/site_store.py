@@ -958,6 +958,63 @@ class RemoteStore:
 				frappe.log_error(title="Remote outgoing submit flag")
 		return True
 
+	def save_mirror(self, row: dict) -> bool:
+		"""Store a Business-app copy. Does not run the chatbot when this site can."""
+		message_id = str(row.get("message_id") or "")
+		phone = str(row.get("customer") or "")
+		if not message_id or not phone:
+			return False
+		current = self._first("WA Message", ["name", "message"], {"message_id": message_id})
+		if current and current.get("name"):
+			new_text = row.get("content") or ""
+			old_text = current.get("message") or ""
+			if new_text and new_text != "[Media]" and (not old_text or old_text == "[Media]"):
+				_, error = self._attempt(
+					lambda: _set_remote_values(self.client, str(current["name"]), {"message": new_text})
+				)
+				return error is None
+			return True
+		profile = self.ensure_profile(phone, phone)
+		remote_account = self.remote_account()
+		if not profile or not remote_account:
+			return False
+		doc = {
+			"doctype": "WA Message",
+			"to": profile,
+			"message": row.get("content") or "",
+			"whatsapp_account": remote_account,
+			"direction": row.get("direction") or "Incoming",
+			"status": row.get("status") or "Sent",
+			"message_id": message_id,
+			"timestamp": _timestamp(row.get("timestamp")) if row.get("timestamp") else _now(),
+		}
+		saved, error = self._attempt(
+			lambda: self._insert_mirror(doc),
+			down_on_not_found=True,
+		)
+		return error is None and isinstance(saved, dict)
+
+	def _insert_mirror(self, doc: dict) -> dict:
+		try:
+			result = self.client.call_method(
+				"nudg.integrations.coexistence.save_on_client",
+				{"doc": doc},
+			)
+			message = result.get("message") if isinstance(result, dict) else result
+			if isinstance(message, dict) and message.get("name"):
+				return message
+			if isinstance(message, str) and message:
+				return {"name": message}
+		except ERPNextClientError:
+			pass
+		saved = self.client.insert_resource("WA Message", doc)
+		if doc.get("direction") == "Outgoing" and isinstance(saved, dict) and saved.get("name"):
+			self.client.call_method(
+				"frappe.client.set_value",
+				{"doctype": "WA Message", "name": saved["name"], "fieldname": "docstatus", "value": 1},
+			)
+		return saved if isinstance(saved, dict) else {}
+
 	def _message_by_id(self, message_id: str) -> dict | None:
 		return self._first("WA Message", ["name", "status", "message_id"], {"message_id": message_id})
 
@@ -1214,7 +1271,7 @@ def update_message_fields(name: str, values: dict | str) -> None:
 		values = json.loads(values)
 	if not isinstance(values, dict) or not name:
 		frappe.throw("A message and its new values are required.")
-	allowed = {"status", "error_message", "error_code", "conversation_id"}
+	allowed = {"status", "error_message", "error_code", "conversation_id", "message"}
 	updates = {field: values.get(field) for field in allowed if field in values}
 	status = updates.get("status")
 	if status is not None and status not in {"Pending", "Sent", "Delivered", "Read", "Failed"}:

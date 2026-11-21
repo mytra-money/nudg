@@ -1054,12 +1054,13 @@ def complete_embedded_signup(
 	waba_id: str | None = None,
 	phone_number_id: str | None = None,
 	account_name: str | None = None,
+	business_app: int | str | None = 0,
 ) -> dict:
 	"""Exchange an Embedded Signup code and connect the customer's WhatsApp account."""
 	_require_manager()
 	from nudg.integrations.embedded_signup import complete_signup
 
-	return complete_signup(code, waba_id, phone_number_id, account_name)
+	return complete_signup(code, waba_id, phone_number_id, account_name, business_app=business_app)
 
 
 @frappe.whitelist()
