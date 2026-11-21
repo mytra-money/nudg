@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
-import { Badge, Button, Dialog, Select, TextInput, toast } from 'frappe-ui'
+import { Badge, Button, Dialog, dialog, FormControl, Select, TextInput, toast } from 'frappe-ui'
+import { NumberCard } from 'frappe-ui/charts'
+import DeskCard from '@/components/desk/DeskCard.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 import LoadingState from '@/components/LoadingState.vue'
@@ -38,6 +40,19 @@ const form = ref({
   scheduled_at: '',
   recipients: '',
 })
+const recipientStatusOptions = [
+  { label: 'All Statuses', value: 'all' },
+  { label: 'Read', value: 'Read' },
+  { label: 'Delivered', value: 'Delivered' },
+  { label: 'Failed', value: 'Failed' },
+  { label: 'Pending', value: 'Pending' },
+]
+const statusFilterOptions = computed(() => [
+  { label: `All (${rows.value.length})`, value: 'all', active: 'bg-[#075E54] text-white', idle: 'bg-surface-gray-2 text-ink-gray-6 hover:bg-surface-gray-3' },
+  { label: 'Completed', value: 'Completed', active: 'bg-emerald-700 text-white', idle: 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100' },
+  { label: 'Draft', value: 'Draft', active: 'bg-gray-700 text-white', idle: 'bg-gray-100 text-gray-700 hover:bg-gray-200' },
+  { label: 'Failed', value: 'Failed', active: 'bg-red-700 text-white', idle: 'bg-red-50 text-red-700 hover:bg-red-100' },
+])
 const recipientQuery = ref('')
 const recipientStatusFilter = ref<'all' | 'Read' | 'Delivered' | 'Failed' | 'Pending'>('all')
 
@@ -258,20 +273,24 @@ async function startEdit(row: any) {
   }
 }
 
-async function removeCampaign() {
+function removeCampaign() {
   if (!selected.value || !canEdit(selected.value)) return
-  if (!window.confirm(`Delete campaign “${selected.value.campaign_name || selected.value.name}”?`)) return
-  busy.value = true
-  try {
-    if (live) await deleteCampaign(selected.value.name)
-    rows.value = rows.value.filter((row) => row.name !== selected.value.name)
-    selected.value = null
-    toast.success('Campaign deleted')
-  } catch (caught) {
-    toast.error(errorText(caught))
-  } finally {
-    busy.value = false
-  }
+  const campaign = selected.value
+  dialog.danger({
+    title: 'Delete campaign?',
+    message: `Remove “${campaign.campaign_name || campaign.name}”?`,
+    onConfirm: async () => {
+      busy.value = true
+      try {
+        if (live) await deleteCampaign(campaign.name)
+        rows.value = rows.value.filter((row) => row.name !== campaign.name)
+        selected.value = null
+        toast.success('Campaign deleted')
+      } finally {
+        busy.value = false
+      }
+    },
+  })
 }
 
 async function saveCampaign() {
@@ -444,41 +463,20 @@ onMounted(() => {
     <!-- Top KPI Performance Funnel Bar -->
     <section class="border-b border-outline-gray-2 bg-white px-4 py-3 shrink-0">
       <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <!-- Metric 1: Total Broadcasts -->
-        <div class="rounded-lg border border-outline-gray-2 bg-surface-gray-1/50 p-2.5">
-          <span class="text-[11px] font-medium uppercase tracking-wider text-ink-gray-5">Broadcasts</span>
-          <div class="mt-1 flex items-baseline gap-1.5">
-            <span class="text-xl font-bold text-ink-gray-9">{{ totalCampaignsCount }}</span>
-            <span class="text-[11px] text-ink-gray-5">campaigns</span>
-          </div>
-        </div>
-
-        <!-- Metric 2: Messages Sent -->
-        <div class="rounded-lg border border-outline-gray-2 bg-surface-gray-1/50 p-2.5">
-          <span class="text-[11px] font-medium uppercase tracking-wider text-ink-gray-5">Messages Sent</span>
-          <div class="mt-1 flex items-baseline gap-1.5">
-            <span class="text-xl font-bold text-[#075E54]">{{ totalSent }}</span>
-            <span class="text-[11px] text-ink-gray-5">total volume</span>
-          </div>
-        </div>
-
-        <!-- Metric 3: Delivery Rate -->
-        <div class="rounded-lg border border-outline-gray-2 bg-surface-gray-1/50 p-2.5">
-          <span class="text-[11px] font-medium uppercase tracking-wider text-ink-gray-5">Delivery Rate</span>
-          <div class="mt-1 flex items-baseline gap-1.5">
-            <span class="text-xl font-bold text-emerald-700">{{ overallDeliveryRate }}%</span>
-            <span class="text-[11px] text-emerald-600 font-medium">({{ totalDelivered }})</span>
-          </div>
-        </div>
-
-        <!-- Metric 4: Read Rate -->
-        <div class="rounded-lg border border-outline-gray-2 bg-surface-gray-1/50 p-2.5">
-          <span class="text-[11px] font-medium uppercase tracking-wider text-ink-gray-5">Read / Open Rate</span>
-          <div class="mt-1 flex items-baseline gap-1.5">
-            <span class="text-xl font-bold text-blue-700">{{ overallReadRate }}%</span>
-            <span class="text-[11px] text-blue-600 font-medium">({{ totalRead }})</span>
-          </div>
-        </div>
+        <NumberCard title="Broadcasts" :value="totalCampaignsCount" color="#374151" delta-caption="campaigns" />
+        <NumberCard title="Messages Sent" :value="totalSent" color="#075E54" delta-caption="total volume" />
+        <NumberCard
+          title="Delivery Rate"
+          :value="`${overallDeliveryRate}%`"
+          color="#047857"
+          :delta-caption="`${totalDelivered} delivered`"
+        />
+        <NumberCard
+          title="Read / Open Rate"
+          :value="`${overallReadRate}%`"
+          color="#1D4ED8"
+          :delta-caption="`${totalRead} read`"
+        />
       </div>
     </section>
 
@@ -509,55 +507,27 @@ onMounted(() => {
       >
         <!-- Search & Filter Tabs -->
         <div class="border-b border-outline-gray-2 p-3 space-y-2.5 shrink-0">
-          <div class="relative">
-            <TextInput
-              v-model="query"
-              placeholder="Search campaigns or templates…"
-              class="w-full text-xs"
-            />
-            <button
-              v-if="query"
-              type="button"
-              class="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-gray-4 hover:text-ink-gray-7"
-              @click="query = ''"
-            >
-              <span class="lucide-x size-3" />
-            </button>
-          </div>
+          <TextInput
+            v-model="query"
+            type="text"
+            placeholder="Search campaigns or templates…"
+            class="w-full text-xs"
+          >
+            <template v-if="query" #suffix>
+              <Button variant="ghost" size="sm" icon="lucide-x" aria-label="Clear search" @click="query = ''" />
+            </template>
+          </TextInput>
 
-          <div class="flex flex-wrap items-center gap-1 text-xs pb-0.5">
-            <button
-              type="button"
-              class="rounded-full px-2.5 py-0.5 font-medium transition-colors"
-              :class="statusFilter === 'all' ? 'bg-[#075E54] text-white' : 'bg-surface-gray-2 text-ink-gray-6 hover:bg-surface-gray-3'"
-              @click="statusFilter = 'all'"
-            >
-              All ({{ rows.length }})
-            </button>
-            <button
-              type="button"
-              class="rounded-full px-2.5 py-0.5 font-medium transition-colors"
-              :class="statusFilter === 'Completed' ? 'bg-emerald-700 text-white' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'"
-              @click="statusFilter = 'Completed'"
-            >
-              Completed
-            </button>
-            <button
-              type="button"
-              class="rounded-full px-2.5 py-0.5 font-medium transition-colors"
-              :class="statusFilter === 'Draft' ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
-              @click="statusFilter = 'Draft'"
-            >
-              Draft
-            </button>
-            <button
-              type="button"
-              class="rounded-full px-2.5 py-0.5 font-medium transition-colors"
-              :class="statusFilter === 'Failed' ? 'bg-red-700 text-white' : 'bg-red-50 text-red-700 hover:bg-red-100'"
-              @click="statusFilter = 'Failed'"
-            >
-              Failed
-            </button>
+          <div class="flex flex-wrap items-center gap-1 pb-0.5">
+            <Button
+              v-for="option in statusFilterOptions"
+              :key="option.value"
+              size="sm"
+              :variant="statusFilter === option.value ? 'solid' : 'subtle'"
+              :class="statusFilter === option.value ? option.active : option.idle"
+              :label="option.label"
+              @click="statusFilter = option.value as typeof statusFilter"
+            />
           </div>
         </div>
 
@@ -617,15 +587,9 @@ onMounted(() => {
         class="min-h-0 flex-col overflow-y-auto bg-white"
         :class="narrow && !showDetail ? 'hidden' : 'flex'"
       >
-        <button
-          v-if="narrow && selected"
-          type="button"
-          class="inline-flex items-center gap-1 px-4 pt-3 text-sm font-medium text-[#075E54]"
-          @click="showDetail = false"
-        >
-          <span class="lucide-arrow-left size-4" aria-hidden="true" />
-          All campaigns
-        </button>
+        <div v-if="narrow && selected" class="px-4 pt-3">
+          <Button variant="ghost" icon-left="lucide-arrow-left" label="All campaigns" @click="showDetail = false" />
+        </div>
         <!-- Active Campaign Inspector -->
         <div v-if="selected" class="p-5 sm:p-6 space-y-6">
           <!-- Inspector Header -->
@@ -667,6 +631,7 @@ onMounted(() => {
               <Button
                 v-if="isManager && canEdit(selected)"
                 variant="subtle"
+                theme="red"
                 label="Delete"
                 @click="removeCampaign"
               />
@@ -691,16 +656,16 @@ onMounted(() => {
             </h3>
             <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <!-- Sent -->
-              <div class="rounded-xl border border-outline-gray-2 bg-surface-gray-1/60 p-3.5">
+              <DeskCard as="div" :padding="false" class="p-3.5">
                 <span class="text-xs font-medium text-ink-gray-5">Total Sent</span>
                 <p class="mt-1 text-2xl font-bold text-ink-gray-9">{{ selected.sent_count || 0 }}</p>
                 <div class="mt-2 h-1.5 w-full rounded-full bg-gray-200">
                   <div class="h-1.5 rounded-full bg-[#075E54]" style="width: 100%" />
                 </div>
-              </div>
+              </DeskCard>
 
               <!-- Delivered -->
-              <div class="rounded-xl border border-outline-gray-2 bg-surface-gray-1/60 p-3.5">
+              <DeskCard as="div" :padding="false" class="p-3.5">
                 <div class="flex justify-between items-baseline">
                   <span class="text-xs font-medium text-ink-gray-5">Delivered</span>
                   <span class="text-xs font-semibold text-emerald-700">{{ campaignDeliveryRate(selected) }}%</span>
@@ -712,10 +677,10 @@ onMounted(() => {
                     :style="`width: ${campaignDeliveryRate(selected)}%`"
                   />
                 </div>
-              </div>
+              </DeskCard>
 
               <!-- Read -->
-              <div class="rounded-xl border border-outline-gray-2 bg-surface-gray-1/60 p-3.5">
+              <DeskCard as="div" :padding="false" class="p-3.5">
                 <div class="flex justify-between items-baseline">
                   <span class="text-xs font-medium text-ink-gray-5">Read / Opened</span>
                   <span class="text-xs font-semibold text-blue-700">{{ campaignReadRate(selected) }}%</span>
@@ -727,10 +692,10 @@ onMounted(() => {
                     :style="`width: ${campaignReadRate(selected)}%`"
                   />
                 </div>
-              </div>
+              </DeskCard>
 
               <!-- Failed -->
-              <div class="rounded-xl border border-outline-gray-2 bg-surface-gray-1/60 p-3.5">
+              <DeskCard as="div" :padding="false" class="p-3.5">
                 <span class="text-xs font-medium text-ink-gray-5">Failed Sends</span>
                 <p class="mt-1 text-2xl font-bold" :class="selected.failed_count ? 'text-red-700' : 'text-ink-gray-5'">
                   {{ selected.failed_count || 0 }}
@@ -741,7 +706,7 @@ onMounted(() => {
                     :style="`width: ${selected.sent_count ? Math.round(((selected.failed_count || 0) / selected.sent_count) * 100) : 0}%`"
                   />
                 </div>
-              </div>
+              </DeskCard>
             </div>
           </section>
 
@@ -753,24 +718,17 @@ onMounted(() => {
               </h3>
 
               <div class="flex items-center gap-2">
-                <div class="relative w-48">
-                  <TextInput
-                    v-model="recipientQuery"
-                    placeholder="Search recipient…"
-                    class="w-full text-xs"
-                  />
-                </div>
+                <FormControl
+                  v-model="recipientQuery"
+                  type="text"
+                  class="w-48 text-xs"
+                  placeholder="Search recipient…"
+                />
                 <Select
                   class="w-32 text-xs"
                   :model-value="recipientStatusFilter"
-                  :options="[
-                    { label: 'All Statuses', value: 'all' },
-                    { label: 'Read', value: 'Read' },
-                    { label: 'Delivered', value: 'Delivered' },
-                    { label: 'Failed', value: 'Failed' },
-                    { label: 'Pending', value: 'Pending' },
-                  ]"
-                  @update:model-value="(val) => (recipientStatusFilter = val as typeof recipientStatusFilter)"
+                  :options="recipientStatusOptions"
+                  @update:model-value="(val) => (recipientStatusFilter = (String(val || 'all') as typeof recipientStatusFilter))"
                 />
               </div>
             </div>
@@ -840,50 +798,41 @@ onMounted(() => {
         <p class="text-xs text-ink-gray-6">
           Save the broadcast here. A schedule keeps it as Scheduled until it runs. One phone number per line becomes the audience.
         </p>
-        <label class="block text-xs font-medium text-ink-gray-7">
-          Name
-          <TextInput v-model="form.name" class="mt-1" placeholder="Festive allocation" />
-        </label>
-        <label class="block text-xs font-medium text-ink-gray-7">
-          Description
-          <textarea
-            v-model="form.description"
-            rows="3"
-            class="mt-1 w-full rounded border border-outline-gray-2 px-2 py-1.5 text-sm text-ink-gray-9"
-            placeholder="Optional note for this broadcast"
-          />
-        </label>
-        <label class="block text-xs font-medium text-ink-gray-7">
-          WhatsApp account
-          <Select
-            class="mt-1"
-            :model-value="form.whatsapp_account"
-            :options="accountOptions"
-            @update:model-value="(val) => (form.whatsapp_account = String(val || ''))"
-          />
-        </label>
-        <label class="block text-xs font-medium text-ink-gray-7">
-          WhatsApp template
-          <Select
-            class="mt-1"
-            :model-value="form.whatsapp_template"
-            :options="templateOptions"
-            @update:model-value="(val) => (form.whatsapp_template = String(val || ''))"
-          />
-        </label>
-        <label class="block text-xs font-medium text-ink-gray-7">
-          Schedule
-          <input v-model="form.scheduled_at" type="datetime-local" class="mt-1 w-full rounded border border-outline-gray-2 px-2 py-1.5 text-sm" />
-        </label>
-        <label class="block text-xs font-medium text-ink-gray-7">
-          Recipients
-          <textarea
-            v-model="form.recipients"
-            rows="4"
-            class="mt-1 w-full rounded border border-outline-gray-2 px-2 py-1.5 font-mono text-sm text-ink-gray-9"
-            placeholder="9198XXXXXXXX&#10;One number per line"
-          />
-        </label>
+        <FormControl
+          v-model="form.name"
+          type="text"
+          label="Name"
+          placeholder="Festive allocation"
+          required
+        />
+        <FormControl
+          v-model="form.description"
+          type="textarea"
+          label="Description"
+          :rows="3"
+          placeholder="Optional note for this broadcast"
+        />
+        <FormControl
+          v-model="form.whatsapp_account"
+          type="select"
+          label="WhatsApp account"
+          :options="accountOptions"
+        />
+        <FormControl
+          v-model="form.whatsapp_template"
+          type="select"
+          label="WhatsApp template"
+          :options="templateOptions"
+        />
+        <FormControl v-model="form.scheduled_at" type="datetime-local" label="Schedule" />
+        <FormControl
+          v-model="form.recipients"
+          type="textarea"
+          label="Recipients"
+          :rows="4"
+          class="[&_textarea]:font-mono"
+          placeholder="9198XXXXXXXX&#10;One number per line"
+        />
       </div>
       <template #actions>
         <div class="flex justify-end gap-2">

@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
-import { Button, Dialog, toast } from 'frappe-ui'
-import StatusBadge from '@/components/StatusBadge.vue'
+import { Alert, Badge, Button, Dialog, FormControl, TabButtons, TextInput, toast } from 'frappe-ui'
+import { NumberCard } from 'frappe-ui/charts'
+import DeskCard from '@/components/desk/DeskCard.vue'
 import { userFacingError } from '@/utils/errors'
 import { formatDay, formatTime, whatsappScreen } from '@/utils/format'
 import { isManager, useDesk } from '@/stores/desk'
@@ -22,6 +23,22 @@ const copiedLogPayload = ref(false)
 
 const levels = ['All', 'Error', 'Warning', 'Info', 'Debug']
 const eventTypes = ['All', 'Message', 'Webhook', 'Template', 'Automation', 'Campaign']
+const levelOptions = levels.map((value) => ({ label: value, value }))
+const eventOptions = eventTypes.map((value) => ({ label: value, value }))
+
+type BadgeTheme = 'gray' | 'blue' | 'green' | 'amber' | 'red'
+function levelTheme(level?: string): BadgeTheme {
+  if (level === 'Error') return 'red'
+  if (level === 'Warning') return 'amber'
+  if (level === 'Debug') return 'gray'
+  return 'green'
+}
+
+function resetFilters() {
+  levelFilter.value = 'All'
+  eventFilter.value = 'All'
+  searchQuery.value = ''
+}
 
 // Enriched sample logs for demo/preview mode
 const fallbackSampleLogs: LogRow[] = [
@@ -231,6 +248,15 @@ function openReference(doctype?: string, docname?: string) {
   void router.push(screen.path)
 }
 
+const payloadTabs = computed(() => {
+  const row = inspectingPayloadLog.value
+  if (!row) return []
+  const tabs: { value: string; label: string }[] = []
+  if (row.response_data) tabs.push({ value: 'response', label: 'Response Payload' })
+  if (row.request_data) tabs.push({ value: 'request', label: 'Request Payload' })
+  return tabs
+})
+
 function openInspectModal(row: LogRow) {
   inspectingPayloadLog.value = row
   activePayloadTab.value = row.response_data ? 'response' : 'request'
@@ -324,30 +350,18 @@ watch(
       </div>
 
       <div class="hidden items-center gap-3 sm:flex">
-        <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
-          <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-          Audit Stream Active
-        </span>
+        <Badge theme="green" variant="subtle" size="md" label="Audit Stream Active" />
       </div>
     </header>
 
     <!-- Access Control Warning Banner (if user cannot read logs) -->
-    <div
-      v-if="desk.inbox.value && !desk.inbox.value.can_read_logs"
-      class="m-6 rounded-xl border border-amber-200 bg-amber-50 p-6 text-amber-900"
-    >
-      <div class="flex items-start gap-3">
-        <svg class="h-6 w-6 text-amber-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-        </svg>
-        <div>
-          <h3 class="text-sm font-semibold">Elevated Permissions Required</h3>
-          <p class="mt-1 text-xs text-amber-800 leading-relaxed">
-            Access to the WhatsApp Message and Webhook Audit Log is restricted by Frappe role-based permissions.
-            Please ensure your user profile has read access to the <code class="rounded bg-amber-100 px-1 py-0.5">WA Log</code> DocType, or contact your System Manager.
-          </p>
-        </div>
-      </div>
+    <div v-if="desk.inbox.value && !desk.inbox.value.can_read_logs" class="m-6">
+      <Alert theme="amber" title="Elevated Permissions Required">
+        <template #description>
+          Access to the WhatsApp Message and Webhook Audit Log is restricted by Frappe role-based permissions.
+          Please ensure your user profile has read access to the <code class="rounded bg-surface-gray-2 px-1 py-0.5">WA Log</code> DocType, or contact your System Manager.
+        </template>
+      </Alert>
     </div>
 
     <!-- Main Audit Content -->
@@ -388,146 +402,83 @@ watch(
             label="Export CSV"
             @click="exportCsv"
           />
-
         </div>
       </div>
 
-      <!-- KPI Metrics Ribbon (4 Cards) -->
-      <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <!-- Card 1: Total Events -->
-        <div class="rounded-xl border border-outline-gray-2 bg-white p-4 shadow-2xs">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-medium text-ink-gray-6 uppercase tracking-wider">Total Audit Events</span>
-            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            </div>
-          </div>
-          <div class="mt-2 flex items-baseline gap-2">
-            <span class="text-2xl font-bold text-ink-gray-9">{{ allLogs.length }}</span>
-            <span class="text-xs text-ink-gray-5">logged entries</span>
-          </div>
-          <p class="mt-1 text-xs text-ink-gray-6">
-            Showing {{ filteredRows.length }} under current filter
-          </p>
+      <!-- KPI Metrics Ribbon (frappe-ui NumberCard) -->
+      <section aria-labelledby="log-kpi-heading" class="mt-6">
+        <h2 id="log-kpi-heading" class="sr-only">Audit Log Metrics</h2>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <NumberCard
+            title="Total Audit Events"
+            :value="allLogs.length"
+            color="#0369A1"
+            :delta-caption="`Showing ${filteredRows.length} under current filter`"
+          />
+          <NumberCard
+            title="Meta API Errors"
+            :value="errorLogsCount"
+            :color="errorLogsCount > 0 ? '#B91C1C' : '#047857'"
+            :delta-caption="`${warningLogsCount} warnings recorded`"
+          />
+          <NumberCard
+            title="Webhook Ingestion"
+            :value="webhookLogsCount"
+            color="#047857"
+            delta-caption="HMAC-SHA256 signature verified"
+          />
+          <NumberCard
+            title="Audit Trail Status"
+            value="Realtime Active"
+            color="#6D28D9"
+            :delta-caption="desk.mode.value === 'live' ? 'Live Desk Connected' : 'Sample Workspace Environment'"
+          />
         </div>
-
-        <!-- Card 2: Error Logs -->
-        <div class="rounded-xl border border-outline-gray-2 bg-white p-4 shadow-2xs">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-medium text-ink-gray-6 uppercase tracking-wider">Meta API Errors</span>
-            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-red-50 text-red-600">
-              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-          </div>
-          <div class="mt-2 flex items-baseline gap-2">
-            <span class="text-2xl font-bold" :class="errorLogsCount > 0 ? 'text-red-600' : 'text-ink-gray-9'">
-              {{ errorLogsCount }}
-            </span>
-            <span class="text-xs text-ink-gray-5">critical alerts</span>
-          </div>
-          <p class="mt-1 text-xs text-ink-gray-6">
-            {{ warningLogsCount }} warnings recorded
-          </p>
-        </div>
-
-        <!-- Card 3: Inbound Webhooks -->
-        <div class="rounded-xl border border-outline-gray-2 bg-white p-4 shadow-2xs">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-medium text-ink-gray-6 uppercase tracking-wider">Webhook Ingestion</span>
-            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-            </div>
-          </div>
-          <div class="mt-2 flex items-baseline gap-2">
-            <span class="text-2xl font-bold text-ink-gray-9">{{ webhookLogsCount }}</span>
-            <span class="text-xs text-ink-gray-5">verified callbacks</span>
-          </div>
-          <p class="mt-1 text-xs text-ink-gray-6">HMAC-SHA256 signature verified</p>
-        </div>
-
-        <!-- Card 4: Audit Health -->
-        <div class="rounded-xl border border-outline-gray-2 bg-white p-4 shadow-2xs">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-medium text-ink-gray-6 uppercase tracking-wider">Audit Trail Status</span>
-            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-50 text-purple-600">
-              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-              </svg>
-            </div>
-          </div>
-          <div class="mt-2 flex items-baseline gap-2">
-            <span class="text-base font-bold text-ink-gray-9">Realtime Active</span>
-          </div>
-          <p class="mt-1 text-xs text-ink-gray-6">
-            {{ desk.mode.value === 'live' ? 'Live Desk Connected' : 'Sample Workspace Environment' }}
-          </p>
-        </div>
-      </div>
+      </section>
 
       <!-- Filter & Search Toolbar -->
-      <div class="mt-6 flex flex-col gap-3 rounded-xl border border-outline-gray-2 bg-white p-4 shadow-2xs">
-        <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <!-- Search Input -->
-          <div class="relative w-full lg:w-80">
-            <input
-              v-model="searchQuery"
-              type="text"
-              placeholder="Search message, docname, event..."
-              class="h-8.5 w-full rounded-lg border border-outline-gray-2 bg-surface-gray-2/50 pl-8 pr-3 text-xs text-ink-gray-9 placeholder:text-ink-gray-4 focus:border-[#128C7E] focus:outline-none focus:ring-1 focus:ring-[#128C7E]"
-            />
-            <svg class="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-ink-gray-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </div>
+      <DeskCard class="mt-6">
+        <div class="flex flex-col gap-3 lg:flex-row lg:items-end">
+          <TextInput
+            v-model="searchQuery"
+            type="text"
+            placeholder="Search message, docname, event..."
+            class="w-full text-xs lg:w-80"
+          >
+            <template #prefix>
+              <span class="lucide-search size-3.5 text-ink-gray-4" aria-hidden="true" />
+            </template>
+          </TextInput>
 
-          <!-- Filter Pills: Log Level -->
-          <div class="flex flex-wrap items-center gap-1.5">
-            <span class="text-xs font-semibold text-ink-gray-6 mr-1">Level:</span>
-            <button
-              v-for="lvl in levels"
-              :key="lvl"
-              type="button"
-              @click="levelFilter = lvl"
-              class="rounded-md px-2.5 py-1 text-xs font-medium transition-all"
-              :class="
-                levelFilter === lvl
-                  ? lvl === 'Error'
-                    ? 'bg-red-600 text-white shadow-2xs'
-                    : lvl === 'Warning'
-                    ? 'bg-amber-600 text-white shadow-2xs'
-                    : 'bg-[#075E54] text-white shadow-2xs'
-                  : 'bg-surface-gray-2 text-ink-gray-7 hover:bg-surface-gray-3'
-              "
-            >
-              {{ lvl }}
-            </button>
-          </div>
+          <FormControl
+            v-model="levelFilter"
+            type="select"
+            label="Level"
+            :options="levelOptions"
+            class="w-full lg:w-40"
+          />
 
-          <!-- Filter Pills: Event Type -->
-          <div class="flex flex-wrap items-center gap-1.5">
-            <span class="text-xs font-semibold text-ink-gray-6 mr-1">Event:</span>
-            <button
-              v-for="evt in eventTypes"
-              :key="evt"
-              type="button"
-              @click="eventFilter = evt"
-              class="rounded-md px-2 py-0.5 text-xs font-medium transition-all"
-              :class="eventFilter === evt ? 'bg-[#1f2937] text-white' : 'text-ink-gray-6 hover:text-ink-gray-9'"
-            >
-              {{ evt }}
-            </button>
-          </div>
+          <FormControl
+            v-model="eventFilter"
+            type="select"
+            label="Event"
+            :options="eventOptions"
+            class="w-full lg:w-44"
+          />
+
+          <Button
+            v-if="levelFilter !== 'All' || eventFilter !== 'All' || searchQuery"
+            variant="ghost"
+            size="sm"
+            icon-left="lucide-x"
+            label="Clear"
+            @click="resetFilters"
+          />
         </div>
-      </div>
+      </DeskCard>
 
       <!-- Log Stream Table / Rows -->
-      <div class="mt-4 flex flex-col rounded-xl border border-outline-gray-2 bg-white shadow-2xs overflow-hidden">
+      <DeskCard class="mt-4" :padding="false">
         <div v-if="filteredRows.length > 0" class="divide-y divide-outline-gray-2">
           <div
             v-for="row in filteredRows"
@@ -538,33 +489,30 @@ watch(
             <div class="flex flex-wrap items-start justify-between gap-2">
               <div class="flex flex-wrap items-center gap-2">
                 <!-- Level Badge -->
-                <StatusBadge :label="row.level || 'Info'" />
+                <Badge :theme="levelTheme(row.level)" variant="subtle" size="sm" :label="row.level || 'Info'" />
 
                 <!-- Event Type -->
-                <span class="rounded bg-surface-gray-2 px-2 py-0.5 text-[11px] font-medium text-ink-gray-7">
-                  {{ row.event_type }}
-                </span>
+                <Badge v-if="row.event_type" theme="gray" variant="subtle" size="sm" :label="row.event_type" />
 
                 <!-- Account Badge -->
-                <span v-if="row.account" class="rounded bg-[#075E54]/10 px-2 py-0.5 text-[11px] font-medium text-[#075E54]">
-                  {{ row.account }}
-                </span>
+                <Badge v-if="row.account" theme="blue" variant="subtle" size="sm" :label="row.account" />
 
                 <!-- Linked Reference DocType -->
-                <button
+                <Button
                   v-if="row.reference_doctype && row.reference_docname && (isManager || linkedScreen(row.reference_doctype))"
-                  type="button"
+                  variant="subtle"
+                  size="sm"
+                  class="font-mono text-[11px]"
+                  :label="`${row.reference_doctype}: ${row.reference_docname}`"
                   @click="openReference(row.reference_doctype, row.reference_docname)"
-                  class="inline-flex items-center gap-1 rounded bg-surface-gray-2/80 px-2 py-0.5 font-mono text-[11px] text-ink-gray-7 hover:bg-surface-gray-3 hover:text-ink-gray-9 transition-colors"
-                >
-                  <span>{{ row.reference_doctype }}: {{ row.reference_docname }}</span>
-                </button>
-                <span
+                />
+                <Badge
                   v-else-if="row.reference_doctype && row.reference_docname"
-                  class="inline-flex items-center gap-1 rounded bg-surface-gray-2/80 px-2 py-0.5 font-mono text-[11px] text-ink-gray-7"
-                >
-                  {{ row.reference_doctype }}: {{ row.reference_docname }}
-                </span>
+                  theme="gray"
+                  variant="outline"
+                  size="sm"
+                  :label="`${row.reference_doctype}: ${row.reference_docname}`"
+                />
               </div>
 
               <!-- Timestamp -->
@@ -583,31 +531,20 @@ watch(
               v-if="row.request_data || row.response_data"
               class="mt-3 flex items-center justify-between border-t border-outline-gray-1 pt-2.5"
             >
-              <div class="flex items-center gap-2">
-                <button
-                  type="button"
+              <div class="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  :icon-left="expandedLogId === row.name ? 'lucide-chevron-down' : 'lucide-chevron-right'"
+                  :label="expandedLogId === row.name ? 'Hide Payloads' : 'View Raw Payload'"
                   @click="expandedLogId = expandedLogId === row.name ? null : row.name"
-                  class="inline-flex items-center gap-1 text-xs font-semibold text-[#075E54] hover:underline"
-                >
-                  <svg
-                    class="h-3.5 w-3.5 transition-transform"
-                    :class="{ 'rotate-90': expandedLogId === row.name }"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                  </svg>
-                  <span>{{ expandedLogId === row.name ? 'Hide Payloads' : 'View Raw Payload' }}</span>
-                </button>
-
-                <button
-                  type="button"
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  label="Inspect JSON"
                   @click="openInspectModal(row)"
-                  class="text-xs text-ink-gray-5 hover:text-ink-gray-9 transition-colors"
-                >
-                  · Inspect JSON
-                </button>
+                />
               </div>
 
               <span class="font-mono text-[10px] text-ink-gray-4">{{ row.name }}</span>
@@ -620,13 +557,12 @@ watch(
             >
               <div class="flex items-center justify-between border-b border-ink-gray-7 pb-2 text-[11px] text-ink-gray-4">
                 <span>{{ row.response_data ? 'API Response Payload' : 'API Request Payload' }}</span>
-                <button
-                  type="button"
+                <Button
+                  variant="subtle"
+                  size="sm"
+                  label="Copy JSON"
                   @click="copyPayloadText(row.response_data || row.request_data || '')"
-                  class="rounded bg-white/10 px-2 py-0.5 text-[10px] text-white hover:bg-white/20 transition-all"
-                >
-                  Copy JSON
-                </button>
+                />
               </div>
               <pre class="max-h-56 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed">{{ parsePayload(row.response_data || row.request_data) }}</pre>
             </div>
@@ -645,15 +581,15 @@ watch(
           </div>
           <h3 class="mt-3 text-sm font-semibold text-ink-gray-9">No Log Entries Found</h3>
           <p class="mt-1 text-xs text-ink-gray-5">No audit logs match the selected level, event, or search query.</p>
-          <button
-            type="button"
-            @click="levelFilter = 'All'; eventFilter = 'All'; searchQuery = ''"
-            class="mt-4 rounded-lg bg-[#075E54] px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-[#128C7E]"
-          >
-            Reset Filters
-          </button>
+          <Button
+            variant="solid"
+            size="sm"
+            class="mt-4 bg-[#075E54] text-white hover:bg-[#128C7E]"
+            label="Reset Filters"
+            @click="resetFilters"
+          />
         </div>
-      </div>
+      </DeskCard>
     </div>
 
     <!-- MODAL: Raw JSON Payload Inspector & Diagnostics -->
@@ -670,26 +606,11 @@ watch(
 
         <!-- Payload Tabs (Response vs Request) -->
         <div class="flex items-center justify-between border-b border-outline-gray-2 pb-2">
-          <div class="flex gap-2">
-            <button
-              v-if="inspectingPayloadLog.response_data"
-              type="button"
-              @click="activePayloadTab = 'response'"
-              class="rounded-md px-3 py-1 text-xs font-semibold transition-all"
-              :class="activePayloadTab === 'response' ? 'bg-[#075E54] text-white' : 'text-ink-gray-6 hover:text-ink-gray-9'"
-            >
-              Response Payload
-            </button>
-            <button
-              v-if="inspectingPayloadLog.request_data"
-              type="button"
-              @click="activePayloadTab = 'request'"
-              class="rounded-md px-3 py-1 text-xs font-semibold transition-all"
-              :class="activePayloadTab === 'request' ? 'bg-[#075E54] text-white' : 'text-ink-gray-6 hover:text-ink-gray-9'"
-            >
-              Request Payload
-            </button>
-          </div>
+          <TabButtons
+            :model-value="activePayloadTab"
+            :options="payloadTabs"
+            @update:model-value="(val) => (activePayloadTab = val as 'response' | 'request')"
+          />
 
           <Button
             variant="subtle"

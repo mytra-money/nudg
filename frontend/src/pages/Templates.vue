@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
 import { Badge, Button, Dialog, FormControl, Select, TextInput, toast } from 'frappe-ui'
+import { NumberCard } from 'frappe-ui/charts'
 import DeskTemplatePreview from '@/components/DeskTemplatePreview.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import TemplateButtonFields from '@/components/templates/TemplateButtonFields.vue'
@@ -458,55 +459,41 @@ function clearFilters() {
       </div>
     </header>
 
-    <!-- Top KPI Performance Bar -->
-    <section class="border-b border-outline-gray-2 bg-white px-4 py-3 shrink-0">
+    <!-- Top KPI Performance Bar (frappe-ui NumberCard) -->
+    <section class="shrink-0 border-b border-outline-gray-2 bg-white px-4 py-3">
       <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <button
-          type="button"
-          class="rounded-lg border border-outline-gray-2 bg-surface-gray-1/50 p-2.5 text-left transition-colors hover:border-[#128C7E]"
-          @click="applyKpiFilter('Approved')"
-        >
-          <span class="text-[11px] font-medium uppercase tracking-wider text-ink-gray-5">Approved Templates</span>
-          <div class="mt-1 flex items-baseline gap-1.5">
-            <span class="text-xl font-bold text-emerald-700">{{ countApproved }}</span>
-            <span class="text-[11px] text-ink-gray-5">/ {{ countTotal }} total</span>
-          </div>
+        <button type="button" class="w-full text-left" @click="applyKpiFilter('Approved')">
+          <NumberCard
+            title="Approved templates"
+            :value="countApproved"
+            :target="countTotal"
+            color="#047857"
+            delta-caption="Click to filter"
+          />
         </button>
-
-        <button
-          type="button"
-          class="rounded-lg border border-outline-gray-2 bg-surface-gray-1/50 p-2.5 text-left transition-colors hover:border-[#128C7E]"
-          @click="applyKpiFilter('Pending')"
-        >
-          <span class="text-[11px] font-medium uppercase tracking-wider text-ink-gray-5">Pending Review</span>
-          <div class="mt-1 flex items-baseline gap-1.5">
-            <span class="text-xl font-bold text-amber-700">{{ countPending }}</span>
-            <span class="text-[11px] font-medium text-amber-600">with Meta</span>
-          </div>
+        <button type="button" class="w-full text-left" @click="applyKpiFilter('Pending')">
+          <NumberCard
+            title="Pending review"
+            :value="countPending"
+            color="#B45309"
+            delta-caption="with Meta"
+          />
         </button>
-
-        <button
-          type="button"
-          class="rounded-lg border border-outline-gray-2 bg-surface-gray-1/50 p-2.5 text-left transition-colors hover:border-[#128C7E]"
-          @click="applyKpiFilter('Utility')"
-        >
-          <span class="text-[11px] font-medium uppercase tracking-wider text-ink-gray-5">Utility Alerts</span>
-          <div class="mt-1 flex items-baseline gap-1.5">
-            <span class="text-xl font-bold text-[#075E54]">{{ countUtility }}</span>
-            <span class="text-[11px] text-ink-gray-5">operational</span>
-          </div>
+        <button type="button" class="w-full text-left" @click="applyKpiFilter('Utility')">
+          <NumberCard
+            title="Utility alerts"
+            :value="countUtility"
+            color="#075E54"
+            delta-caption="operational"
+          />
         </button>
-
-        <button
-          type="button"
-          class="rounded-lg border border-outline-gray-2 bg-surface-gray-1/50 p-2.5 text-left transition-colors hover:border-[#128C7E]"
-          @click="applyKpiFilter('Marketing')"
-        >
-          <span class="text-[11px] font-medium uppercase tracking-wider text-ink-gray-5">Marketing Broadcasts</span>
-          <div class="mt-1 flex items-baseline gap-1.5">
-            <span class="text-xl font-bold text-purple-700">{{ countMarketing }}</span>
-            <span class="text-[11px] text-ink-gray-5">promotional</span>
-          </div>
+        <button type="button" class="w-full text-left" @click="applyKpiFilter('Marketing')">
+          <NumberCard
+            title="Marketing broadcasts"
+            :value="countMarketing"
+            color="#7E22CE"
+            delta-caption="promotional"
+          />
         </button>
       </div>
     </section>

@@ -18,6 +18,7 @@ declare module 'vue' {
     CannedReplyPicker: typeof import('./src/components/inbox/CannedReplyPicker.vue')['default']
     ChatHeader: typeof import('./src/components/inbox/ChatHeader.vue')['default']
     ConversationList: typeof import('./src/components/inbox/ConversationList.vue')['default']
+    DeskCard: typeof import('./src/components/desk/DeskCard.vue')['default']
     DeskGate: typeof import('./src/components/DeskGate.vue')['default']
     DeskTemplatePreview: typeof import('./src/components/DeskTemplatePreview.vue')['default']
     EmbeddedSignup: typeof import('./src/components/EmbeddedSignup.vue')['default']

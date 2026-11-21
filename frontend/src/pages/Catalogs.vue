@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { Badge, Button, Dialog, toast } from 'frappe-ui'
+import { Badge, Button, Dialog, FormControl, Select, TextInput, dialog, toast } from 'frappe-ui'
+import { NumberCard } from 'frappe-ui/charts'
+import DeskCard from '@/components/desk/DeskCard.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 import LoadingState from '@/components/LoadingState.vue'
@@ -272,42 +274,52 @@ async function saveCatalogForm() {
   }
 }
 
-async function removeCatalog() {
+function removeCatalog() {
   if (catalogEditorMode.value !== 'edit' || !editingCatalogName.value) return
-  if (!window.confirm(`Delete catalog “${catalogForm.value.catalog_name || editingCatalogName.value}” and its items?`)) return
-  savingCatalog.value = true
-  const isLive = Boolean(window.csrf_token)
-  try {
-    if (isLive) await deleteCatalog(editingCatalogName.value)
-    catalogs.value = catalogs.value.filter((row) => row.name !== editingCatalogName.value)
-    if (selectedCatalogName.value === editingCatalogName.value) {
-      selectedCatalogName.value = catalogs.value[0]?.name || null
-      items.value = []
-    }
-    catalogEditorOpen.value = false
-    showToast('Catalog deleted')
-  } catch (caught) {
-    showToast(errorText(caught), true)
-  } finally {
-    savingCatalog.value = false
-  }
+  const name = editingCatalogName.value
+  const label = catalogForm.value.catalog_name || name
+  dialog.danger({
+    title: 'Delete catalog?',
+    message: `Remove “${label}” and its items from Nudg?`,
+    onConfirm: async () => {
+      savingCatalog.value = true
+      const isLive = Boolean(window.csrf_token)
+      try {
+        if (isLive) await deleteCatalog(name)
+        catalogs.value = catalogs.value.filter((row) => row.name !== name)
+        if (selectedCatalogName.value === name) {
+          selectedCatalogName.value = catalogs.value[0]?.name || null
+          items.value = []
+        }
+        catalogEditorOpen.value = false
+        showToast('Catalog deleted')
+      } finally {
+        savingCatalog.value = false
+      }
+    },
+  })
 }
 
-async function removeItem() {
+function removeItem() {
   if (itemEditorMode.value !== 'edit' || !editingItemName.value) return
-  if (!window.confirm(`Delete item “${itemForm.value.item_name || editingItemName.value}”?`)) return
-  savingCatalog.value = true
-  const isLive = Boolean(window.csrf_token)
-  try {
-    if (isLive) await deleteCatalogItem(editingItemName.value)
-    items.value = items.value.filter((row) => row.name !== editingItemName.value)
-    itemEditorOpen.value = false
-    showToast('Item deleted')
-  } catch (caught) {
-    showToast(errorText(caught), true)
-  } finally {
-    savingCatalog.value = false
-  }
+  const name = editingItemName.value
+  const label = itemForm.value.item_name || name
+  dialog.danger({
+    title: 'Delete item?',
+    message: `Remove “${label}” from this catalog?`,
+    onConfirm: async () => {
+      savingCatalog.value = true
+      const isLive = Boolean(window.csrf_token)
+      try {
+        if (isLive) await deleteCatalogItem(name)
+        items.value = items.value.filter((row) => row.name !== name)
+        itemEditorOpen.value = false
+        showToast('Item deleted')
+      } finally {
+        savingCatalog.value = false
+      }
+    },
+  })
 }
 
 async function saveItemForm() {
@@ -545,6 +557,38 @@ const totalProductsCount = computed(() => {
   return items.value.length
 })
 
+const activeProductsCount = computed(() => items.value.filter((item) => item.status === 'Active').length)
+const syncedCatalogsCount = computed(() => catalogs.value.filter((c) => c.sync_status === 'Synced').length)
+
+const catalogStatusOptions = [
+  { label: 'Draft', value: 'Draft' },
+  { label: 'Active', value: 'Active' },
+  { label: 'Archived', value: 'Archived' },
+]
+const itemStatusOptions = [
+  { label: 'Active', value: 'Active' },
+  { label: 'Inactive', value: 'Inactive' },
+]
+const itemStatusFilterOptions = computed(() => [
+  { label: `All (${items.value.length})`, value: 'all' },
+  { label: 'Active', value: 'Active' },
+  { label: 'Inactive', value: 'Inactive' },
+])
+const accountSelectOptions = computed(() => [
+  { label: 'No account', value: '' },
+  ...accountOptions.value.map((account: any) => ({
+    label: account.account_name || account.name,
+    value: account.name,
+  })),
+])
+const recipientOptions = computed(() => [
+  { label: 'Select customer...', value: '' },
+  ...(desk.inbox.value?.conversations || []).map((conv: any) => ({
+    label: `${conv.profile.profile_name || conv.profile.name} (${conv.profile.phone_number})`,
+    value: conv.profile.name,
+  })),
+])
+
 function formatCurrency(price?: number, currency = 'INR') {
   if (price === undefined || price === null) return ''
   if (currency === 'INR') {
@@ -567,16 +611,12 @@ onMounted(() => {
       <div class="flex flex-col gap-4 border-b border-outline-gray-2 pb-6 md:flex-row md:items-start md:justify-between">
         <div class="flex min-w-0 items-start gap-2.5">
           <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#075E54]/10 text-[#075E54]">
-            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-            </svg>
+            <span class="lucide-shopping-bag size-5" />
           </div>
           <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2">
               <h1 class="text-2xl font-bold tracking-tight text-ink-gray-9">WhatsApp Product Catalogs</h1>
-              <span class="inline-flex h-6 items-center rounded-full bg-amber-50 px-2.5 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-600/20">
-                Stored on this site
-              </span>
+              <Badge label="Stored on this site" theme="amber" variant="subtle" size="md" />
             </div>
             <p class="mt-1 text-xs text-ink-gray-6 sm:text-sm">
               Add products here and send them in a chat. Meta catalog import is not available in this build.
@@ -586,120 +626,46 @@ onMounted(() => {
 
         <!-- Header Actions -->
         <div class="flex shrink-0 flex-wrap items-center gap-2 md:justify-end">
-          <button
-            type="button"
-            @click="load"
-            :disabled="loading"
-            class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-outline-gray-2 bg-white px-3 text-xs font-semibold text-ink-gray-8 shadow-2xs hover:bg-surface-gray-2 disabled:opacity-50"
-          >
-            <svg
-              class="h-4 w-4 text-ink-gray-6"
-              :class="{ 'animate-spin': loading }"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.03 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            <span>Refresh</span>
-          </button>
-
-          <button
-            type="button"
-            @click="startCatalog()"
-            class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-outline-gray-2 bg-white px-3 text-xs font-semibold text-ink-gray-8 shadow-2xs hover:bg-surface-gray-2"
-          >
-            <svg class="h-4 w-4 text-[#075E54]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-            </svg>
-            <span>New Catalog</span>
-          </button>
-
-          <button
-            type="button"
+          <Button variant="subtle" icon-left="lucide-refresh-cw" label="Refresh" :loading="loading" @click="load" />
+          <Button variant="subtle" icon-left="lucide-plus" label="New Catalog" @click="startCatalog()" />
+          <Button
+            variant="solid"
+            class="bg-[#075E54] text-white hover:bg-[#128C7E]"
+            icon-left="lucide-plus"
+            label="Add Catalog Item"
             @click="startItem()"
-            class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#075E54] px-3 text-xs font-semibold text-white hover:bg-[#128C7E]"
-          >
-            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-            </svg>
-            <span>Add Catalog Item</span>
-          </button>
+          />
         </div>
       </div>
 
-      <!-- KPI Metrics Ribbon (4 Cards) -->
+      <!-- KPI Metrics Ribbon (frappe-ui NumberCard) -->
       <div class="mt-6 grid grid-cols-1 items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div class="flex h-full flex-col rounded-xl border border-outline-gray-2 bg-white p-4 shadow-2xs">
-          <div class="flex h-10 items-start justify-between gap-2">
-            <span class="text-xs font-medium uppercase leading-4 tracking-wider text-ink-gray-6">Catalogs</span>
-            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-[#075E54]/10 text-[#075E54]">
-              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-              </svg>
-            </div>
-          </div>
-          <div class="mt-3 flex min-h-8 items-end gap-2">
-            <span class="text-2xl font-bold leading-none text-ink-gray-9">{{ catalogs.length }}</span>
-            <span class="text-xs text-ink-gray-5">collections</span>
-          </div>
-          <p class="mt-2 line-clamp-2 text-xs text-ink-gray-6">
-            {{ selectedCatalog ? 'Selected: ' + selectedCatalog.catalog_name : 'No catalog selected' }}
-          </p>
-        </div>
-
-        <div class="flex h-full flex-col rounded-xl border border-outline-gray-2 bg-white p-4 shadow-2xs">
-          <div class="flex h-10 items-start justify-between gap-2">
-            <span class="text-xs font-medium uppercase leading-4 tracking-wider text-ink-gray-6">Products</span>
-            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-[#25D366]/10 text-[#075E54]">
-              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-              </svg>
-            </div>
-          </div>
-          <div class="mt-3 flex min-h-8 items-end gap-2">
-            <span class="text-2xl font-bold leading-none text-ink-gray-9">{{ totalProductsCount }}</span>
-            <span class="text-xs text-ink-gray-5">products</span>
-          </div>
-          <p class="mt-2 line-clamp-2 text-xs text-ink-gray-6">In the catalog selected on the left</p>
-        </div>
-
-        <div class="flex h-full flex-col rounded-xl border border-outline-gray-2 bg-white p-4 shadow-2xs">
-          <div class="flex h-10 items-start justify-between gap-2">
-            <span class="text-xs font-medium uppercase leading-4 tracking-wider text-ink-gray-6">Sync</span>
-            <div
-              class="flex h-8 w-8 items-center justify-center rounded-lg"
-              :class="syncStatusLabel === 'Error' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-700'"
-            >
-              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86l-8.02 14A1 1 0 003.14 19h17.72a1 1 0 00.87-1.5l-8.02-14a1 1 0 00-1.74 0z" />
-              </svg>
-            </div>
-          </div>
-          <div class="mt-3 flex min-h-8 items-end gap-1.5">
-            <span
-              class="mb-1 h-2 w-2 shrink-0 rounded-full"
-              :class="syncStatusLabel === 'Error' ? 'bg-red-500' : syncStatusLabel === 'Synced' ? 'bg-emerald-500' : 'bg-amber-500'"
-            ></span>
-            <span class="text-2xl font-bold leading-none text-ink-gray-9">{{ syncStatusLabel }}</span>
-          </div>
-          <p class="mt-2 line-clamp-2 text-xs text-ink-gray-6">{{ syncStatusDetail }}</p>
-        </div>
-
-        <div class="flex h-full flex-col rounded-xl border border-outline-gray-2 bg-white p-4 shadow-2xs">
-          <div class="flex h-10 items-start justify-between gap-2">
-            <span class="text-xs font-medium uppercase leading-4 tracking-wider text-ink-gray-6">Send</span>
-            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-              </svg>
-            </div>
-          </div>
-          <div class="mt-3 flex min-h-8 items-end">
-            <span class="text-2xl font-bold leading-none text-ink-gray-9">In chat</span>
-          </div>
-          <p class="mt-2 line-clamp-2 text-xs text-ink-gray-6">Send one product or a list from a conversation</p>
-        </div>
+        <NumberCard
+          title="Catalogs"
+          :value="catalogs.length"
+          color="#075E54"
+          :delta-caption="selectedCatalog ? 'Selected: ' + selectedCatalog.catalog_name : 'No catalog selected'"
+        />
+        <NumberCard
+          title="Products"
+          :value="totalProductsCount"
+          color="#047857"
+          delta-caption="In the catalog selected on the left"
+        />
+        <NumberCard
+          title="Active products"
+          :value="activeProductsCount"
+          :target="totalProductsCount"
+          color="#1D4ED8"
+          delta-caption="Send one product from a conversation"
+        />
+        <NumberCard
+          title="Synced catalogs"
+          :value="syncedCatalogsCount"
+          :target="catalogs.length"
+          :color="syncStatusLabel === 'Error' ? '#B91C1C' : '#B45309'"
+          :delta-caption="'Selected: ' + syncStatusLabel"
+        />
       </div>
 
       <!-- State Containers (Loading / Error / Empty) -->
@@ -713,38 +679,28 @@ onMounted(() => {
 
       <!-- Master-Detail Layout -->
       <div v-else class="nudg-split mt-6 grid min-h-0 flex-1 items-start gap-4 lg:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)]">
-        <div class="flex flex-col rounded-xl border border-outline-gray-2 bg-white shadow-2xs">
+        <DeskCard as="div" :padding="false" class="flex flex-col">
           <div class="border-b border-outline-gray-2 p-4">
             <div class="flex h-9 items-center justify-between gap-3">
               <h2 class="text-sm font-semibold text-ink-gray-9">Collections ({{ catalogs.length }})</h2>
-              <button
-                type="button"
-                class="inline-flex h-8 items-center rounded-lg px-2 text-xs font-semibold text-[#075E54] hover:bg-[#075E54]/10"
-                @click="startCatalog()"
-              >
-                New
-              </button>
+              <Button variant="ghost" size="sm" label="New" @click="startCatalog()" />
             </div>
-            <div class="relative mt-3">
-              <svg class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-gray-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                v-model="searchQuery"
-                type="text"
-                placeholder="Search collections..."
-                class="h-9 w-full rounded-lg border border-outline-gray-2 bg-surface-gray-2/50 pl-8 pr-3 text-xs text-ink-gray-9 placeholder:text-ink-gray-4 focus:border-[#128C7E] focus:outline-none focus:ring-1 focus:ring-[#128C7E]"
-              />
-            </div>
+            <TextInput v-model="searchQuery" class="mt-3 w-full" placeholder="Search collections...">
+              <template #prefix>
+                <span class="lucide-search size-3.5 text-ink-gray-4" />
+              </template>
+            </TextInput>
           </div>
 
-          <div class="min-h-0 flex-1 divide-y divide-outline-gray-1 overflow-y-auto">
-            <button
+          <div class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">
+            <DeskCard
               v-for="cat in filteredCatalogs"
               :key="cat.name"
-              type="button"
-              class="flex w-full flex-col gap-1.5 border-l-4 px-4 py-3 text-left hover:bg-surface-gray-2/50"
-              :class="selectedCatalogName === cat.name ? 'border-l-[#128C7E] bg-[#075E54]/5' : 'border-l-transparent'"
+              as="button"
+              interactive
+              :padding="false"
+              class="flex flex-col gap-1.5 px-4 py-3"
+              :class="selectedCatalogName === cat.name ? '!border-[#128C7E] !bg-[#075E54]/5' : ''"
               @click="open(cat.name)"
             >
               <div class="flex items-center justify-between gap-2">
@@ -756,12 +712,12 @@ onMounted(() => {
                 <span class="min-w-0 truncate">{{ cat.whatsapp_account || 'No account' }}</span>
                 <span class="shrink-0 font-mono">{{ cat.name }}</span>
               </div>
-            </button>
+            </DeskCard>
           </div>
-        </div>
+        </DeskCard>
 
         <!-- Detail Column: Catalog Products & Actions -->
-        <div v-if="selectedCatalog" class="flex min-w-0 flex-col rounded-xl border border-outline-gray-2 bg-white p-4 shadow-2xs sm:p-5">
+        <DeskCard v-if="selectedCatalog" as="div" class="flex min-w-0 flex-col">
           <div class="flex flex-wrap items-center gap-2">
             <h2 class="min-w-0 truncate text-lg font-bold text-ink-gray-9">{{ selectedCatalog.catalog_name }}</h2>
             <StatusBadge :label="selectedCatalog.status || 'Inactive'" />
@@ -770,104 +726,57 @@ onMounted(() => {
           <p v-if="selectedCatalog.sync_error" class="mt-2 text-sm text-red-700" role="alert">
             {{ selectedCatalog.sync_error }}
           </p>
-          <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
-            <span class="inline-flex h-7 items-center rounded-md bg-surface-gray-2 px-2 font-mono text-ink-gray-7">
-              Meta ID {{ selectedCatalog.meta_catalog_id || 'Not set' }}
-            </span>
-            <span class="inline-flex h-7 items-center rounded-md bg-surface-gray-2 px-2 text-ink-gray-7">
-              {{ selectedCatalog.whatsapp_account || 'No account' }}
-            </span>
+          <div class="mt-3 flex flex-wrap items-center gap-2">
+            <Badge :label="'Meta ID ' + (selectedCatalog.meta_catalog_id || 'Not set')" theme="gray" variant="subtle" size="md" />
+            <Badge :label="selectedCatalog.whatsapp_account || 'No account'" theme="gray" variant="subtle" size="md" />
           </div>
           <div class="mt-3 flex flex-wrap items-center gap-2 border-b border-outline-gray-2 pb-4">
-            <button
-              type="button"
-              :disabled="busy"
-              class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-outline-gray-2 bg-white px-3 text-xs font-semibold text-ink-gray-8 hover:bg-surface-gray-2 disabled:opacity-50"
+            <Button
+              variant="subtle"
+              icon-left="lucide-refresh-cw"
+              :label="busy ? 'Syncing...' : 'Sync catalog'"
+              :loading="busy"
               @click="sync(selectedCatalog.name)"
-            >
-                <svg
-                  class="h-4 w-4 text-[#128C7E]"
-                  :class="{ 'animate-spin': busy }"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.03 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                <span>{{ busy ? 'Syncing...' : 'Sync catalog' }}</span>
-              </button>
-
-            <button
-              type="button"
-              class="inline-flex h-9 items-center rounded-lg border border-outline-gray-2 bg-white px-3 text-xs font-semibold text-ink-gray-8 hover:bg-surface-gray-2"
-              @click="startCatalog(selectedCatalog)"
-            >
-              Edit catalog
-            </button>
-            <button
-              type="button"
-              class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#075E54] px-3 text-xs font-semibold text-white hover:bg-[#128C7E]"
+            />
+            <Button variant="subtle" label="Edit catalog" @click="startCatalog(selectedCatalog)" />
+            <Button
+              variant="solid"
+              class="bg-[#075E54] text-white hover:bg-[#128C7E]"
+              icon-left="lucide-plus"
+              label="New Item"
               @click="startItem()"
-            >
-                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                </svg>
-                <span>New Item</span>
-              </button>
+            />
           </div>
 
           <!-- Items Filter & Search -->
           <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div class="relative w-full sm:max-w-xs sm:flex-1">
-              <svg class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-gray-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                v-model="itemSearchQuery"
-                type="text"
-                placeholder="Search products or SKU..."
-                class="h-9 w-full rounded-lg border border-outline-gray-2 bg-white pl-8 pr-3 text-xs text-ink-gray-9 placeholder:text-ink-gray-4 focus:border-[#128C7E] focus:outline-none focus:ring-1 focus:ring-[#128C7E]"
-              />
-            </div>
-            <div class="flex h-9 shrink-0 items-center rounded-lg border border-outline-gray-2 bg-white p-0.5">
-              <button
-                type="button"
-                class="h-8 rounded-md px-3 text-xs font-medium"
-                :class="itemStatusFilter === 'all' ? 'bg-[#075E54] text-white' : 'text-ink-gray-6 hover:text-ink-gray-9'"
-                @click="itemStatusFilter = 'all'"
-              >
-                All ({{ items.length }})
-              </button>
-              <button
-                type="button"
-                class="h-8 rounded-md px-3 text-xs font-medium"
-                :class="itemStatusFilter === 'Active' ? 'bg-[#075E54] text-white' : 'text-ink-gray-6 hover:text-ink-gray-9'"
-                @click="itemStatusFilter = 'Active'"
-              >
-                Active
-              </button>
-              <button
-                type="button"
-                class="h-8 rounded-md px-3 text-xs font-medium"
-                :class="itemStatusFilter === 'Inactive' ? 'bg-[#075E54] text-white' : 'text-ink-gray-6 hover:text-ink-gray-9'"
-                @click="itemStatusFilter = 'Inactive'"
-              >
-                Inactive
-              </button>
-            </div>
+            <TextInput
+              v-model="itemSearchQuery"
+              class="w-full sm:max-w-xs sm:flex-1"
+              placeholder="Search products or SKU..."
+            >
+              <template #prefix>
+                <span class="lucide-search size-3.5 text-ink-gray-4" />
+              </template>
+            </TextInput>
+            <Select
+              class="w-full sm:w-40"
+              :model-value="itemStatusFilter"
+              :options="itemStatusFilterOptions"
+              @update:model-value="(val) => (itemStatusFilter = (String(val || 'all') as typeof itemStatusFilter))"
+            />
           </div>
 
           <div v-if="filteredItems.length > 0" class="mt-4 space-y-3">
-            <article
+            <DeskCard
               v-for="item in filteredItems"
               :key="item.name"
-              class="rounded-xl border border-outline-gray-2 bg-white p-4"
+              as="article"
+              class="!p-4"
             >
               <div class="flex items-start gap-3">
                 <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-[#25D366]/20 bg-[#25D366]/10 text-[#075E54]">
-                  <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                  </svg>
+                  <span class="lucide-package size-5" />
                 </div>
                 <div class="min-w-0 flex-1">
                   <div class="flex items-start justify-between gap-3">
@@ -877,7 +786,7 @@ onMounted(() => {
                     </span>
                   </div>
                   <div class="mt-1 flex flex-wrap items-center gap-2">
-                    <span class="rounded bg-surface-gray-2 px-1.5 py-0.5 font-mono text-[11px] text-ink-gray-6">{{ item.sku || 'No SKU' }}</span>
+                    <Badge :label="item.sku || 'No SKU'" theme="gray" variant="subtle" size="sm" />
                     <Badge
                       :variant="item.status === 'Active' ? 'subtle' : 'outline'"
                       :theme="item.status === 'Active' ? 'green' : 'gray'"
@@ -902,7 +811,7 @@ onMounted(() => {
                   @click="openSendModal(item)"
                 />
               </div>
-            </article>
+            </DeskCard>
           </div>
 
           <!-- Empty Items State -->
@@ -911,51 +820,33 @@ onMounted(() => {
             class="mt-6 flex flex-col items-center justify-center rounded-xl border border-dashed border-outline-gray-2 bg-white p-10 text-center"
           >
             <div class="flex h-10 w-10 items-center justify-center rounded-full bg-surface-gray-2 text-ink-gray-5">
-              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-              </svg>
+              <span class="lucide-package size-5" />
             </div>
             <h3 class="mt-2 text-sm font-semibold text-ink-gray-9">No Product Items in Collection</h3>
             <p class="mt-1 text-xs text-ink-gray-5">Add WA Catalog Item records to display products in this catalog.</p>
-            <button
-              type="button"
+            <Button
+              class="mt-3 bg-[#075E54] text-white hover:bg-[#128C7E]"
+              variant="solid"
+              icon-left="lucide-plus"
+              label="Add Catalog Item"
               @click="startItem()"
-              class="mt-3 rounded-lg bg-[#075E54] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#128C7E]"
-            >
-              + Add Catalog Item
-            </button>
+            />
           </div>
-        </div>
+        </DeskCard>
       </div>
     </div>
 
     <Dialog v-model="catalogEditorOpen" :title="catalogEditorMode === 'edit' ? 'Edit catalog' : 'New catalog'">
-      <div class="space-y-3 py-1 text-xs">
-        <label class="block font-semibold text-ink-gray-7">
-          Catalog name
-          <input v-model="catalogForm.catalog_name" type="text" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 text-xs" />
-        </label>
-        <label class="block font-semibold text-ink-gray-7">
-          WhatsApp account
-          <select v-model="catalogForm.whatsapp_account" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 text-xs">
-            <option value="">No account</option>
-            <option v-for="account in accountOptions" :key="account.name" :value="account.name">
-              {{ account.account_name || account.name }}
-            </option>
-          </select>
-        </label>
-        <label class="block font-semibold text-ink-gray-7">
-          Description
-          <textarea v-model="catalogForm.description" rows="3" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 text-xs" />
-        </label>
-        <label class="block font-semibold text-ink-gray-7">
-          Status
-          <select v-model="catalogForm.status" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 text-xs">
-            <option>Draft</option>
-            <option>Active</option>
-            <option>Archived</option>
-          </select>
-        </label>
+      <div class="space-y-3 py-1">
+        <FormControl v-model="catalogForm.catalog_name" type="text" label="Catalog name" />
+        <FormControl
+          v-model="catalogForm.whatsapp_account"
+          type="select"
+          label="WhatsApp account"
+          :options="accountSelectOptions"
+        />
+        <FormControl v-model="catalogForm.description" type="textarea" label="Description" :rows="3" />
+        <FormControl v-model="catalogForm.status" type="select" label="Status" :options="catalogStatusOptions" />
       </div>
       <template #actions>
         <div class="flex w-full items-center justify-between gap-2">
@@ -970,40 +861,16 @@ onMounted(() => {
     </Dialog>
 
     <Dialog v-model="itemEditorOpen" :title="itemEditorMode === 'edit' ? 'Edit item' : 'New catalog item'">
-      <div class="space-y-3 py-1 text-xs">
-        <label class="block font-semibold text-ink-gray-7">
-          Item name
-          <input v-model="itemForm.item_name" type="text" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 text-xs" />
-        </label>
-        <label class="block font-semibold text-ink-gray-7">
-          SKU
-          <input v-model="itemForm.sku" type="text" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 text-xs" />
-        </label>
-        <label class="block font-semibold text-ink-gray-7">
-          Description
-          <textarea v-model="itemForm.description" rows="3" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 text-xs" />
-        </label>
+      <div class="space-y-3 py-1">
+        <FormControl v-model="itemForm.item_name" type="text" label="Item name" />
+        <FormControl v-model="itemForm.sku" type="text" label="SKU" />
+        <FormControl v-model="itemForm.description" type="textarea" label="Description" :rows="3" />
         <div class="grid grid-cols-2 gap-3">
-          <label class="block font-semibold text-ink-gray-7">
-            Price
-            <input v-model="itemForm.price" type="number" min="0" step="0.01" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 text-xs" />
-          </label>
-          <label class="block font-semibold text-ink-gray-7">
-            Currency
-            <input v-model="itemForm.currency" type="text" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 text-xs" />
-          </label>
+          <FormControl v-model="itemForm.price" type="number" label="Price" min="0" step="0.01" />
+          <FormControl v-model="itemForm.currency" type="text" label="Currency" />
         </div>
-        <label class="block font-semibold text-ink-gray-7">
-          Image
-          <input v-model="itemForm.image" type="text" placeholder="https://… or /files/…" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 text-xs" />
-        </label>
-        <label class="block font-semibold text-ink-gray-7">
-          Status
-          <select v-model="itemForm.status" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 text-xs">
-            <option>Active</option>
-            <option>Inactive</option>
-          </select>
-        </label>
+        <FormControl v-model="itemForm.image" type="text" label="Image" placeholder="https://… or /files/…" />
+        <FormControl v-model="itemForm.status" type="select" label="Status" :options="itemStatusOptions" />
       </div>
       <template #actions>
         <div class="flex w-full items-center justify-between gap-2">
@@ -1031,45 +898,25 @@ onMounted(() => {
         <div class="mt-3 grid items-start gap-6 md:grid-cols-2">
           <!-- Configuration Form -->
           <div class="space-y-4">
-            <!-- Recipient Selection -->
-            <div>
-              <label class="block text-xs font-semibold text-ink-gray-7">Target Customer / Thread</label>
-              <select
-                v-model="recipientProfile"
-                class="mt-1 block w-full rounded-lg border border-outline-gray-2 bg-white px-3 py-2 text-xs text-ink-gray-9 focus:border-[#128C7E] focus:outline-none focus:ring-1 focus:ring-[#128C7E]"
-              >
-                <option value="" disabled>Select customer...</option>
-                <option
-                  v-for="conv in desk.inbox.value?.conversations || []"
-                  :key="conv.profile.name"
-                  :value="conv.profile.name"
-                >
-                  {{ conv.profile.profile_name || conv.profile.name }} ({{ conv.profile.phone_number }})
-                </option>
-              </select>
-            </div>
-
-            <!-- Custom Message Body -->
-            <div>
-              <label class="block text-xs font-semibold text-ink-gray-7">Message Body</label>
-              <textarea
-                v-model="customBodyText"
-                rows="3"
-                class="mt-1 block w-full rounded-lg border border-outline-gray-2 bg-white p-2.5 text-xs text-ink-gray-9 focus:border-[#128C7E] focus:outline-none focus:ring-1 focus:ring-[#128C7E]"
-                placeholder="Enter introductory message text..."
-              ></textarea>
-            </div>
-
-            <!-- Footer Text -->
-            <div>
-              <label class="block text-xs font-semibold text-ink-gray-7">Footer Note</label>
-              <input
-                v-model="customFooterText"
-                type="text"
-                class="mt-1 block h-9 w-full rounded-lg border border-outline-gray-2 bg-white px-3 text-sm text-ink-gray-9 focus:border-[#128C7E] focus:outline-none focus:ring-1 focus:ring-[#128C7E]"
-                placeholder="Tap below to view details"
-              />
-            </div>
+            <FormControl
+              v-model="recipientProfile"
+              type="select"
+              label="Target Customer / Thread"
+              :options="recipientOptions"
+            />
+            <FormControl
+              v-model="customBodyText"
+              type="textarea"
+              label="Message Body"
+              :rows="3"
+              placeholder="Enter introductory message text..."
+            />
+            <FormControl
+              v-model="customFooterText"
+              type="text"
+              label="Footer Note"
+              placeholder="Tap below to view details"
+            />
           </div>
 
           <!-- Live WhatsApp Chat Bubble Preview -->

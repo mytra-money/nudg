@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { call } from 'frappe-ui'
+import { call, FormControl } from 'frappe-ui'
 import LogsView from '@/pages/Logs.vue'
 
 vi.mock('frappe-ui', async (importOriginal) => {
@@ -37,7 +37,7 @@ describe('LogsView', () => {
     expect(wrapper.text()).toContain('Inbound message stored for Meera Iyer')
   })
 
-  it('filters logs by level when Level button is clicked', async () => {
+  it('filters logs by level when Level select changes', async () => {
     const wrapper = mount(LogsView, {
       global: {
         stubs: {
@@ -49,10 +49,13 @@ describe('LogsView', () => {
     })
     await flushPromises()
 
-    const errorBtn = wrapper.findAll('button').find((b) => b.text() === 'Error')
-    expect(errorBtn).toBeDefined()
+    const levelControl = wrapper
+      .findAllComponents(FormControl)
+      .find((c) => c.props('label') === 'Level')
+    expect(levelControl).toBeDefined()
 
-    await errorBtn!.trigger('click')
+    levelControl!.vm.$emit('update:modelValue', 'Error')
+    await flushPromises()
     expect(wrapper.text()).toContain('Meta rejected the text')
     expect(wrapper.text()).not.toContain('Inbound message stored for Meera Iyer')
   })

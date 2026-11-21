@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { Badge, Button, Select, toast } from 'frappe-ui'
+import { Alert, Badge, Button, FormControl, Spinner, toast } from 'frappe-ui'
+import { NumberCard } from 'frappe-ui/charts'
+import DeskCard from '@/components/desk/DeskCard.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 import LoadingState from '@/components/LoadingState.vue'
@@ -81,6 +83,15 @@ const sampleHistory = [
   },
 ]
 
+const themeColors: Record<string, string> = {
+  blue: '#0369A1',
+  teal: '#075E54',
+  green: '#047857',
+  amber: '#B45309',
+  red: '#B91C1C',
+  purple: '#6D28D9',
+}
+
 const cards = computed(() => {
   const row = latest.value
   if (!row) return []
@@ -91,7 +102,6 @@ const cards = computed(() => {
       subtext: 'Customer inbound messages',
       pill: 'Inbound',
       theme: 'blue',
-      icon: 'lucide-arrow-down-left',
     },
     {
       label: 'Outgoing Messages',
@@ -99,7 +109,6 @@ const cards = computed(() => {
       subtext: 'Free-form & template sends',
       pill: 'Outbound',
       theme: 'teal',
-      icon: 'lucide-arrow-up-right',
     },
     {
       label: 'Delivery Success Rate',
@@ -107,7 +116,6 @@ const cards = computed(() => {
       subtext: `${row.failed_messages || 0} failed messages`,
       pill: row.failed_messages > 0 ? `${row.failed_messages} issues` : 'Optimal',
       theme: row.failed_messages > 0 ? 'amber' : 'green',
-      icon: 'lucide-shield-check',
     },
     {
       label: 'Active 24h Sessions',
@@ -115,7 +123,6 @@ const cards = computed(() => {
       subtext: 'Live SLA customer care windows',
       pill: 'Meta Window',
       theme: 'green',
-      icon: 'lucide-clock',
     },
     {
       label: 'Unassigned Queue',
@@ -123,7 +130,6 @@ const cards = computed(() => {
       subtext: 'Awaiting team assignment',
       pill: row.unassigned > 0 ? 'Needs Attention' : 'Cleared',
       theme: row.unassigned > 0 ? 'red' : 'green',
-      icon: 'lucide-users',
     },
     {
       label: 'Campaign Broadcasts',
@@ -131,7 +137,6 @@ const cards = computed(() => {
       subtext: 'Outbound marketing campaigns',
       pill: 'Broadcasts',
       theme: 'purple',
-      icon: 'lucide-megaphone',
     },
   ]
 })
@@ -302,11 +307,12 @@ onUnmounted(() => window.clearInterval(timer))
       </div>
 
       <div v-if="!needsAccount" class="flex flex-wrap items-center gap-2">
-        <Select
-          class="w-36 text-xs"
+        <FormControl
+          type="select"
+          class="w-40"
           :model-value="selectedAccount"
           :options="accountOptions"
-          @update:model-value="(val) => { selectedAccount = String(val || 'all'); load(); }"
+          @update:model-value="(val: unknown) => { selectedAccount = String(val || 'all'); load(); }"
         />
         <Button
           variant="subtle"
@@ -328,14 +334,12 @@ onUnmounted(() => window.clearInterval(timer))
     </header>
 
     <!-- Background Refresh Notification Banner -->
-    <div
-      v-if="refreshing"
-      class="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800 shrink-0"
-    >
-      <span class="lucide-loader-2 size-3.5 animate-spin text-amber-600" />
-      <span>
-        Generating a new Metric Snapshot in background… displaying the latest Ready values until computation finishes.
-      </span>
+    <div v-if="refreshing" class="shrink-0 border-b border-outline-gray-2 bg-white px-4 py-2">
+      <Alert theme="amber" title="Generating a new Metric Snapshot in background… displaying the latest Ready values until computation finishes.">
+        <template #prefix>
+          <Spinner class="size-4" />
+        </template>
+      </Alert>
     </div>
 
     <!-- State Handlers -->
@@ -381,59 +385,28 @@ onUnmounted(() => window.clearInterval(timer))
       <section aria-labelledby="kpi-cards-heading">
         <h2 id="kpi-cards-heading" class="sr-only">Executive KPI Cards</h2>
         <div class="grid grid-cols-2 gap-4 lg:grid-cols-3">
-          <div
+          <NumberCard
             v-for="card in cards"
             :key="card.label"
-            class="rounded-xl border border-outline-gray-2 bg-white p-4.5 shadow-xs transition-all hover:border-[#128C7E] hover:shadow-sm"
-          >
-            <div class="flex items-start justify-between gap-2">
-              <span class="min-w-0 text-xs font-medium uppercase tracking-wider text-ink-gray-6">
-                {{ card.label }}
-              </span>
-              <span
-                class="rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                :class="
-                  card.theme === 'green'
-                    ? 'bg-emerald-50 text-emerald-800'
-                    : card.theme === 'teal'
-                      ? 'bg-teal-50 text-[#075E54]'
-                      : card.theme === 'blue'
-                        ? 'bg-blue-50 text-blue-700'
-                        : card.theme === 'red'
-                          ? 'bg-red-50 text-red-700'
-                          : card.theme === 'purple'
-                            ? 'bg-purple-50 text-purple-700'
-                            : 'bg-amber-50 text-amber-800'
-                "
-              >
-                {{ card.pill }}
-              </span>
-            </div>
-
-            <div class="mt-3 flex items-baseline gap-2">
-              <span class="text-2xl font-semibold tracking-tight text-ink-gray-9 sm:text-3xl">
-                {{ card.value }}
-              </span>
-            </div>
-
-            <p class="mt-1 text-xs text-ink-gray-5">
-              {{ card.subtext }}
-            </p>
-          </div>
+            :title="card.label"
+            :value="card.value"
+            :color="themeColors[card.theme]"
+            :delta-caption="`${card.pill} · ${card.subtext}`"
+          />
         </div>
       </section>
 
       <!-- Traffic Ratio & Delivery Quality Panel (2-Column Grid) -->
       <section class="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <!-- Card 1: Inbound vs Outbound Message Ratio -->
-        <div class="rounded-xl border border-outline-gray-2 bg-white p-5 shadow-xs space-y-4">
-          <div class="flex items-center justify-between border-b border-outline-gray-1 pb-3">
-            <div>
-              <h3 class="text-sm font-bold text-ink-gray-9">Traffic Volume Distribution</h3>
-              <p class="text-xs text-ink-gray-5">Inbound customer queries vs outbound responses & templates</p>
-            </div>
+        <DeskCard
+          title="Traffic Volume Distribution"
+          description="Inbound customer queries vs outbound responses & templates"
+          class="space-y-4"
+        >
+          <template #actions>
             <span class="text-xs font-semibold text-ink-gray-8">{{ totalMessages }} total</span>
-          </div>
+          </template>
 
           <!-- Ratio Progress Bar -->
           <div class="space-y-2">
@@ -462,51 +435,56 @@ onUnmounted(() => window.clearInterval(timer))
             </div>
           </div>
 
-          <p class="text-xs leading-relaxed text-ink-gray-6 bg-surface-gray-1/60 rounded-lg p-3">
-            💡 Healthy omnichannel desks typically maintain a 1:1.5 to 1:2 ratio of inbound to outbound messages, reflecting prompt replies and automated notifications.
-          </p>
-        </div>
+          <Alert
+            theme="blue"
+            title="Healthy ratio"
+            description="Healthy omnichannel desks typically maintain a 1:1.5 to 1:2 ratio of inbound to outbound messages, reflecting prompt replies and automated notifications."
+          />
+        </DeskCard>
 
         <!-- Card 2: Meta 24-Hour SLA & Quality Rating -->
-        <div class="rounded-xl border border-outline-gray-2 bg-white p-5 shadow-xs space-y-4">
-          <div class="flex items-center justify-between border-b border-outline-gray-1 pb-3">
-            <div>
-              <h3 class="text-sm font-bold text-ink-gray-9">Meta SLA & Delivery Health</h3>
-              <p class="text-xs text-ink-gray-5">Message delivery reliability and active service sessions</p>
-            </div>
-            <span class="rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5 text-xs font-semibold">
-              High Quality
-            </span>
+        <DeskCard
+          title="Meta SLA & Delivery Health"
+          description="Message delivery reliability and active service sessions"
+          class="space-y-4"
+        >
+          <template #actions>
+            <Badge theme="green" variant="subtle" size="md" label="High Quality" />
+          </template>
+
+          <div class="grid grid-cols-2 gap-3">
+            <NumberCard
+              title="Delivery success"
+              :value="`${deliveryRate}%`"
+              color="#047857"
+              delta-caption="Carrier & Meta handoff rate"
+            />
+            <NumberCard
+              title="SLA window sessions"
+              :value="latest.open_conversations"
+              color="#075E54"
+              delta-caption="Active customer care sessions"
+            />
           </div>
 
-          <div class="grid grid-cols-2 gap-3 text-xs">
-            <div class="rounded-lg border border-outline-gray-1 p-3 bg-surface-gray-1/40">
-              <span class="text-ink-gray-5 block text-[11px] font-bold uppercase">Delivery Success</span>
-              <p class="mt-1 text-2xl font-extrabold text-emerald-700">{{ deliveryRate }}%</p>
-              <p class="mt-0.5 text-[11px] text-ink-gray-5">Carrier & Meta handoff rate</p>
-            </div>
-            <div class="rounded-lg border border-outline-gray-1 p-3 bg-surface-gray-1/40">
-              <span class="text-ink-gray-5 block text-[11px] font-bold uppercase">SLA Window Sessions</span>
-              <p class="mt-1 text-2xl font-extrabold text-[#075E54]">{{ latest.open_conversations }}</p>
-              <p class="mt-0.5 text-[11px] text-ink-gray-5">Active customer care sessions</p>
-            </div>
-          </div>
-
-          <p class="text-xs leading-relaxed text-ink-gray-6 bg-surface-gray-1/60 rounded-lg p-3">
-            🛡️ <strong>Quality Rating:</strong> Keeping message failures under 2% protects your Meta WABA tier limits and ensures uninterrupted outbound broadcasting.
-          </p>
-        </div>
+          <Alert
+            theme="gray"
+            title="Quality Rating"
+            description="Keeping message failures under 2% protects your Meta WABA tier limits and ensures uninterrupted outbound broadcasting."
+          />
+        </DeskCard>
       </section>
 
       <!-- Snapshot History Table -->
-      <section class="rounded-xl border border-outline-gray-2 bg-white shadow-xs overflow-hidden">
-        <div class="flex items-center justify-between border-b border-outline-gray-2 p-4">
-          <div>
-            <h3 class="text-sm font-bold text-ink-gray-9">Snapshot Audit History</h3>
-            <p class="text-xs text-ink-gray-5">Historical daily WhatsApp performance snapshots</p>
-          </div>
+      <DeskCard
+        title="Snapshot Audit History"
+        description="Historical daily WhatsApp performance snapshots"
+        :padding="false"
+        class="[&>div:first-child]:mb-0 [&>div:first-child]:px-4 [&>div:first-child]:py-3"
+      >
+        <template #actions>
           <span class="text-xs text-ink-gray-5">{{ history.length }} records</span>
-        </div>
+        </template>
 
         <div class="overflow-x-auto">
           <table class="w-full text-left text-xs text-ink-gray-8">
@@ -566,7 +544,7 @@ onUnmounted(() => window.clearInterval(timer))
             </tbody>
           </table>
         </div>
-      </section>
+      </DeskCard>
     </div>
   </div>
 </template>
