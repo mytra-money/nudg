@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { Button, Dialog } from 'frappe-ui'
+import { Button, Dialog, TextInput } from 'frappe-ui'
+import DeskCard from '@/components/desk/DeskCard.vue'
 import EmbeddedSignup from '@/components/EmbeddedSignup.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import ManualConnectDialog from '@/components/ManualConnectDialog.vue'
@@ -77,25 +78,24 @@ const filteredAccounts = computed(() => {
     <div v-else class="mt-6">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <p class="text-sm text-ink-gray-7">{{ accountsList.length }} connected</p>
-        <input
+        <TextInput
           v-model="searchQuery"
-          type="text"
           placeholder="Search numbers"
-          class="h-8 w-full rounded-lg border border-outline-gray-2 bg-white px-3 text-xs text-ink-gray-9 sm:w-48"
+          class="w-full sm:w-48"
         />
       </div>
       <div class="mt-4 grid gap-3 md:grid-cols-2">
-        <article
+        <DeskCard
           v-for="account in filteredAccounts"
           :key="account.name"
-          class="rounded-xl border border-outline-gray-2 bg-white p-4"
+          class="!p-4"
         >
           <div class="flex items-start justify-between gap-3">
             <h2 class="min-w-0 truncate text-base font-semibold text-ink-gray-9">{{ account.account_name }}</h2>
             <StatusBadge :label="account.status || 'Inactive'" />
           </div>
           <p v-if="account.is_default" class="mt-2 text-xs font-medium text-[#075E54]">Default number</p>
-        </article>
+        </DeskCard>
       </div>
       <EmptyState v-if="filteredAccounts.length === 0" compact title="No numbers match" description="Try a different name." />
     </div>

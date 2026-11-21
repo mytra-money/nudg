@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { Button, call, Dialog, toast } from 'frappe-ui'
+import { Alert, Badge, Button, call, Checkbox, Dialog, dialog, FormControl, Password, TabButtons, TextInput, toast } from 'frappe-ui'
+import { NumberCard } from 'frappe-ui/charts'
+import DeskCard from '@/components/desk/DeskCard.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 import LoadingState from '@/components/LoadingState.vue'
-import StatusBadge from '@/components/StatusBadge.vue'
 import { errorText } from '@/utils/format'
 import { deleteQuickReply, getWhatsappSettings, listQuickReplies, saveQuickReply, saveWhatsappSettings, updateWhatsappAccount } from '@/services/catalogApi'
 import { isManager, isSiteAdmin, useDesk } from '@/stores/desk'
@@ -160,6 +161,57 @@ function showToast(message: string, isError = false) {
     toast.success(message)
   }
 }
+
+type SettingsTab = 'replies' | 'hours' | 'routing' | 'profile' | 'team'
+
+const tabOptions = computed(() => {
+  const tabs: { value: SettingsTab; label: string; iconLeft: string }[] = [
+    { value: 'replies', label: 'Quick Replies', iconLeft: 'lucide-message-square' },
+  ]
+  if (isManager.value) {
+    tabs.push(
+      { value: 'routing', label: 'Routing & Assignment', iconLeft: 'lucide-route' },
+      { value: 'team', label: 'Team & Agents', iconLeft: 'lucide-users' },
+      { value: 'profile', label: 'WABA Profile', iconLeft: 'lucide-user' },
+    )
+  }
+  return tabs
+})
+
+function selectTab(value: string | number) {
+  activeTab.value = value as SettingsTab
+  if (value === 'team') loadTeamMembers()
+}
+
+function statusTheme(label: string): 'green' | 'red' | 'gray' {
+  if (label === 'Active') return 'green'
+  if (label === 'Disabled') return 'red'
+  return 'gray'
+}
+
+const roleOptions = [
+  { label: 'WhatsApp User (Agent)', value: 'WhatsApp User' },
+  { label: 'WhatsApp Manager (Admin)', value: 'WhatsApp Manager' },
+]
+const editRoleOptions = [
+  { label: 'WhatsApp User', value: 'WhatsApp User' },
+  { label: 'WhatsApp Manager', value: 'WhatsApp Manager' },
+]
+const statusOptions = [
+  { label: 'Active', value: 'Active' },
+  { label: 'Inactive', value: 'Inactive' },
+]
+const accountOptions = computed(() =>
+  (desk.inbox.value?.accounts || []).map((account) => ({
+    label: account.account_name || account.name,
+    value: account.name,
+  })),
+)
+const defaultAccountOptions = computed(() => [{ label: 'None', value: '' }, ...accountOptions.value])
+const replyChannelOptions = computed(() => [
+  { label: 'Global (All Channels)', value: '' },
+  ...channelOptions.value,
+])
 
 function openIntegrations() {
   void router.push('/integrations')
@@ -476,21 +528,23 @@ async function saveSiteSettings() {
   }
 }
 
-async function removeReply() {
+function removeReply() {
   if (!editingReply.value) return
-  if (!window.confirm(`Delete quick reply “${newTitle.value || editingReply.value}”?`)) return
-  if (desk.mode.value === 'live') {
-    try {
-      await deleteQuickReply(editingReply.value)
-    } catch (caught) {
-      showToast(errorText(caught), true)
-      return
-    }
-  }
-  replies.value = replies.value.filter((row) => row.name !== editingReply.value)
-  editingReply.value = null
-  showCreateModal.value = false
-  showToast('Quick reply deleted.')
+  const name = editingReply.value
+  const label = newTitle.value || name
+  dialog.danger({
+    title: 'Delete quick reply?',
+    message: `Remove “${label}” from this account?`,
+    onConfirm: async () => {
+      if (desk.mode.value === 'live') {
+        await deleteQuickReply(name)
+      }
+      replies.value = replies.value.filter((row) => row.name !== name)
+      editingReply.value = null
+      showCreateModal.value = false
+      showToast('Quick reply deleted.')
+    },
+  })
 }
 
 onMounted(() => {
@@ -510,10 +564,7 @@ onMounted(() => {
         <div>
           <div class="flex items-center gap-2.5">
             <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-[#075E54]/10 text-[#075E54]">
-              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
+              <span class="lucide-settings size-5" />
             </div>
             <div>
               <h1 class="text-2xl font-bold tracking-tight text-ink-gray-9">Nudg Settings</h1>
@@ -547,79 +598,19 @@ onMounted(() => {
       </div>
 
       <!-- Settings Navigation Tabs -->
-      <div class="mt-6 flex flex-wrap items-center gap-1 border-b border-outline-gray-2 pb-px">
-        <button
-          type="button"
-          @click="activeTab = 'replies'"
-          class="flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs sm:text-sm font-semibold transition-all"
-          :class="
-            activeTab === 'replies'
-              ? 'border-[#128C7E] text-[#075E54]'
-              : 'border-transparent text-ink-gray-6 hover:text-ink-gray-9'
-          "
+      <div class="mt-6 overflow-x-auto">
+        <TabButtons
+          :model-value="activeTab"
+          :options="tabOptions"
+          variant="underline"
+          size="md"
+          @update:model-value="selectTab"
         >
-          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-          </svg>
-          <span>Quick Replies</span>
-          <span class="rounded-full bg-surface-gray-2 px-2 py-0.5 text-xs font-medium text-ink-gray-7">
-            {{ allReplies.length }}
-          </span>
-        </button>
-
-        <button
-          v-if="isManager"
-          type="button"
-          @click="activeTab = 'routing'"
-          class="flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs sm:text-sm font-semibold transition-all"
-          :class="
-            activeTab === 'routing'
-              ? 'border-[#128C7E] text-[#075E54]'
-              : 'border-transparent text-ink-gray-6 hover:text-ink-gray-9'
-          "
-        >
-          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-          </svg>
-          <span>Routing & Assignment</span>
-        </button>
-
-        <button
-          v-if="isManager"
-          type="button"
-          @click="activeTab = 'team'; loadTeamMembers()"
-          class="flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs sm:text-sm font-semibold transition-all"
-          :class="
-            activeTab === 'team'
-              ? 'border-[#128C7E] text-[#075E54]'
-              : 'border-transparent text-ink-gray-6 hover:text-ink-gray-9'
-          "
-        >
-          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-          </svg>
-          <span>Team &amp; Agents</span>
-          <span class="rounded-full bg-surface-gray-2 px-2 py-0.5 text-xs font-medium text-ink-gray-7">
-            {{ teamMembers.length }}
-          </span>
-        </button>
-
-        <button
-          v-if="isManager"
-          type="button"
-          @click="activeTab = 'profile'"
-          class="flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs sm:text-sm font-semibold transition-all"
-          :class="
-            activeTab === 'profile'
-              ? 'border-[#128C7E] text-[#075E54]'
-              : 'border-transparent text-ink-gray-6 hover:text-ink-gray-9'
-          "
-        >
-          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-          </svg>
-          <span>WABA Profile</span>
-        </button>
+          <template #suffix="{ button }">
+            <Badge v-if="button.value === 'replies'" theme="gray" size="sm" :label="allReplies.length" />
+            <Badge v-else-if="button.value === 'team'" theme="gray" size="sm" :label="teamMembers.length" />
+          </template>
+        </TabButtons>
       </div>
 
       <!-- TAB 1: QUICK REPLIES -->
@@ -629,79 +620,69 @@ onMounted(() => {
         <template v-else>
         <!-- KPI Metrics -->
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div class="rounded-xl border border-outline-gray-2 bg-white p-4 shadow-2xs">
-            <span class="text-xs font-medium text-ink-gray-6 uppercase tracking-wider">Configured Shortcuts</span>
-            <div class="mt-2 flex items-baseline gap-2">
-              <span class="text-2xl font-bold text-ink-gray-9">{{ allReplies.length }}</span>
-              <span class="text-xs text-ink-gray-5">active templates</span>
-            </div>
-            <p class="mt-1 text-xs text-ink-gray-6">Triggerable via "/" in composer</p>
-          </div>
-
-          <div class="rounded-xl border border-outline-gray-2 bg-white p-4 shadow-2xs">
-            <span class="text-xs font-medium text-ink-gray-6 uppercase tracking-wider">Most Used Shortcut</span>
-            <div class="mt-2 flex items-baseline gap-2">
-              <span class="font-mono text-lg font-bold text-[#075E54]">/{{ mostUsedReply?.shortcut || 'greet' }}</span>
-              <span class="text-xs text-ink-gray-5">({{ mostUsedReply?.usage_count || 0 }} times)</span>
-            </div>
-            <p class="mt-1 text-xs text-ink-gray-6">{{ mostUsedReply?.title || 'Welcome Greeting' }}</p>
-          </div>
-
-          <div class="rounded-xl border border-outline-gray-2 bg-white p-4 shadow-2xs">
-            <span class="text-xs font-medium text-ink-gray-6 uppercase tracking-wider">Fast Dispatch Mode</span>
-            <div class="mt-2 flex items-baseline gap-2">
-              <span class="text-lg font-bold text-ink-gray-9">Freeform & Variables</span>
-            </div>
-            <p class="mt-1 text-xs text-ink-gray-6">Single-click insertion in Inbox</p>
-          </div>
+          <NumberCard
+            title="Configured Shortcuts"
+            :value="allReplies.length"
+            color="#075E54"
+            delta-caption='Triggerable via "/" in composer'
+          />
+          <NumberCard
+            title="Most Used Shortcut"
+            :value="'/' + (mostUsedReply?.shortcut || 'greet')"
+            color="#075E54"
+            :delta-caption="`${mostUsedReply?.usage_count || 0} times · ${mostUsedReply?.title || 'Welcome Greeting'}`"
+          />
+          <NumberCard
+            title="Fast Dispatch Mode"
+            value="Freeform & Variables"
+            delta-caption="Single-click insertion in Inbox"
+          />
         </div>
 
         <!-- Filter & Search Toolbar -->
-        <div class="flex flex-col gap-3 rounded-xl border border-outline-gray-2 bg-white p-4 shadow-2xs sm:flex-row sm:items-center sm:justify-between">
-          <div class="relative w-full sm:w-72">
-            <input
+        <DeskCard as="div">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <TextInput
               v-model="searchQuery"
               type="text"
+              class="w-full sm:w-72"
               placeholder="Search title, /shortcut, body..."
-              class="h-8.5 w-full rounded-lg border border-outline-gray-2 bg-surface-gray-2/50 pl-8 pr-3 text-xs text-ink-gray-9 placeholder:text-ink-gray-4 focus:border-[#128C7E] focus:outline-none focus:ring-1 focus:ring-[#128C7E]"
-            />
-            <svg class="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-ink-gray-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </div>
+            >
+              <template #prefix>
+                <span class="lucide-search size-3.5 text-ink-gray-4" />
+              </template>
+            </TextInput>
 
-          <div class="flex items-center gap-2">
-            <Button
-              variant="solid"
-              size="sm"
-              class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-              icon-left="lucide-plus"
-              label="New Quick Reply"
-              @click="startReply()"
-            />
+            <div class="flex items-center gap-2">
+              <Button
+                variant="solid"
+                size="sm"
+                class="bg-[#075E54] text-white hover:bg-[#128C7E]"
+                icon-left="lucide-plus"
+                label="New Quick Reply"
+                @click="startReply()"
+              />
+            </div>
           </div>
-        </div>
+        </DeskCard>
 
         <!-- Quick Replies Grid -->
         <div v-if="filteredReplies.length > 0" class="grid gap-4 sm:grid-cols-2">
-          <article
+          <DeskCard
             v-for="row in filteredReplies"
             :key="row.name"
-            class="flex flex-col justify-between rounded-xl border border-outline-gray-2 bg-white p-5 shadow-2xs hover:border-[#128C7E]/40 hover:shadow-xs transition-all"
+            as="article"
+            interactive
+            class="flex flex-col justify-between"
           >
             <div>
               <div class="flex items-start justify-between gap-3">
                 <div class="flex items-center gap-2">
-                  <span
-                    v-if="row.shortcut"
-                    class="rounded-md bg-[#075E54]/10 px-2 py-0.5 font-mono text-xs font-bold text-[#075E54]"
-                  >
-                    /{{ row.shortcut }}
-                  </span>
+                  <Badge v-if="row.shortcut" theme="green" variant="subtle" :label="'/' + row.shortcut" />
                   <h3 class="text-sm font-semibold text-ink-gray-9">{{ row.title }}</h3>
                 </div>
 
-                <StatusBadge :label="row.status || 'Active'" />
+                <Badge :theme="statusTheme(row.status || 'Active')" :label="row.status || 'Active'" />
               </div>
 
               <p class="mt-3 text-xs text-ink-gray-7 leading-relaxed whitespace-pre-wrap bg-surface-gray-2/40 rounded-lg p-3 border border-outline-gray-1">
@@ -715,204 +696,179 @@ onMounted(() => {
                 <span v-if="row.whatsapp_account">· {{ row.whatsapp_account }}</span>
               </div>
 
-              <div class="flex items-center gap-2">
-                <button
+              <div class="flex items-center gap-1">
+                <Button
                   v-if="isManager"
-                  type="button"
-                  class="text-xs font-semibold text-ink-gray-7 hover:text-[#075E54]"
+                  variant="ghost"
+                  size="sm"
+                  label="Edit"
                   @click="startReply(row)"
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  :label="copiedShortcut === (row.shortcut ? '/' + row.shortcut : row.title) ? 'Copied!' : 'Copy Text'"
                   @click="copyText(row.body, row.shortcut ? '/' + row.shortcut : row.title)"
-                  class="text-xs font-semibold text-[#075E54] hover:underline"
-                >
-                  {{ copiedShortcut === (row.shortcut ? '/' + row.shortcut : row.title) ? 'Copied!' : 'Copy Text' }}
-                </button>
+                />
               </div>
             </div>
-          </article>
+          </DeskCard>
         </div>
 
-        <div
+        <EmptyState
           v-else
-          class="flex flex-col items-center justify-center rounded-xl border border-dashed border-outline-gray-2 bg-white p-12 text-center"
+          title="No Quick Replies Found"
+          description="No replies match the current filter or search criteria."
         >
-          <div class="flex h-12 w-12 items-center justify-center rounded-full bg-surface-gray-2 text-ink-gray-5">
-            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-            </svg>
-          </div>
-          <h3 class="mt-3 text-sm font-semibold text-ink-gray-9">No Quick Replies Found</h3>
-          <p class="mt-1 text-xs text-ink-gray-5">No replies match the current filter or search criteria.</p>
-          <button
-            type="button"
+          <Button
+            variant="solid"
+            size="sm"
+            class="bg-[#075E54] text-white hover:bg-[#128C7E]"
+            label="Reset Filters"
             @click="searchQuery = ''; channelFilter = 'all'"
-            class="mt-4 rounded-lg bg-[#075E54] px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-[#128C7E]"
-          >
-            Reset Filters
-          </button>
-        </div>
+          />
+        </EmptyState>
         </template>
       </div>
 
       <!-- TAB 2: ROUTING & AUTO-ASSIGNMENT -->
       <div v-else-if="activeTab === 'routing'" class="mt-6 space-y-6">
         <div class="grid gap-6 sm:grid-cols-3">
-          <!-- Card 1 -->
-          <div class="rounded-xl border border-outline-gray-2 bg-white p-5 shadow-2xs">
-            <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600 mb-3">
-              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
+          <DeskCard>
+            <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+              <span class="lucide-users size-5" />
             </div>
             <h3 class="text-sm font-semibold text-ink-gray-9">Frappe Assignment Rules</h3>
             <p class="mt-1 text-xs text-ink-gray-6 leading-relaxed">
               Assign conversations from the inbox, and add agents from the Team tab.
             </p>
-            <button
+            <Button
               v-if="isManager"
-              type="button"
-              class="mt-3 text-xs font-semibold text-[#075E54] hover:underline"
-              @click="activeTab = 'team'; loadTeamMembers()"
-            >
-              Open team
-            </button>
-          </div>
+              class="mt-3"
+              variant="ghost"
+              size="sm"
+              label="Open team"
+              @click="selectTab('team')"
+            />
+          </DeskCard>
 
-          <!-- Card 2 -->
-          <div class="rounded-xl border border-outline-gray-2 bg-white p-5 shadow-2xs">
-            <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 mb-3">
-              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-              </svg>
+          <DeskCard>
+            <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+              <span class="lucide-shield-check size-5" />
             </div>
             <h3 class="text-sm font-semibold text-ink-gray-9">Agent Role & Permissions</h3>
             <p class="mt-1 text-xs text-ink-gray-6 leading-relaxed">
               Users with the <code class="rounded bg-surface-gray-2 px-1 text-[11px]">WhatsApp User</code> role can chat with assigned leads and view shared inboxes. Administrators require <code class="rounded bg-surface-gray-2 px-1 text-[11px]">System Manager</code>.
             </p>
-          </div>
+          </DeskCard>
 
-          <!-- Card 3 -->
-          <div class="rounded-xl border border-outline-gray-2 bg-white p-5 shadow-2xs">
-            <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-50 text-purple-600 mb-3">
-              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+          <DeskCard>
+            <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-purple-50 text-purple-600">
+              <span class="lucide-clock size-5" />
             </div>
             <h3 class="text-sm font-semibold text-ink-gray-9">24h SLA Session Window</h3>
             <p class="mt-1 text-xs text-ink-gray-6 leading-relaxed">
               Meta enforces a 24-hour service window per conversation. Inbound replies automatically re-open the freeform window for support agents.
             </p>
-          </div>
+          </DeskCard>
         </div>
       </div>
 
+      <!-- TAB 4: WABA PROFILE -->
       <div v-else-if="activeTab === 'profile'" class="mt-6 space-y-6">
         <template v-if="desk.mode.value === 'live'">
-          <div
+          <Alert
             v-if="!(desk.inbox.value?.accounts || []).length"
-            class="rounded-xl border border-outline-gray-2 bg-white p-6 text-sm text-ink-gray-6"
-          >
-            No WhatsApp account is connected yet. Add one from Integrations.
-          </div>
-          <div
+            theme="gray"
+            title="No WhatsApp account is connected yet."
+            description="Add one from Integrations."
+          />
+          <DeskCard
             v-for="account in desk.inbox.value?.accounts || []"
             :key="account.name"
-            class="rounded-xl border border-outline-gray-2 bg-white p-6 shadow-2xs"
           >
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 class="text-lg font-bold text-ink-gray-9">{{ account.account_name || account.name }}</h2>
                 <p class="mt-1 text-xs text-ink-gray-5">{{ account.name }} · {{ account.status }}</p>
               </div>
-              <button
+              <Button
                 v-if="isManager"
-                type="button"
-                class="rounded-lg border border-outline-gray-2 px-3.5 py-2 text-xs font-semibold text-ink-gray-8 hover:bg-surface-gray-2"
+                variant="subtle"
+                size="sm"
+                label="Edit"
                 @click="startAccountEdit(account)"
-              >
-                Edit
-              </button>
+              />
             </div>
-          </div>
-          <div v-if="isSiteAdmin" class="rounded-xl border border-outline-gray-2 bg-white p-6 shadow-2xs">
-            <h2 class="text-lg font-bold text-ink-gray-9">WhatsApp settings</h2>
-            <p class="mt-1 text-xs text-ink-gray-5">
-              Site-wide. Only an Administrator or System Manager can see this. Callback: {{ siteSettings.callback_method }}
-            </p>
-            <p class="mt-2 text-xs leading-relaxed text-ink-gray-6">
+          </DeskCard>
+          <DeskCard
+            v-if="isSiteAdmin"
+            title="WhatsApp settings"
+            :description="`Site-wide. Only an Administrator or System Manager can see this. Callback: ${siteSettings.callback_method}`"
+          >
+            <p class="text-xs leading-relaxed text-ink-gray-6">
               Optional. Leave this empty on a multi-client site. Connecting or removing a number does not fill it.
               It is used only when a webhook or send does not name a number and that number cannot be matched by phone id.
               People still message only from numbers they are allowed to use.
             </p>
-            <div class="mt-4 grid gap-3 sm:grid-cols-2 text-xs">
-              <label class="block font-semibold text-ink-gray-7">
-                Default account
-                <select v-model="siteSettings.default_account" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 font-normal">
-                  <option value="">None</option>
-                  <option v-for="account in desk.inbox.value?.accounts || []" :key="account.name" :value="account.name">
-                    {{ account.account_name || account.name }}
-                  </option>
-                </select>
-              </label>
-              <label class="block font-semibold text-ink-gray-7">
-                API version
-                <input v-model="siteSettings.whatsapp_api_version" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 font-normal" placeholder="v23.0" />
-              </label>
-              <label class="block font-semibold text-ink-gray-7 sm:col-span-2">
-                API URL
-                <input v-model="siteSettings.whatsapp_api_url" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 font-normal" placeholder="https://graph.facebook.com" />
-              </label>
-              <label class="block font-semibold text-ink-gray-7">
-                Webhook verify token
-                <input v-model="siteSettings.webhook_verify_token" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 font-normal" />
-              </label>
-              <label class="block font-semibold text-ink-gray-7">
-                Webhook secret
-                <input
-                  v-model="siteSettings.webhook_secret"
-                  type="password"
-                  class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2 font-normal"
-                  :placeholder="siteSettings.has_webhook_secret ? 'Saved. Type a new secret to replace it.' : 'App secret from Meta'"
-                />
-              </label>
+            <div class="mt-4 grid gap-3 sm:grid-cols-2">
+              <FormControl
+                v-model="siteSettings.default_account"
+                type="select"
+                label="Default account"
+                :options="defaultAccountOptions"
+              />
+              <FormControl
+                v-model="siteSettings.whatsapp_api_version"
+                type="text"
+                label="API version"
+                placeholder="v23.0"
+              />
+              <FormControl
+                v-model="siteSettings.whatsapp_api_url"
+                type="text"
+                label="API URL"
+                class="sm:col-span-2"
+                placeholder="https://graph.facebook.com"
+              />
+              <FormControl
+                v-model="siteSettings.webhook_verify_token"
+                type="text"
+                label="Webhook verify token"
+              />
+              <Password
+                v-model="siteSettings.webhook_secret"
+                label="Webhook secret"
+                :placeholder="siteSettings.has_webhook_secret ? 'Saved. Type a new secret to replace it.' : 'App secret from Meta'"
+              />
             </div>
             <div class="mt-4 flex justify-end">
               <Button variant="solid" class="bg-[#075E54] text-white hover:bg-[#128C7E]" label="Save settings" :loading="savingSite" @click="saveSiteSettings" />
             </div>
-          </div>
+          </DeskCard>
         </template>
-        <div v-else class="rounded-xl border border-outline-gray-2 bg-white p-6 shadow-2xs">
+        <DeskCard v-else>
           <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between border-b border-outline-gray-2 pb-5">
             <div class="flex items-start gap-4">
               <div class="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#075E54] text-white shadow-sm font-bold text-xl">
                 SS
               </div>
               <div>
-                <div class="flex items-center gap-2">
+                <div class="flex flex-wrap items-center gap-2">
                   <h2 class="text-lg font-bold text-ink-gray-9">Sundarban Spices & Agri Corp</h2>
-                  <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
-                    <svg class="h-3.5 w-3.5 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                    </svg>
-                    Meta Verified Business
-                  </span>
+                  <Badge theme="green" variant="subtle" label="Meta Verified Business" />
                 </div>
                 <p class="mt-1 text-xs text-ink-gray-5">Official WhatsApp Business Account (WABA ID: 9920148123901)</p>
               </div>
             </div>
 
-            <button
+            <Button
               v-if="isManager"
-              type="button"
-              class="rounded-lg border border-outline-gray-2 px-3.5 py-2 text-xs font-semibold text-ink-gray-8 hover:bg-surface-gray-2 transition-all"
+              variant="subtle"
+              size="sm"
+              label="Connect a number"
               @click="openIntegrations"
-            >
-              Connect a number
-            </button>
+            />
           </div>
 
           <div class="mt-5 grid gap-4 sm:grid-cols-2 text-xs">
@@ -943,27 +899,24 @@ onMounted(() => {
               <p class="mt-1 text-ink-gray-9">Sundarban Organic Estate, South 24 Parganas, West Bengal 743370, India</p>
             </div>
           </div>
-        </div>
+        </DeskCard>
       </div>
 
       <!-- TAB 5: TEAM & AGENTS -->
       <div v-else-if="activeTab === 'team'" class="mt-6 space-y-6">
-        <div class="rounded-xl border border-outline-gray-2 bg-white p-6 shadow-2xs">
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-outline-gray-2 pb-5">
-            <div>
-              <h2 class="text-lg font-bold text-ink-gray-9">Team Members &amp; Agents</h2>
-              <p class="mt-1 text-xs text-ink-gray-6">
-                Manage agent accounts, scoped roles, and WhatsApp permissions directly in Nudg without opening Desk.
-              </p>
-            </div>
+        <DeskCard
+          title="Team Members & Agents"
+          description="Manage agent accounts, scoped roles, and WhatsApp permissions directly in Nudg without opening Desk."
+        >
+          <template #actions>
             <Button
               variant="solid"
-              class="bg-[#075E54] text-white hover:bg-[#128C7E] shrink-0 font-medium"
+              class="bg-[#075E54] text-white hover:bg-[#128C7E]"
               label="Add Team Member"
               icon-left="lucide-user-plus"
               @click="showAddMemberModal = true"
             />
-          </div>
+          </template>
 
           <LoadingState v-if="teamLoading" label="Loading team members…" />
           <ErrorState v-else-if="teamError" :message="teamError" allow-retry @retry="loadTeamMembers" />
@@ -974,7 +927,7 @@ onMounted(() => {
           />
 
           <!-- Members Table -->
-          <div v-else class="mt-4 overflow-x-auto">
+          <div v-else class="overflow-x-auto">
             <table class="min-w-full divide-y divide-outline-gray-2 text-xs">
               <thead>
                 <tr class="text-left text-ink-gray-5">
@@ -999,31 +952,31 @@ onMounted(() => {
                     </div>
                   </td>
                   <td class="py-3 px-4">
-                    <StatusBadge :label="member.role" :tone="member.role === 'WhatsApp Manager' ? 'purple' : 'blue'" />
+                    <Badge :theme="member.role === 'WhatsApp Manager' ? 'violet' : 'blue'" :label="member.role" />
                   </td>
                   <td class="py-3 px-4 text-ink-gray-7 font-medium">
                     {{ member.account || 'All Permitted' }}
                   </td>
                   <td class="py-3 px-4">
-                    <StatusBadge :label="member.enabled ? 'Active' : 'Disabled'" />
+                    <Badge :theme="member.enabled ? 'green' : 'red'" :label="member.enabled ? 'Active' : 'Disabled'" />
                   </td>
                   <td class="py-3 pl-4 text-right">
-                    <button
+                    <Button
                       v-if="!member.is_owner"
-                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      label="Edit"
                       @click="openEditMember(member)"
-                      class="text-[#075E54] hover:underline font-semibold"
-                    >
-                      Edit
-                    </button>
+                    />
                     <span v-else class="text-ink-gray-4 text-[11px]">Owner</span>
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
-        </div>
+        </DeskCard>
       </div>
+    </div>
 
     <!-- MODAL: Add Team Member -->
     <Dialog
@@ -1031,67 +984,45 @@ onMounted(() => {
       title="Add Team Member"
       size="xl"
     >
-      <div class="space-y-4 py-1 text-xs">
-        <p class="text-xs text-ink-gray-6 -mt-2">
+      <div class="space-y-4 py-1">
+        <p class="-mt-2 text-xs text-ink-gray-6">
           Create a team member account and automatically grant them WhatsApp access.
         </p>
 
-        <div>
-          <label class="block font-semibold text-ink-gray-7">Full Name <span class="text-red-500">*</span></label>
-          <input
-            v-model="newMemberName"
-            type="text"
-            class="mt-1 block w-full rounded-lg border border-outline-gray-2 bg-white px-3 py-2 text-xs text-ink-gray-9 focus:border-[#128C7E] focus:outline-none focus:ring-1 focus:ring-[#128C7E]"
-            placeholder="e.g. John Doe"
-            required
-          />
-        </div>
-
-        <div>
-          <label class="block font-semibold text-ink-gray-7">Email Address <span class="text-red-500">*</span></label>
-          <input
-            v-model="newMemberEmail"
-            type="email"
-            class="mt-1 block w-full rounded-lg border border-outline-gray-2 bg-white px-3 py-2 text-xs text-ink-gray-9 focus:border-[#128C7E] focus:outline-none focus:ring-1 focus:ring-[#128C7E]"
-            placeholder="agent@example.com"
-            required
-          />
-        </div>
-
-        <div>
-          <label class="block font-semibold text-ink-gray-7">Password <span class="text-red-500">*</span></label>
-          <input
-            v-model="newMemberPassword"
-            type="password"
-            class="mt-1 block w-full rounded-lg border border-outline-gray-2 bg-white px-3 py-2 text-xs text-ink-gray-9 focus:border-[#128C7E] focus:outline-none focus:ring-1 focus:ring-[#128C7E]"
-            placeholder="Min 6 characters"
-            required
-          />
-        </div>
+        <FormControl
+          v-model="newMemberName"
+          type="text"
+          label="Full Name"
+          placeholder="e.g. John Doe"
+          required
+        />
+        <FormControl
+          v-model="newMemberEmail"
+          type="email"
+          label="Email Address"
+          placeholder="agent@example.com"
+          required
+        />
+        <Password
+          v-model="newMemberPassword"
+          label="Password"
+          placeholder="Min 6 characters"
+          required
+        />
 
         <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block font-semibold text-ink-gray-7">Role</label>
-            <select
-              v-model="newMemberRole"
-              class="mt-1 block w-full rounded-lg border border-outline-gray-2 bg-white px-3 py-2 text-xs text-ink-gray-9 focus:border-[#128C7E] focus:outline-none focus:ring-1 focus:ring-[#128C7E]"
-            >
-              <option value="WhatsApp User">WhatsApp User (Agent)</option>
-              <option value="WhatsApp Manager">WhatsApp Manager (Admin)</option>
-            </select>
-          </div>
-
-          <div>
-            <label class="block font-semibold text-ink-gray-7">Assign WhatsApp Account</label>
-            <select
-              v-model="selectedTeamAccount"
-              class="mt-1 block w-full rounded-lg border border-outline-gray-2 bg-white px-3 py-2 text-xs text-ink-gray-9 focus:border-[#128C7E] focus:outline-none focus:ring-1 focus:ring-[#128C7E]"
-            >
-              <option v-for="acc in desk.inbox.value?.accounts || []" :key="acc.name" :value="acc.name">
-                {{ acc.account_name || acc.name }}
-              </option>
-            </select>
-          </div>
+          <FormControl
+            v-model="newMemberRole"
+            type="select"
+            label="Role"
+            :options="roleOptions"
+          />
+          <FormControl
+            v-model="selectedTeamAccount"
+            type="select"
+            label="Assign WhatsApp Account"
+            :options="accountOptions"
+          />
         </div>
       </div>
 
@@ -1119,38 +1050,19 @@ onMounted(() => {
       :title="editingMember ? 'Edit Member · ' + editingMember.full_name : 'Edit Member'"
       size="lg"
     >
-      <div v-if="editingMember" class="space-y-4 py-1 text-xs">
-        <div>
-          <label class="block font-semibold text-ink-gray-7">Role</label>
-          <select
-            v-model="editRole"
-            class="mt-1 block w-full rounded-lg border border-outline-gray-2 bg-white px-3 py-2 text-xs text-ink-gray-9 focus:border-[#128C7E] focus:outline-none focus:ring-1 focus:ring-[#128C7E]"
-          >
-            <option value="WhatsApp User">WhatsApp User</option>
-            <option value="WhatsApp Manager">WhatsApp Manager</option>
-          </select>
-        </div>
-
-        <div>
-          <label class="block font-semibold text-ink-gray-7">Reset Password (Optional)</label>
-          <input
-            v-model="editNewPassword"
-            type="password"
-            class="mt-1 block w-full rounded-lg border border-outline-gray-2 bg-white px-3 py-2 text-xs text-ink-gray-9 focus:border-[#128C7E] focus:outline-none focus:ring-1 focus:ring-[#128C7E]"
-            placeholder="Leave empty to keep current password"
-          />
-        </div>
-
-        <div class="pt-2">
-          <label class="inline-flex items-center gap-2 cursor-pointer">
-            <input
-              v-model="editEnabled"
-              type="checkbox"
-              class="rounded border-outline-gray-3 text-[#075E54] focus:ring-[#128C7E]"
-            />
-            <span class="text-xs font-semibold text-ink-gray-8">Account Enabled</span>
-          </label>
-        </div>
+      <div v-if="editingMember" class="space-y-4 py-1">
+        <FormControl
+          v-model="editRole"
+          type="select"
+          label="Role"
+          :options="editRoleOptions"
+        />
+        <Password
+          v-model="editNewPassword"
+          label="Reset Password (Optional)"
+          placeholder="Leave empty to keep current password"
+        />
+        <Checkbox v-model="editEnabled" label="Account Enabled" />
       </div>
 
       <template #actions>
@@ -1170,39 +1082,25 @@ onMounted(() => {
       </template>
     </Dialog>
 
+    <!-- MODAL: Edit WhatsApp account -->
     <Dialog v-model="accountEditorOpen" :title="accountEditor ? 'Edit ' + accountEditor.account_name : 'WhatsApp account'">
-      <div v-if="accountEditor" class="space-y-4 py-1 text-xs">
-        <p class="text-ink-gray-6">A new number is connected from Integrations. Update the credentials Meta issued for this number. Leave the token blank to keep the current one.</p>
-        <label class="block font-semibold text-ink-gray-7">
-          Phone number ID
-          <input v-model="accountEditor.phone_id" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2" />
-        </label>
-        <label class="block font-semibold text-ink-gray-7">
-          Business ID
-          <input v-model="accountEditor.business_id" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2" />
-        </label>
-        <label class="block font-semibold text-ink-gray-7">
-          App ID
-          <input v-model="accountEditor.app_id" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2" />
-        </label>
-        <label class="block font-semibold text-ink-gray-7">
-          Access token
-          <input v-model="accountEditor.access_token" type="password" class="mt-1 block w-full rounded-lg border border-outline-gray-2 px-3 py-2" placeholder="Leave blank to keep the current token" />
-        </label>
-        <div>
-          <label class="block font-semibold text-ink-gray-7">Status</label>
-          <select
-            v-model="accountEditor.status"
-            class="mt-1 block w-full rounded-lg border border-outline-gray-2 bg-white px-3 py-2 text-xs text-ink-gray-9"
-          >
-            <option value="Active">Active</option>
-            <option value="Inactive">Inactive</option>
-          </select>
-        </div>
-        <label class="flex items-center gap-2 text-ink-gray-8">
-          <input v-model="accountEditor.auto_read_receipts" type="checkbox" />
-          Send read receipts
-        </label>
+      <div v-if="accountEditor" class="space-y-4 py-1">
+        <p class="text-xs text-ink-gray-6">A new number is connected from Integrations. Update the credentials Meta issued for this number. Leave the token blank to keep the current one.</p>
+        <FormControl v-model="accountEditor.phone_id" type="text" label="Phone number ID" />
+        <FormControl v-model="accountEditor.business_id" type="text" label="Business ID" />
+        <FormControl v-model="accountEditor.app_id" type="text" label="App ID" />
+        <Password
+          v-model="accountEditor.access_token"
+          label="Access token"
+          placeholder="Leave blank to keep the current token"
+        />
+        <FormControl
+          v-model="accountEditor.status"
+          type="select"
+          label="Status"
+          :options="statusOptions"
+        />
+        <Checkbox v-model="accountEditor.auto_read_receipts" label="Send read receipts" />
       </div>
       <template #actions>
         <div class="flex w-full justify-end gap-2">
@@ -1212,73 +1110,56 @@ onMounted(() => {
       </template>
     </Dialog>
 
-        <!-- MODAL: Create New Quick Reply -->
+    <!-- MODAL: Create New Quick Reply -->
     <Dialog
       v-model="showCreateModal"
       title="Quick Reply"
       size="xl"
     >
-      <div class="space-y-4 py-1 text-xs">
-        <p class="text-xs text-ink-gray-6 -mt-2">
+      <div class="space-y-4 py-1">
+        <p class="-mt-2 text-xs text-ink-gray-6">
           Create a keyboard shortcut for fast customer replies in conversation threads
         </p>
 
-        <div>
-          <label class="block font-semibold text-ink-gray-7">Title</label>
-          <input
-            v-model="newTitle"
+        <FormControl
+          v-model="newTitle"
+          type="text"
+          label="Title"
+          placeholder="e.g. Return Policy Notice"
+        />
+
+        <div class="grid grid-cols-2 gap-3">
+          <FormControl
+            v-model="newShortcut"
             type="text"
-            class="mt-1 block w-full rounded-lg border border-outline-gray-2 bg-white px-3 py-2 text-xs text-ink-gray-9 focus:border-[#128C7E] focus:outline-none focus:ring-1 focus:ring-[#128C7E]"
-            placeholder="e.g. Return Policy Notice"
+            label="Keyboard Shortcut"
+            placeholder="return"
+          >
+            <template #prefix>
+              <span class="font-mono text-ink-gray-4">/</span>
+            </template>
+          </FormControl>
+          <FormControl
+            v-model="replyStatus"
+            type="select"
+            label="Status"
+            :options="statusOptions"
+          />
+          <FormControl
+            v-model="newChannel"
+            type="select"
+            label="Channel"
+            :options="replyChannelOptions"
           />
         </div>
 
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block font-semibold text-ink-gray-7">Keyboard Shortcut</label>
-            <div class="relative mt-1">
-              <span class="pointer-events-none absolute left-3 top-2 text-ink-gray-4 font-mono">/</span>
-              <input
-                v-model="newShortcut"
-                type="text"
-                class="block w-full rounded-lg border border-outline-gray-2 bg-white pl-6 pr-3 py-2 font-mono text-xs text-ink-gray-9 focus:border-[#128C7E] focus:outline-none focus:ring-1 focus:ring-[#128C7E]"
-                placeholder="return"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label class="block font-semibold text-ink-gray-7">Status</label>
-            <select
-              v-model="replyStatus"
-              class="mt-1 block w-full rounded-lg border border-outline-gray-2 bg-white px-3 py-2 text-xs text-ink-gray-9"
-            >
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
-            </select>
-          </div>
-
-          <div>
-            <label class="block font-semibold text-ink-gray-7">Channel</label>
-            <select
-              v-model="newChannel"
-              class="mt-1 block w-full rounded-lg border border-outline-gray-2 bg-white px-3 py-2 text-xs text-ink-gray-9 focus:border-[#128C7E] focus:outline-none focus:ring-1 focus:ring-[#128C7E]"
-            >
-              <option value="">Global (All Channels)</option>
-              <option v-for="option in channelOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-            </select>
-          </div>
-        </div>
-
-        <div>
-          <label class="block font-semibold text-ink-gray-7">Message Body</label>
-          <textarea
-            v-model="newBody"
-            rows="4"
-            class="mt-1 block w-full rounded-lg border border-outline-gray-2 bg-white p-2.5 text-xs text-ink-gray-9 focus:border-[#128C7E] focus:outline-none focus:ring-1 focus:ring-[#128C7E]"
-            placeholder="Type message text to be inserted in the conversation composer..."
-          ></textarea>
-        </div>
+        <FormControl
+          v-model="newBody"
+          type="textarea"
+          label="Message Body"
+          :rows="4"
+          placeholder="Type message text to be inserted in the conversation composer..."
+        />
       </div>
 
       <template #actions>
@@ -1305,6 +1186,5 @@ onMounted(() => {
         </div>
       </template>
     </Dialog>
-    </div>
   </div>
 </template>

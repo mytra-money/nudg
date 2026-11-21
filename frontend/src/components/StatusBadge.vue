@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { Badge } from 'frappe-ui'
 
 const props = defineProps<{
   label: string
   tone?: 'green' | 'amber' | 'red' | 'gray' | 'blue' | 'teal' | 'purple'
 }>()
 
-const known: Record<string, NonNullable<typeof props.tone>> = {
+type BadgeTheme = 'gray' | 'blue' | 'green' | 'amber' | 'red' | 'violet'
+
+const known: Record<string, BadgeTheme> = {
   Connected: 'green',
   Active: 'green',
   Approved: 'green',
@@ -31,24 +34,22 @@ const known: Record<string, NonNullable<typeof props.tone>> = {
   Inactive: 'gray',
 }
 
-const styles: Record<string, string> = {
-  green: 'bg-emerald-50 text-emerald-800 ring-emerald-600/20',
-  amber: 'bg-amber-50 text-amber-800 ring-amber-600/20',
-  red: 'bg-red-50 text-red-700 ring-red-600/20',
-  gray: 'bg-surface-gray-2 text-ink-gray-6 ring-outline-gray-2',
-  blue: 'bg-blue-50 text-blue-700 ring-blue-600/20',
-  teal: 'bg-teal-50 text-[#075E54] ring-[#075E54]/20',
-  purple: 'bg-purple-50 text-purple-700 ring-purple-600/20',
+const toneMap: Record<NonNullable<typeof props.tone>, BadgeTheme> = {
+  green: 'green',
+  amber: 'amber',
+  red: 'red',
+  gray: 'gray',
+  blue: 'blue',
+  teal: 'blue',
+  purple: 'violet',
 }
 
-const tone = computed(() => props.tone || known[props.label] || 'gray')
+const theme = computed<BadgeTheme>(() => {
+  if (props.tone) return toneMap[props.tone]
+  return known[props.label] || 'gray'
+})
 </script>
 
 <template>
-  <span
-    class="inline-flex h-5 max-w-full shrink-0 items-center rounded-full px-2 text-[11px] font-medium leading-none ring-1 ring-inset"
-    :class="styles[tone]"
-  >
-    <span class="truncate">{{ label }}</span>
-  </span>
+  <Badge :label="label" :theme="theme" variant="subtle" size="sm" />
 </template>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { Button, call, Dialog, toast } from 'frappe-ui'
+import { Button, call, Dialog, FormControl, Password, toast } from 'frappe-ui'
 import { userFacingError } from '@/utils/errors'
 
 const open = defineModel<boolean>({ default: false })
@@ -49,35 +49,50 @@ async function save() {
 
 <template>
   <Dialog v-model="open" title="Enter WhatsApp credentials">
-    <div class="grid grid-cols-1 gap-4 py-1 text-xs sm:grid-cols-2">
-      <p class="sm:col-span-2 text-ink-gray-6">
+    <div class="grid grid-cols-1 gap-4 py-1 sm:grid-cols-2">
+      <p class="text-xs text-ink-gray-6 sm:col-span-2">
         Use this if the number is already on the WhatsApp Cloud API and you have its token.
       </p>
-      <label class="sm:col-span-2 block font-semibold text-ink-gray-8">
-        Account name <span class="text-red-500">*</span>
-        <input v-model="accountName" type="text" class="mt-1 block w-full rounded-lg border border-outline-gray-2 bg-white px-3 py-2 font-normal text-ink-gray-9" placeholder="Support" />
-      </label>
-      <label class="block font-semibold text-ink-gray-8">
-        Phone number ID <span class="text-red-500">*</span>
-        <input v-model="phoneId" type="text" class="mt-1 block w-full rounded-lg border border-outline-gray-2 bg-white px-3 py-2 font-normal text-ink-gray-9" placeholder="108928374928172" />
-      </label>
-      <label class="block font-semibold text-ink-gray-8">
-        WhatsApp account ID
-        <input v-model="businessId" type="text" class="mt-1 block w-full rounded-lg border border-outline-gray-2 bg-white px-3 py-2 font-normal text-ink-gray-9" placeholder="102938475619283" />
-      </label>
-      <label class="sm:col-span-2 block font-semibold text-ink-gray-8">
-        Access token <span class="text-red-500">*</span>
-        <input v-model="accessToken" type="password" autocomplete="off" class="mt-1 block w-full rounded-lg border border-outline-gray-2 bg-white px-3 py-2 font-mono font-normal text-ink-gray-9" />
-      </label>
-      <label class="block font-semibold text-ink-gray-8">
-        Meta app ID
-        <input v-model="appId" type="text" class="mt-1 block w-full rounded-lg border border-outline-gray-2 bg-white px-3 py-2 font-normal text-ink-gray-9" />
-      </label>
+      <FormControl
+        v-model="accountName"
+        type="text"
+        label="Account name"
+        placeholder="Support"
+        required
+        class="sm:col-span-2"
+      />
+      <FormControl
+        v-model="phoneId"
+        type="text"
+        label="Phone number ID"
+        placeholder="108928374928172"
+        required
+      />
+      <FormControl
+        v-model="businessId"
+        type="text"
+        label="WhatsApp account ID"
+        placeholder="102938475619283"
+      />
+      <Password
+        v-model="accessToken"
+        label="Access token"
+        autocomplete="off"
+        required
+        class="sm:col-span-2"
+      />
+      <FormControl v-model="appId" type="text" label="Meta app ID" />
     </div>
     <template #actions>
       <div class="flex w-full items-center justify-end gap-2">
-        <Button variant="solid" class="!bg-[#e5e7eb] !text-[#111827] hover:!bg-[#d1d5db]" label="Cancel" @click="open = false" />
-        <Button variant="solid" class="bg-[#075E54] text-white hover:bg-[#128C7E]" :loading="saving" label="Connect number" @click="save" />
+        <Button variant="subtle" label="Cancel" @click="open = false" />
+        <Button
+          variant="solid"
+          class="bg-[#075E54] text-white hover:bg-[#128C7E]"
+          :loading="saving"
+          label="Connect number"
+          @click="save"
+        />
       </div>
     </template>
   </Dialog>

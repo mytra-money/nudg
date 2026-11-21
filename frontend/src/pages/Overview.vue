@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, watch } from 'vue'
 import { Avatar, Badge, Button } from 'frappe-ui'
+import { NumberCard } from 'frappe-ui/charts'
+import DeskCard from '@/components/desk/DeskCard.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 import LoadingState from '@/components/LoadingState.vue'
@@ -228,444 +230,386 @@ const recentLogs = computed(() => logs.value.slice(0, 4))
           </a>
         </div>
 
-        <!-- Metric KPI Cards -->
+        <!-- Metric KPI Cards (frappe-ui NumberCard) -->
         <section aria-labelledby="kpi-heading">
           <h2 id="kpi-heading" class="sr-only">Key Performance Indicators</h2>
           <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <!-- Card 1: Needs Reply -->
             <a
               href="/conversations?tab=needs_reply"
-              class="group relative flex flex-col justify-between rounded-xl border border-outline-gray-2 bg-white p-4.5 shadow-xs transition-all hover:border-[#128C7E] hover:shadow-sm"
+              class="block min-w-0"
               @click.prevent="navigateTo('/conversations?tab=needs_reply')"
             >
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-medium uppercase tracking-wider text-ink-gray-6">Needs Reply</span>
-                <span
-                  class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
-                  :class="needsReplyCount > 0 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'"
-                >
-                  {{ needsReplyCount > 0 ? `${needsReplyCount} urgent` : 'All caught up' }}
-                </span>
-              </div>
-              <div class="mt-3 flex items-baseline gap-2">
-                <span class="text-3xl font-extrabold tracking-tight text-ink-gray-9">
-                  {{ needsReplyCount }}
-                </span>
-                <span class="text-xs text-ink-gray-5">pending response</span>
-              </div>
-              <p class="mt-2 text-[11px] text-ink-gray-5 group-hover:text-[#075E54]">
-                Customer messages waiting for agent reply &rarr;
-              </p>
+              <NumberCard
+                title="Needs reply"
+                :value="needsReplyCount"
+                :color="needsReplyCount > 0 ? '#B91C1C' : '#047857'"
+                :delta-caption="needsReplyCount > 0 ? 'pending response' : 'all caught up'"
+              />
             </a>
-
-            <!-- Card 2: 24h Windows Active -->
             <a
               href="/conversations?tab=window_open"
-              class="group relative flex flex-col justify-between rounded-xl border border-outline-gray-2 bg-white p-4.5 shadow-xs transition-all hover:border-[#128C7E] hover:shadow-sm"
+              class="block min-w-0"
               @click.prevent="navigateTo('/conversations?tab=window_open')"
             >
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-medium uppercase tracking-wider text-ink-gray-6">Open 24h Windows</span>
-                <span class="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                  {{ openWindowsCount > 0 ? 'Free-form' : 'Template only' }}
-                </span>
-              </div>
-              <div class="mt-3 flex items-baseline gap-2">
-                <span class="text-3xl font-extrabold tracking-tight text-ink-gray-9">
-                  {{ openWindowsCount }}
-                </span>
-                <span class="text-xs text-ink-gray-5">active sessions</span>
-              </div>
-              <p class="mt-2 text-[11px] text-ink-gray-5 group-hover:text-[#075E54]">
-                Sessions eligible for free-form replies &rarr;
-              </p>
+              <NumberCard
+                title="Open 24h windows"
+                :value="openWindowsCount"
+                color="#075E54"
+                :delta-caption="openWindowsCount > 0 ? 'free-form eligible' : 'template only'"
+              />
             </a>
-
-            <!-- Card 3: Approved Templates -->
-            <a
-              href="/template-studio"
-              class="group relative flex flex-col justify-between rounded-xl border border-outline-gray-2 bg-white p-4.5 shadow-xs transition-all hover:border-[#128C7E] hover:shadow-sm"
-              @click.prevent="navigateTo('/template-studio')"
-            >
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-medium uppercase tracking-wider text-ink-gray-6">Templates</span>
-                <span class="inline-flex items-center rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-700">
-                  {{ approvedTemplatesCount }} approved
-                </span>
-              </div>
-              <div class="mt-3 flex items-baseline gap-2">
-                <span class="text-3xl font-extrabold tracking-tight text-ink-gray-9">
-                  {{ approvedTemplatesCount }}
-                </span>
-                <span class="text-xs text-ink-gray-5">/ {{ templates.length }} total</span>
-              </div>
-              <p class="mt-2 text-[11px] text-ink-gray-5 group-hover:text-[#075E54]">
-                Meta-approved templates ready to broadcast &rarr;
-              </p>
+            <a href="/template-studio" class="block min-w-0" @click.prevent="navigateTo('/template-studio')">
+              <NumberCard
+                title="Templates"
+                :value="approvedTemplatesCount"
+                :target="templates.length"
+                color="#0369A1"
+                delta-caption="approved for send"
+              />
             </a>
-
-            <!-- Card 4: Active Accounts -->
-            <a
-              :href="channelPath()"
-              class="group relative flex flex-col justify-between rounded-xl border border-outline-gray-2 bg-white p-4.5 shadow-xs transition-all hover:border-[#128C7E] hover:shadow-sm"
-              @click.prevent="navigateTo(channelPath())"
-            >
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-medium uppercase tracking-wider text-ink-gray-6">WABA Channels</span>
-                <span
-                  class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
-                  :class="channelConnected ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'"
-                >
-                  {{ channelConnected ? 'Connected' : 'Setup' }}
-                </span>
-              </div>
-              <div class="mt-3 flex items-baseline gap-2">
-                <span class="text-3xl font-extrabold tracking-tight text-ink-gray-9">
-                  {{ activeAccountsCount }}
-                </span>
-                <span class="text-xs text-ink-gray-5">phone lines</span>
-              </div>
-              <p class="mt-2 truncate text-[11px] text-ink-gray-5 group-hover:text-[#075E54]">
-                {{ selectedAccountRow ? shownAccountName : `Default: ${defaultAccountName}` }} &rarr;
-              </p>
+            <a :href="channelPath()" class="block min-w-0" @click.prevent="navigateTo(channelPath())">
+              <NumberCard
+                title="WABA channels"
+                :value="activeAccountsCount"
+                :color="channelConnected ? '#047857' : '#B45309'"
+                :delta-caption="selectedAccountRow ? shownAccountName : `Default: ${defaultAccountName}`"
+              />
             </a>
           </div>
         </section>
 
         <!-- Quick Launchpad Navigation Tiles -->
         <section aria-labelledby="launchpad-heading">
-          <h2 id="launchpad-heading" class="text-sm font-semibold tracking-wide text-ink-gray-8 uppercase">
+          <h2 id="launchpad-heading" class="text-sm font-semibold uppercase tracking-wide text-ink-gray-8">
             Workspaces & Launchpad
           </h2>
           <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <a
+            <DeskCard
+              as="a"
               href="/conversations"
-              class="flex items-start gap-3 rounded-xl border border-outline-gray-2 bg-white p-4 shadow-xs transition-all hover:border-[#128C7E] hover:bg-surface-gray-2"
+              interactive
+              padding
+              class="!p-4"
               @click.prevent="navigateTo('/conversations')"
             >
-              <div class="grid size-9 shrink-0 place-items-center rounded-lg bg-teal-50 text-[#075E54]">
-                <span class="lucide-inbox size-5" aria-hidden="true" />
+              <div class="flex items-start gap-3">
+                <div class="grid size-9 shrink-0 place-items-center rounded-lg bg-teal-50 text-[#075E54]">
+                  <span class="lucide-inbox size-5" aria-hidden="true" />
+                </div>
+                <div class="min-w-0">
+                  <p class="text-sm font-semibold text-ink-gray-9">Conversations</p>
+                  <p class="mt-0.5 text-xs text-ink-gray-6">Live chats, agent assignment, media messages, and replies.</p>
+                </div>
               </div>
-              <div class="min-w-0">
-                <p class="text-sm font-semibold text-ink-gray-9">Conversations</p>
-                <p class="mt-0.5 text-xs text-ink-gray-6">Live chats, agent assignment, media messages, and replies.</p>
-              </div>
-            </a>
+            </DeskCard>
 
-            <a
+            <DeskCard
+              as="a"
               href="/marketing"
-              class="flex items-start gap-3 rounded-xl border border-outline-gray-2 bg-white p-4 shadow-xs transition-all hover:border-[#128C7E] hover:bg-surface-gray-2"
+              interactive
+              class="!p-4"
               @click.prevent="navigateTo('/marketing')"
             >
-              <div class="grid size-9 shrink-0 place-items-center rounded-lg bg-emerald-50 text-emerald-700">
-                <span class="lucide-megaphone size-5" aria-hidden="true" />
+              <div class="flex items-start gap-3">
+                <div class="grid size-9 shrink-0 place-items-center rounded-lg bg-emerald-50 text-emerald-700">
+                  <span class="lucide-megaphone size-5" aria-hidden="true" />
+                </div>
+                <div class="min-w-0">
+                  <p class="text-sm font-semibold text-ink-gray-9">Marketing & Broadcasts</p>
+                  <p class="mt-0.5 text-xs text-ink-gray-6">Launch outbound WhatsApp campaigns to customer groups.</p>
+                </div>
               </div>
-              <div class="min-w-0">
-                <p class="text-sm font-semibold text-ink-gray-9">Marketing & Broadcasts</p>
-                <p class="mt-0.5 text-xs text-ink-gray-6">Launch outbound WhatsApp campaigns to customer groups.</p>
-              </div>
-            </a>
+            </DeskCard>
 
-            <a
+            <DeskCard
+              as="a"
               href="/catalogs"
-              class="flex items-start gap-3 rounded-xl border border-outline-gray-2 bg-white p-4 shadow-xs transition-all hover:border-[#128C7E] hover:bg-surface-gray-2"
+              interactive
+              class="!p-4"
               @click.prevent="navigateTo('/catalogs')"
             >
-              <div class="grid size-9 shrink-0 place-items-center rounded-lg bg-orange-50 text-orange-700">
-                <span class="lucide-shopping-bag size-5" aria-hidden="true" />
+              <div class="flex items-start gap-3">
+                <div class="grid size-9 shrink-0 place-items-center rounded-lg bg-orange-50 text-orange-700">
+                  <span class="lucide-shopping-bag size-5" aria-hidden="true" />
+                </div>
+                <div class="min-w-0">
+                  <p class="text-sm font-semibold text-ink-gray-9">Catalogs</p>
+                  <p class="mt-0.5 text-xs text-ink-gray-6">Products, prices, and the Meta catalog id for this number.</p>
+                </div>
               </div>
-              <div class="min-w-0">
-                <p class="text-sm font-semibold text-ink-gray-9">Catalogs</p>
-                <p class="mt-0.5 text-xs text-ink-gray-6">Products, prices, and the Meta catalog id for this number.</p>
-              </div>
-            </a>
+            </DeskCard>
 
-            <a
+            <DeskCard
+              as="a"
               href="/template-studio"
-              class="flex items-start gap-3 rounded-xl border border-outline-gray-2 bg-white p-4 shadow-xs transition-all hover:border-[#128C7E] hover:bg-surface-gray-2"
+              interactive
+              class="!p-4"
               @click.prevent="navigateTo('/template-studio')"
             >
-              <div class="grid size-9 shrink-0 place-items-center rounded-lg bg-sky-50 text-sky-700">
-                <span class="lucide-layout-template size-5" aria-hidden="true" />
+              <div class="flex items-start gap-3">
+                <div class="grid size-9 shrink-0 place-items-center rounded-lg bg-sky-50 text-sky-700">
+                  <span class="lucide-layout-template size-5" aria-hidden="true" />
+                </div>
+                <div class="min-w-0">
+                  <p class="text-sm font-semibold text-ink-gray-9">Template Studio</p>
+                  <p class="mt-0.5 text-xs text-ink-gray-6">Design message templates with dynamic params & quick replies.</p>
+                </div>
               </div>
-              <div class="min-w-0">
-                <p class="text-sm font-semibold text-ink-gray-9">Template Studio</p>
-                <p class="mt-0.5 text-xs text-ink-gray-6">Design message templates with dynamic params & quick replies.</p>
-              </div>
-            </a>
+            </DeskCard>
 
-            <a
+            <DeskCard
+              as="a"
               :href="channelPath()"
-              class="flex items-start gap-3 rounded-xl border border-outline-gray-2 bg-white p-4 shadow-xs transition-all hover:border-[#128C7E] hover:bg-surface-gray-2"
+              interactive
+              class="!p-4"
               @click.prevent="navigateTo(channelPath())"
             >
-              <div class="grid size-9 shrink-0 place-items-center rounded-lg bg-amber-50 text-amber-700">
-                <span class="lucide-plug size-5" aria-hidden="true" />
+              <div class="flex items-start gap-3">
+                <div class="grid size-9 shrink-0 place-items-center rounded-lg bg-amber-50 text-amber-700">
+                  <span class="lucide-plug size-5" aria-hidden="true" />
+                </div>
+                <div class="min-w-0">
+                  <p class="text-sm font-semibold text-ink-gray-9">Integrations & WABA</p>
+                  <p class="mt-0.5 text-xs text-ink-gray-6">Configure WhatsApp Cloud API tokens, webhooks, and ERPNext.</p>
+                </div>
               </div>
-              <div class="min-w-0">
-                <p class="text-sm font-semibold text-ink-gray-9">Integrations & WABA</p>
-                <p class="mt-0.5 text-xs text-ink-gray-6">Configure WhatsApp Cloud API tokens, webhooks, and ERPNext.</p>
-              </div>
-            </a>
+            </DeskCard>
           </div>
         </section>
 
-        <!-- Priority Attention Queue / Recent Active Conversations -->
-        <section class="rounded-xl border border-outline-gray-2 bg-white p-5 shadow-xs" aria-labelledby="priority-queue-heading">
-              <div class="flex items-center justify-between border-b border-outline-gray-1 pb-4">
-                <div>
-                  <h3 id="priority-queue-heading" class="text-base font-semibold text-ink-gray-9">
-                    Conversations Needing Attention
-                  </h3>
-                  <p class="text-xs text-ink-gray-5">
-                    Threads requiring prompt agent reply or nearing 24-hour window closure.
-                  </p>
-                </div>
-                <a
-                  href="/conversations"
-                  class="inline-flex items-center gap-1 text-xs font-semibold text-[#075E54] hover:underline"
-                  @click.prevent="navigateTo('/conversations')"
-                >
-                  View all ({{ conversations.length }}) &rarr;
-                </a>
-              </div>
+        <DeskCard
+          title="Conversations Needing Attention"
+          description="Threads requiring prompt agent reply or nearing 24-hour window closure."
+          aria-labelledby="priority-queue-heading"
+        >
+          <template #actions>
+            <a
+              href="/conversations"
+              class="inline-flex items-center gap-1 text-xs font-semibold text-[#075E54] hover:underline"
+              @click.prevent="navigateTo('/conversations')"
+            >
+              View all ({{ conversations.length }}) &rarr;
+            </a>
+          </template>
 
-              <!-- List of priority threads -->
-              <div v-if="priorityQueue.length" class="mt-3 divide-y divide-outline-gray-1">
-                <div
-                  v-for="item in priorityQueue"
-                  :key="item.profile.name"
-                  class="flex flex-col gap-3 py-3.5 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div class="flex min-w-0 items-center gap-3">
-                    <Avatar
-                      :label="item.profile.profile_name || item.profile.phone_number"
-                      size="lg"
-                    />
-                    <div class="min-w-0">
-                      <div class="flex items-center gap-2">
-                        <p class="truncate text-sm font-semibold text-ink-gray-9">
-                          {{ item.profile.profile_name || item.profile.phone_number }}
-                        </p>
-                        <Badge
-                          v-if="item.needs_reply"
-                          theme="red"
-                          variant="subtle"
-                          size="sm"
-                          label="Needs Reply"
-                        />
-                        <Badge
-                          v-else-if="item.window?.status === 'open'"
-                          theme="green"
-                          variant="subtle"
-                          size="sm"
-                          :label="formatRemaining(item.window.expires_at)"
-                        />
-                      </div>
-                      <p class="truncate text-xs text-ink-gray-6">
-                        <span class="font-medium text-ink-gray-5">{{ item.profile.phone_number }}</span>
-                        <span class="mx-1">·</span>
-                        <span>{{ previewText(item.preview) }}</span>
-                      </p>
-                    </div>
-                  </div>
-
-                  <div class="flex shrink-0 items-center gap-2">
-                    <span v-if="item.preview?.creation" class="text-[11px] text-ink-gray-5">
-                      {{ formatTime(item.preview.creation) }}
-                    </span>
-                    <Button
+          <div v-if="priorityQueue.length" class="divide-y divide-outline-gray-1">
+            <div
+              v-for="item in priorityQueue"
+              :key="item.profile.name"
+              class="flex flex-col gap-3 py-3.5 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div class="flex min-w-0 items-center gap-3">
+                <Avatar
+                  :label="item.profile.profile_name || item.profile.phone_number"
+                  size="lg"
+                />
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2">
+                    <p class="truncate text-sm font-semibold text-ink-gray-9">
+                      {{ item.profile.profile_name || item.profile.phone_number }}
+                    </p>
+                    <Badge
+                      v-if="item.needs_reply"
+                      theme="red"
                       variant="subtle"
                       size="sm"
-                      class="text-[#075E54] font-medium"
-                      label="Reply"
-                      @click="handleOpenProfile(item.profile.name)"
+                      label="Needs Reply"
+                    />
+                    <Badge
+                      v-else-if="item.window?.status === 'open'"
+                      theme="green"
+                      variant="subtle"
+                      size="sm"
+                      :label="formatRemaining(item.window.expires_at)"
                     />
                   </div>
-                </div>
-              </div>
-
-              <!-- Empty state when all caught up -->
-              <div v-else class="py-8 text-center">
-                <div class="mx-auto grid size-10 place-items-center rounded-full bg-emerald-50 text-emerald-600">
-                  <span class="lucide-check-circle-2 size-5" aria-hidden="true" />
-                </div>
-                <p class="mt-2 text-sm font-medium text-ink-gray-9">All customer messages are handled!</p>
-                <p class="text-xs text-ink-gray-5">No active conversations currently require immediate reply.</p>
-              </div>
-            </section>
-
-        <!-- Logs and policy share the row and grow into leftover width; health and channels sit beside each other below. -->
-        <div class="grid flex-1 grid-cols-1 items-stretch gap-6 lg:grid-cols-2 lg:grid-rows-[minmax(11rem,1fr)_auto]">
-            <section class="flex h-full min-h-0 flex-col rounded-xl border border-outline-gray-2 bg-white p-5 shadow-xs" aria-labelledby="activity-feed-heading">
-              <div class="flex shrink-0 items-center justify-between border-b border-outline-gray-1 pb-4">
-                <div>
-                  <h3 id="activity-feed-heading" class="text-base font-semibold text-ink-gray-9">
-                    Recent Message Stream
-                  </h3>
-                  <p class="text-xs text-ink-gray-5">
-                    Latest incoming inquiries, outgoing replies, and delivery status updates.
+                  <p class="truncate text-xs text-ink-gray-6">
+                    <span class="font-medium text-ink-gray-5">{{ item.profile.phone_number }}</span>
+                    <span class="mx-1">·</span>
+                    <span>{{ previewText(item.preview) }}</span>
                   </p>
                 </div>
-                <a
-                  href="/integrations/logs"
-                  class="inline-flex items-center gap-1 text-xs font-semibold text-[#075E54] hover:underline"
-                  @click.prevent="navigateTo('/integrations/logs')"
-                >
-                  Audit logs &rarr;
-                </a>
               </div>
 
-              <div v-if="recentLogs.length" class="mt-3 min-h-0 flex-1 divide-y divide-outline-gray-1 overflow-y-auto">
-                <div
-                  v-for="log in recentLogs"
-                  :key="log.name"
-                  class="flex items-start justify-between gap-3 py-3"
-                >
-                  <div class="min-w-0">
-                    <div class="flex items-center gap-2">
-                      <span class="text-xs font-semibold text-ink-gray-8">{{ log.event_type }}</span>
-                      <span
-                        class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
-                        :class="
-                          log.level === 'Error'
-                            ? 'bg-red-100 text-red-700'
-                            : log.level === 'Warning'
-                              ? 'bg-amber-100 text-amber-700'
-                              : 'bg-gray-100 text-gray-700'
-                        "
-                      >
-                        {{ log.level }}
-                      </span>
-                      <span v-if="log.account" class="text-[11px] text-ink-gray-5">
-                        {{ log.account }}
-                      </span>
-                    </div>
-                    <p class="mt-1 truncate text-xs text-ink-gray-6">{{ userFacingError(log.message, log.level === 'Error' ? 'Something went wrong.' : 'Activity recorded.') }}</p>
+              <div class="flex shrink-0 items-center gap-2">
+                <span v-if="item.preview?.creation" class="text-[11px] text-ink-gray-5">
+                  {{ formatTime(item.preview.creation) }}
+                </span>
+                <Button
+                  variant="subtle"
+                  size="sm"
+                  class="font-medium text-[#075E54]"
+                  label="Reply"
+                  @click="handleOpenProfile(item.profile.name)"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div v-else class="py-8 text-center">
+            <div class="mx-auto grid size-10 place-items-center rounded-full bg-emerald-50 text-emerald-600">
+              <span class="lucide-check-circle-2 size-5" aria-hidden="true" />
+            </div>
+            <p class="mt-2 text-sm font-medium text-ink-gray-9">All customer messages are handled!</p>
+            <p class="text-xs text-ink-gray-5">No active conversations currently require immediate reply.</p>
+          </div>
+        </DeskCard>
+
+        <div class="grid flex-1 grid-cols-1 items-stretch gap-6 lg:grid-cols-2 lg:grid-rows-[minmax(11rem,1fr)_auto]">
+          <DeskCard
+            class="flex h-full min-h-0 flex-col"
+            title="Recent Message Stream"
+            description="Latest incoming inquiries, outgoing replies, and delivery status updates."
+          >
+            <template #actions>
+              <a
+                href="/integrations/logs"
+                class="inline-flex items-center gap-1 text-xs font-semibold text-[#075E54] hover:underline"
+                @click.prevent="navigateTo('/integrations/logs')"
+              >
+                Audit logs &rarr;
+              </a>
+            </template>
+
+            <div v-if="recentLogs.length" class="min-h-0 flex-1 divide-y divide-outline-gray-1 overflow-y-auto">
+              <div
+                v-for="log in recentLogs"
+                :key="log.name"
+                class="flex items-start justify-between gap-3 py-3"
+              >
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs font-semibold text-ink-gray-8">{{ log.event_type }}</span>
+                    <span
+                      class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
+                      :class="
+                        log.level === 'Error'
+                          ? 'bg-red-100 text-red-700'
+                          : log.level === 'Warning'
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-gray-100 text-gray-700'
+                      "
+                    >
+                      {{ log.level }}
+                    </span>
+                    <span v-if="log.account" class="text-[11px] text-ink-gray-5">
+                      {{ log.account }}
+                    </span>
                   </div>
-                  <span class="shrink-0 text-[11px] text-ink-gray-5">
-                    {{ formatTime(log.timestamp) }}
-                  </span>
+                  <p class="mt-1 truncate text-xs text-ink-gray-6">
+                    {{ userFacingError(log.message, log.level === 'Error' ? 'Something went wrong.' : 'Activity recorded.') }}
+                  </p>
                 </div>
+                <span class="shrink-0 text-[11px] text-ink-gray-5">
+                  {{ formatTime(log.timestamp) }}
+                </span>
               </div>
-              <div v-else class="flex flex-1 items-center justify-center py-6 text-center text-xs text-ink-gray-5">
-                No recent message logs recorded.
-              </div>
-            </section>
+            </div>
+            <div v-else class="flex flex-1 items-center justify-center py-6 text-center text-xs text-ink-gray-5">
+              No recent message logs recorded.
+            </div>
+          </DeskCard>
 
-            <section class="flex h-full min-h-0 flex-col rounded-xl border border-teal-200/60 bg-gradient-to-br from-teal-50/70 to-emerald-50/40 p-5 text-sm text-ink-gray-7 shadow-xs">
-              <h4 class="flex shrink-0 items-center gap-1.5 font-semibold text-[#075E54]">
+          <DeskCard tone="accent" class="flex h-full min-h-0 flex-col text-sm text-ink-gray-7">
+            <template #header>
+              <h4 class="flex items-center gap-1.5 font-semibold text-[#075E54]">
                 <span class="lucide-shield-check size-4" aria-hidden="true" />
                 WhatsApp SLA & Policy Rules
               </h4>
-              <ul class="mt-3 flex min-h-0 flex-1 flex-col gap-3 leading-relaxed">
-                <li class="flex flex-1 items-center gap-2.5 rounded-lg bg-white/75 px-3.5 py-3">
-                  <span class="font-bold text-[#075E54]">•</span>
-                  <span><strong>24-Hour Rule:</strong> Free-form messages can only be sent within 24 hours of the customer's last incoming message.</span>
-                </li>
-                <li class="flex flex-1 items-center gap-2.5 rounded-lg bg-white/75 px-3.5 py-3">
-                  <span class="font-bold text-[#075E54]">•</span>
-                  <span><strong>Templates Required:</strong> To initiate conversations or reply after 24h, you must use an approved WhatsApp Template.</span>
-                </li>
-                <li class="flex flex-1 items-center gap-2.5 rounded-lg bg-white/75 px-3.5 py-3">
-                  <span class="font-bold text-[#075E54]">•</span>
-                  <span><strong>Read Receipts:</strong> Incoming messages automatically update read markers when configured in account settings.</span>
-                </li>
-              </ul>
-            </section>
+            </template>
+            <ul class="flex min-h-0 flex-1 flex-col gap-3 leading-relaxed">
+              <li class="flex flex-1 items-center gap-2.5 rounded-lg bg-white/75 px-3.5 py-3">
+                <span class="font-bold text-[#075E54]">•</span>
+                <span><strong>24-Hour Rule:</strong> Free-form messages can only be sent within 24 hours of the customer's last incoming message.</span>
+              </li>
+              <li class="flex flex-1 items-center gap-2.5 rounded-lg bg-white/75 px-3.5 py-3">
+                <span class="font-bold text-[#075E54]">•</span>
+                <span><strong>Templates Required:</strong> To initiate conversations or reply after 24h, you must use an approved WhatsApp Template.</span>
+              </li>
+              <li class="flex flex-1 items-center gap-2.5 rounded-lg bg-white/75 px-3.5 py-3">
+                <span class="font-bold text-[#075E54]">•</span>
+                <span><strong>Read Receipts:</strong> Incoming messages automatically update read markers when configured in account settings.</span>
+              </li>
+            </ul>
+          </DeskCard>
 
-            <section class="flex h-full flex-col rounded-xl border border-outline-gray-2 bg-white p-5 shadow-xs" aria-labelledby="integration-status-heading">
-              <div class="flex items-center justify-between border-b border-outline-gray-1 pb-3">
-                <h3 id="integration-status-heading" class="text-sm font-semibold text-ink-gray-9">
-                  Integration & System Health
-                </h3>
+          <DeskCard title="Integration & System Health" class="flex h-full flex-col">
+            <template #actions>
+              <span
+                class="size-2 rounded-full"
+                :class="status?.whatsapp_installed || !live ? 'bg-emerald-500' : 'bg-amber-500'"
+              />
+            </template>
+
+            <p v-if="status?.detail" class="text-xs leading-relaxed text-ink-gray-6">
+              {{ status.detail }}
+            </p>
+
+            <dl class="mt-1 flex-1 divide-y divide-outline-gray-1 text-xs">
+              <div class="flex items-center justify-between py-2.5">
+                <dt class="text-ink-gray-5">WhatsApp App</dt>
+                <dd class="font-medium" :class="status?.whatsapp_installed || !live ? 'text-emerald-700' : 'text-amber-700'">
+                  {{ status ? (status.whatsapp_installed ? 'Installed' : 'Not installed') : (!live ? 'Simulated' : 'Checking…') }}
+                </dd>
+              </div>
+              <div class="flex items-center justify-between py-2.5">
+                <dt class="text-ink-gray-5">DocTypes</dt>
+                <dd class="font-medium text-ink-gray-8">
+                  {{ status ? (status.doctypes_ready ? 'Ready' : 'Not ready') : (!live ? 'Ready' : 'Checking…') }}
+                </dd>
+              </div>
+              <div class="flex items-center justify-between py-2.5">
+                <dt class="text-ink-gray-5">Default Account</dt>
+                <dd class="font-medium text-ink-gray-8">{{ defaultAccountName }}</dd>
+              </div>
+              <div class="flex items-center justify-between py-2.5">
+                <dt class="text-ink-gray-5">Active Accounts</dt>
+                <dd class="font-medium text-ink-gray-8">{{ accountCount(activeAccountsCount) }}</dd>
+              </div>
+              <div class="py-2.5">
+                <dt class="text-ink-gray-5">Missing Dependencies</dt>
+                <dd class="mt-1 font-medium text-ink-gray-8">
+                  <ul v-if="status?.missing_dependencies?.length" class="list-disc space-y-0.5 pl-4 text-red-600">
+                    <li v-for="item in status.missing_dependencies" :key="item">{{ item }}</li>
+                  </ul>
+                  <span v-else class="text-emerald-600">None · All dependencies satisfied</span>
+                </dd>
+              </div>
+            </dl>
+          </DeskCard>
+
+          <DeskCard title="Configured Channels" class="flex h-full flex-col">
+            <template #actions>
+              <a
+                :href="channelPath()"
+                class="text-xs font-medium text-[#075E54] hover:underline"
+                @click.prevent="navigateTo(channelPath())"
+              >
+                Manage &rarr;
+              </a>
+            </template>
+
+            <div class="flex-1 space-y-2.5">
+              <div
+                v-for="acc in accounts"
+                :key="acc.name"
+                class="flex items-center justify-between rounded-lg border border-outline-gray-1 bg-surface-gray-1/70 px-3 py-2 text-xs"
+              >
+                <div>
+                  <p class="font-semibold text-ink-gray-9">{{ acc.account_name || acc.name }}</p>
+                  <p class="text-[11px] text-ink-gray-5">
+                    {{ acc.is_default ? 'Primary default line' : 'Secondary channel' }}
+                  </p>
+                </div>
                 <span
-                  class="size-2 rounded-full"
-                  :class="status?.whatsapp_installed || !live ? 'bg-emerald-500' : 'bg-amber-500'"
-                />
-              </div>
-
-              <p v-if="status?.detail" class="mt-2 text-xs leading-relaxed text-ink-gray-6">
-                {{ status.detail }}
-              </p>
-
-              <dl class="mt-3 flex-1 divide-y divide-outline-gray-1 text-xs">
-                <div class="flex items-center justify-between py-2.5">
-                  <dt class="text-ink-gray-5">WhatsApp App</dt>
-                  <dd class="font-medium" :class="status?.whatsapp_installed || !live ? 'text-emerald-700' : 'text-amber-700'">
-                    {{ status ? (status.whatsapp_installed ? 'Installed' : 'Not installed') : (!live ? 'Simulated' : 'Checking…') }}
-                  </dd>
-                </div>
-
-                <div class="flex items-center justify-between py-2.5">
-                  <dt class="text-ink-gray-5">DocTypes</dt>
-                  <dd class="font-medium text-ink-gray-8">
-                    {{ status ? (status.doctypes_ready ? 'Ready' : 'Not ready') : (!live ? 'Ready' : 'Checking…') }}
-                  </dd>
-                </div>
-
-                <div class="flex items-center justify-between py-2.5">
-                  <dt class="text-ink-gray-5">Default Account</dt>
-                  <dd class="font-medium text-ink-gray-8">
-                    {{ defaultAccountName }}
-                  </dd>
-                </div>
-
-                <div class="flex items-center justify-between py-2.5">
-                  <dt class="text-ink-gray-5">Active Accounts</dt>
-                  <dd class="font-medium text-ink-gray-8">
-                    {{ accountCount(activeAccountsCount) }}
-                  </dd>
-                </div>
-
-                <div class="py-2.5">
-                  <dt class="text-ink-gray-5">Missing Dependencies</dt>
-                  <dd class="mt-1 font-medium text-ink-gray-8">
-                    <ul v-if="status?.missing_dependencies?.length" class="list-disc space-y-0.5 pl-4 text-red-600">
-                      <li v-for="item in status.missing_dependencies" :key="item">{{ item }}</li>
-                    </ul>
-                    <span v-else class="text-emerald-600">None · All dependencies satisfied</span>
-                  </dd>
-                </div>
-              </dl>
-            </section>
-
-            <!-- Configured WhatsApp Channels / Phone Lines -->
-            <section class="flex h-full flex-col rounded-xl border border-outline-gray-2 bg-white p-5 shadow-xs" aria-labelledby="channels-heading">
-              <div class="flex items-center justify-between border-b border-outline-gray-1 pb-3">
-                <h3 id="channels-heading" class="text-sm font-semibold text-ink-gray-9">
-                  Configured Channels
-                </h3>
-                <a
-                  :href="channelPath()"
-                  class="text-xs font-medium text-[#075E54] hover:underline"
-                  @click.prevent="navigateTo(channelPath())"
+                  class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
+                  :class="acc.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-700'"
                 >
-                  Manage &rarr;
-                </a>
+                  {{ acc.status }}
+                </span>
               </div>
-
-              <div class="mt-3 flex-1 space-y-2.5">
-                <div
-                  v-for="acc in accounts"
-                  :key="acc.name"
-                  class="flex items-center justify-between rounded-lg border border-outline-gray-1 bg-surface-gray-1/70 px-3 py-2 text-xs"
-                >
-                  <div>
-                    <p class="font-semibold text-ink-gray-9">{{ acc.account_name || acc.name }}</p>
-                    <p class="text-[11px] text-ink-gray-5">
-                      {{ acc.is_default ? 'Primary default line' : 'Secondary channel' }}
-                    </p>
-                  </div>
-                  <span
-                    class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
-                    :class="acc.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-700'"
-                  >
-                    {{ acc.status }}
-                  </span>
-                </div>
-              </div>
-            </section>
+            </div>
+          </DeskCard>
         </div>
       </div>
     </div>

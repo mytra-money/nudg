@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
 import { Badge, Button, Dialog, FormControl, Select, TextInput, toast } from 'frappe-ui'
+import { NumberCard } from 'frappe-ui/charts'
 import DeskTemplatePreview from '@/components/DeskTemplatePreview.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import TemplateButtonFields from '@/components/templates/TemplateButtonFields.vue'
@@ -457,27 +458,42 @@ function clearFilters() {
       </div>
     </header>
 
-    <section class="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-outline-gray-2 bg-white px-4 py-1.5 text-xs">
-      <button type="button" class="inline-flex items-baseline gap-1 rounded px-1 hover:bg-surface-gray-2" @click="applyKpiFilter('Approved')">
-        <span class="font-semibold text-emerald-700">{{ countApproved }}</span>
-        <span class="text-ink-gray-5">approved</span>
-        <span class="text-ink-gray-4">/ {{ countTotal }}</span>
-      </button>
-      <span class="text-ink-gray-3" aria-hidden="true">·</span>
-      <button type="button" class="inline-flex items-baseline gap-1 rounded px-1 hover:bg-surface-gray-2" @click="applyKpiFilter('Pending')">
-        <span class="font-semibold text-amber-700">{{ countPending }}</span>
-        <span class="text-ink-gray-5">pending</span>
-      </button>
-      <span class="text-ink-gray-3" aria-hidden="true">·</span>
-      <button type="button" class="inline-flex items-baseline gap-1 rounded px-1 hover:bg-surface-gray-2" @click="applyKpiFilter('Utility')">
-        <span class="font-semibold text-[#075E54]">{{ countUtility }}</span>
-        <span class="text-ink-gray-5">utility</span>
-      </button>
-      <span class="text-ink-gray-3" aria-hidden="true">·</span>
-      <button type="button" class="inline-flex items-baseline gap-1 rounded px-1 hover:bg-surface-gray-2" @click="applyKpiFilter('Marketing')">
-        <span class="font-semibold text-purple-700">{{ countMarketing }}</span>
-        <span class="text-ink-gray-5">marketing</span>
-      </button>
+    <section class="shrink-0 border-b border-outline-gray-2 bg-white px-4 py-3">
+      <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <button type="button" class="w-full text-left" @click="applyKpiFilter('Approved')">
+          <NumberCard
+            title="Approved templates"
+            :value="countApproved"
+            :target="countTotal"
+            color="#047857"
+            delta-caption="Click to filter"
+          />
+        </button>
+        <button type="button" class="w-full text-left" @click="applyKpiFilter('Pending')">
+          <NumberCard
+            title="Pending review"
+            :value="countPending"
+            color="#B45309"
+            delta-caption="with Meta"
+          />
+        </button>
+        <button type="button" class="w-full text-left" @click="applyKpiFilter('Utility')">
+          <NumberCard
+            title="Utility alerts"
+            :value="countUtility"
+            color="#075E54"
+            delta-caption="operational"
+          />
+        </button>
+        <button type="button" class="w-full text-left" @click="applyKpiFilter('Marketing')">
+          <NumberCard
+            title="Marketing broadcasts"
+            :value="countMarketing"
+            color="#7E22CE"
+            delta-caption="promotional"
+          />
+        </button>
+      </div>
     </section>
 
     <!-- Filters & Search Toolbar -->
