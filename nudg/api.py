@@ -1112,7 +1112,12 @@ def _rendered_for(raw: list) -> list:
 
 
 def _fold(messages: list) -> list:
-	ordered = sorted(messages, key=lambda row: (row.get("creation") or "", row.get("name") or ""))
+	# WA Message rows are stamped to ISO strings. Official get_messages rows
+	# still carry datetime creation, and a missing time falls back to "".
+	ordered = sorted(
+		messages,
+		key=lambda row: (_iso(row.get("creation")) or "", row.get("name") or ""),
+	)
 	# A retried webhook can leave two WA Message rows for one WhatsApp id.
 	# Keep the earliest so the thread shows that message once.
 	seen_ids: set[str] = set()
