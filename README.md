@@ -1,6 +1,6 @@
 <div align="center" markdown="1">
 
-<img src="docs/images/logo.svg" alt="Nudg logo" width="80" />
+<img src="logo.svg" alt="Nudg logo" width="80" />
 
 # Nudg
 
@@ -8,7 +8,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](license.txt)
 
-[Try it](https://nudg.mytra.money) · [Documentation](docs/index.md) · [Getting started](#getting-started)
+[Try it](https://nudg.mytra.money) · [Getting started](#getting-started)
 
 </div>
 
@@ -125,9 +125,7 @@ bench --site <site> clear-cache
 
 `bench build --app nudg` from the bench root does the same build.
 
-Then open `http://<site>:8000/nudg`.
-
-See [Prerequisites](docs/getting-started/prerequisites.md), [Installation](docs/getting-started/installation.md), and [Configuration](docs/getting-started/configuration.md). The full guide lives in `docs/` and is published with Frappe Wiki.
+Then open `http://<site>:8000/nudg`. The guide is maintained in Desk.
 
 ---
 

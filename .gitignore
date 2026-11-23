@@ -21,6 +21,9 @@ nudg/public/frontend/
 # Internal notes. Not published.
 /private-docs/
 
+# Wiki source stays on this machine. The published guide is in Desk.
+/docs/
+
 # Tool caches
 .pytest_cache/
 .mypy_cache/
