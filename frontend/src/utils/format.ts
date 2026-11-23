@@ -106,6 +106,7 @@ export function whatsappScreen(doctype: string): { path: string; manager?: boole
     'wa catalog': { path: '/catalogs', manager: true },
     'wa catalog item': { path: '/catalogs', manager: true },
     'utm campaign': { path: '/marketing', manager: true },
+    'wa campaign': { path: '/marketing', manager: true },
     'wa quick reply': { path: '/settings' },
     'wa campaign recipient': { path: '/marketing', manager: true },
     'wa signup settings': { path: '/integrations', manager: true },

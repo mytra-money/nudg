@@ -1,6 +1,6 @@
 """Drop campaign and profile custom fields that schedules replaced.
 
-UTM Campaign keeps whatsapp_schedules and whatsapp_recipient_list. The hidden
+UTM Campaign keeps whatsapp_schedules. The hidden
 single-send columns are not recreated. WA Profile consent lives on status,
 not on consent_status or consent_reason.
 """

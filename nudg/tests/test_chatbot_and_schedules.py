@@ -10,7 +10,7 @@ from nudg.chatbot.ai_responder import phone_variants
 from nudg.chatbot.flow_engine import next_step_name, substitute, validate_input
 from nudg.chatbot.keyword_matcher import rule_matches
 from nudg.services.bulk import clean_mobile
-from nudg.services.campaign_schedules import schedule_is_due
+from nudg.services.campaign_schedules import end_date_for, schedule_is_due, schedule_sends_on, trigger_time_reached
 
 
 class _Rule:
@@ -76,6 +76,19 @@ class TestChatbotMatching(unittest.TestCase):
 		self.assertTrue(schedule_is_due(start, 3, on_date=datetime(2026, 11, 4).date()))
 		self.assertTrue(schedule_is_due(start, 3, on_date=datetime(2026, 11, 6).date()))
 		self.assertFalse(schedule_is_due(start, 3, on_date=datetime(2026, 11, 6).date(), already_sent=True))
+
+	def test_end_date_and_trigger_match_email_campaign(self):
+		start = datetime(2026, 11, 1).date()
+		self.assertEqual(end_date_for(start, [0, 3, 1]), datetime(2026, 11, 4).date())
+		self.assertIsNone(end_date_for(start, []))
+		self.assertTrue(schedule_sends_on(start, 3, datetime(2026, 11, 4).date()))
+		self.assertFalse(schedule_sends_on(start, 3, datetime(2026, 11, 5).date()))
+		self.assertFalse(schedule_sends_on(start, 3, datetime(2026, 11, 3).date()))
+		morning = datetime(2026, 11, 4, 8, 59)
+		due = datetime(2026, 11, 4, 9, 0)
+		self.assertFalse(trigger_time_reached("09:00:00", morning))
+		self.assertTrue(trigger_time_reached("09:00", due))
+		self.assertFalse(trigger_time_reached(None, due))
 
 
 if __name__ == "__main__":

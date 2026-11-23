@@ -373,17 +373,22 @@ def auto_assign_round_robin(profile: str) -> dict:
 @frappe.whitelist()
 def list_campaigns(account: str | None = None, start: int | None = 0, limit: int | None = None) -> list:
 	_require_manager()
-	return campaigns.list_campaigns(account, start=start, limit=limit)
+	from nudg.services.campaign_schedules import list_whatsapp_campaigns
+
+	return list_whatsapp_campaigns(account)
 
 
 @frappe.whitelist()
 def get_campaign(name: str) -> dict:
 	_require_manager()
-	return campaigns.get_campaign(name)
+	from nudg.services.campaign_schedules import get_whatsapp_campaign
+
+	return get_whatsapp_campaign(name)
 
 
 @frappe.whitelist()
 def run_campaign(name: str) -> dict:
+	"""Create the bulk messages that are due for this WhatsApp Campaign."""
 	_require_manager()
 	return campaigns.enqueue_run(name)
 
@@ -395,22 +400,36 @@ def list_recipient_lists(account: str | None = None) -> list:
 
 
 @frappe.whitelist()
+def list_recipient_profiles(account: str | None = None) -> list:
+	_require_manager()
+	from nudg.services.campaign_schedules import list_recipient_profiles as _profiles
+
+	return _profiles(account)
+
+
+@frappe.whitelist()
 def create_campaign(
 	name: str,
 	campaign_description: str | None = None,
 	whatsapp_account: str | None = None,
-	whatsapp_start_date: str | None = None,
-	whatsapp_recipient_list: str | None = None,
+	recipient_type: str | None = None,
+	recipient: str | None = None,
+	start_date: str | None = None,
+	trigger_time: str | None = None,
 	schedules: str | list | None = None,
 ) -> dict:
-	"""Create a draft broadcast from the Marketing screen."""
+	"""Create a WhatsApp Campaign. It sends the bulk message, not the campaign."""
 	_require_manager()
-	return campaigns.create_campaign(
+	from nudg.services.campaign_schedules import create_whatsapp_campaign
+
+	return create_whatsapp_campaign(
 		name,
 		campaign_description,
 		whatsapp_account,
-		whatsapp_start_date=whatsapp_start_date,
-		whatsapp_recipient_list=whatsapp_recipient_list,
+		recipient_type=recipient_type,
+		recipient=recipient,
+		start_date=start_date,
+		trigger_time=trigger_time,
 		schedules=schedules,
 	)
 
@@ -421,27 +440,35 @@ def update_campaign(
 	campaign_name: str | None = None,
 	campaign_description: str | None = None,
 	whatsapp_account: str | None = None,
-	whatsapp_start_date: str | None = None,
-	whatsapp_recipient_list: str | None = None,
+	recipient_type: str | None = None,
+	recipient: str | None = None,
+	start_date: str | None = None,
+	trigger_time: str | None = None,
 	schedules: str | list | None = None,
 ) -> dict:
 	_require_manager()
-	return campaigns.update_campaign(
+	from nudg.services.campaign_schedules import update_whatsapp_campaign
+
+	return update_whatsapp_campaign(
 		name,
 		campaign_name,
 		campaign_description,
 		whatsapp_account,
-		whatsapp_start_date=whatsapp_start_date,
-		whatsapp_recipient_list=whatsapp_recipient_list,
+		recipient_type=recipient_type,
+		recipient=recipient,
+		start_date=start_date,
+		trigger_time=trigger_time,
 		schedules=schedules,
 	)
 
 
 @frappe.whitelist()
 def delete_campaign(name: str) -> dict:
-	"""Delete a draft, scheduled, or cancelled campaign."""
+	"""Delete a WhatsApp Campaign that has not created a bulk message."""
 	_require_manager()
-	return campaigns.delete_campaign(name)
+	from nudg.services.campaign_schedules import delete_whatsapp_campaign
+
+	return delete_whatsapp_campaign(name)
 
 
 @frappe.whitelist()
@@ -519,8 +546,9 @@ def delete_catalog_item(name: str) -> dict:
 	name = (name or "").strip()
 	if not name or not frappe.db.exists("WA Catalog Item", name):
 		frappe.throw(_("Catalog item not found."))
-	catalog = frappe.db.get_value("WA Catalog Item", name, "catalog")
-	account = frappe.db.get_value("WA Catalog", catalog, "whatsapp_account") if catalog else None
+	catalog, account = frappe.db.get_value("WA Catalog Item", name, ["catalog", "whatsapp_account"]) or (None, None)
+	if not account and catalog:
+		account = frappe.db.get_value("WA Catalog", catalog, "whatsapp_account")
 	if account:
 		_assert_account_access(account)
 	frappe.delete_doc("WA Catalog Item", name, ignore_permissions=True, force=True)

@@ -433,9 +433,14 @@ function catalogItemBlocked(item: any) {
 }
 
 const filteredCatalogItems = computed(() => {
-  if (!catalogQuery.value.trim()) return catalogItems.value
+  const account = current.value?.profile?.whatsapp_account
+  let rows = catalogItems.value
+  if (account) {
+    rows = rows.filter((item) => !item.whatsapp_account || item.whatsapp_account === account)
+  }
+  if (!catalogQuery.value.trim()) return rows
   const term = catalogQuery.value.toLowerCase()
-  return catalogItems.value.filter(
+  return rows.filter(
     (i) => (i.item_name || '').toLowerCase().includes(term) || (i.sku || '').toLowerCase().includes(term),
   )
 })

@@ -12,8 +12,6 @@ from typing import Any
 
 import frappe
 from frappe import _
-from frappe.utils import now_datetime
-
 from nudg.integrations.connector.factory import get_connector
 from nudg.integrations.whatsapp import adapter
 
@@ -61,13 +59,6 @@ def list_campaigns(account: str | None = None, start: int | None = 0, limit: int
 			"slug",
 			"campaign_description",
 			"whatsapp_account",
-			"whatsapp_status",
-			"whatsapp_start_date",
-			"whatsapp_recipient_list",
-			"whatsapp_sent_count",
-			"whatsapp_delivered_count",
-			"whatsapp_read_count",
-			"whatsapp_failed_count",
 			"whatsapp_last_error",
 			"modified",
 		],
@@ -86,17 +77,9 @@ def list_campaigns(account: str | None = None, start: int | None = 0, limit: int
 			"description": c.get("campaign_description"),
 			"whatsapp_account": c.get("whatsapp_account"),
 			"whatsapp_channel": c.get("whatsapp_account"),
-			"whatsapp_recipient_list": c.get("whatsapp_recipient_list"),
 			"template": template,
 			"whatsapp_template": template,
-			"status": c.get("whatsapp_status") or "Draft",
-			"whatsapp_status": c.get("whatsapp_status") or "Draft",
-			"scheduled_at": c.get("whatsapp_start_date"),
-			"whatsapp_start_date": c.get("whatsapp_start_date"),
-			"sent_count": int(c.get("whatsapp_sent_count") or 0),
-			"delivered_count": int(c.get("whatsapp_delivered_count") or 0),
-			"read_count": int(c.get("whatsapp_read_count") or 0),
-			"failed_count": int(c.get("whatsapp_failed_count") or 0),
+			"status": "Draft",
 			"last_error": c.get("whatsapp_last_error"),
 			"modified": c.modified,
 		})
@@ -113,15 +96,8 @@ def get_campaign(name: str) -> dict:
 	d["whatsapp_channel"] = doc.get("whatsapp_account")
 	d["template"] = template
 	d["whatsapp_template"] = template
-	d["status"] = doc.get("whatsapp_status") or "Draft"
-	d["scheduled_at"] = doc.get("whatsapp_start_date")
-	d["whatsapp_start_date"] = doc.get("whatsapp_start_date")
-	d["whatsapp_recipient_list"] = doc.get("whatsapp_recipient_list")
+	d["status"] = "Draft"
 	d["whatsapp_schedules"] = doc.get("whatsapp_schedules") or []
-	d["sent_count"] = int(doc.get("whatsapp_sent_count") or 0)
-	d["delivered_count"] = int(doc.get("whatsapp_delivered_count") or 0)
-	d["read_count"] = int(doc.get("whatsapp_read_count") or 0)
-	d["failed_count"] = int(doc.get("whatsapp_failed_count") or 0)
 	d["last_error"] = doc.get("whatsapp_last_error")
 	d["recipients"] = _recipient_rows(doc)
 	return d
@@ -218,20 +194,6 @@ def check_recipient_consent(profile: str | None = None, phone_number: str | None
 			if str(prof_status or "").lower() in ("blocked", "opted-out", "opt-out", "unsubscribed"):
 				return False
 
-	return True
-
-
-def _claim_campaign(name: str) -> bool:
-	"""Move Draft or Scheduled to Running. Only the caller that updates the row may send."""
-	frappe.db.sql(
-		"""UPDATE `tabUTM Campaign`
-		   SET whatsapp_status = 'Running'
-		   WHERE name = %s AND whatsapp_status IN ('Draft', 'Scheduled')""",
-		(name,),
-	)
-	rowcount = getattr(getattr(frappe.db, "_cursor", None), "rowcount", None)
-	if isinstance(rowcount, int) and not isinstance(rowcount, bool):
-		return rowcount > 0
 	return True
 
 
@@ -376,53 +338,20 @@ def run_campaign(name: str, claimed: int = 0) -> dict:
 
 
 def enqueue_run(name: str) -> dict:
-	"""Claim the campaign, then enqueue one worker. A second claim does not send again."""
-	if not _claim_campaign(name):
-		status = frappe.db.get_value("UTM Campaign", name, "whatsapp_status") or "Running"
-		return {"name": name, "status": status, "queued": False, "already_running": True}
-	frappe.enqueue(
-		"nudg.services.campaigns.run_campaign",
-		name=name,
-		claimed=1,
-		queue="short",
-		timeout=600,
-		enqueue_after_commit=True,
-	)
-	return {"name": name, "status": "Running", "queued": True}
+	"""UTM Campaign no longer sends. WhatsApp Campaign creates the bulk message."""
+	from nudg.services.campaign_schedules import send_whatsapp_campaign
+
+	if frappe.db.exists("WA Campaign", name):
+		created = send_whatsapp_campaign(name)
+		return {"name": name, "queued": bool(created), "bulk_messages": created}
+	frappe.throw(_("Send this from a WhatsApp Campaign. The campaign record no longer sends messages."))
 
 
 def check_and_run_scheduled_campaigns(now: bool = False) -> list[str]:
-	"""Background scheduler runner: triggers scheduled campaigns whose scheduled_at is due."""
-	current_time = now_datetime()
-	filters = {"whatsapp_status": "Scheduled"}
-	if frappe.db.has_column("UTM Campaign", "whatsapp_start_date"):
-		filters["whatsapp_start_date"] = ["<=", current_time]
-	scheduled_campaigns = frappe.get_all(
-		"UTM Campaign",
-		filters=filters,
-		pluck="name",
-	)
+	"""Create bulk messages for WhatsApp Campaigns whose start date has arrived."""
+	from nudg.services.campaign_schedules import send_due_campaign_schedules
 
-	executed = []
-	for campaign_name in scheduled_campaigns:
-		try:
-			if now:
-				if not _claim_campaign(campaign_name):
-					continue
-				run_campaign(campaign_name, claimed=1)
-			else:
-				result = enqueue_run(campaign_name)
-				if isinstance(result, dict) and not result.get("queued"):
-					continue
-			executed.append(campaign_name)
-		except Exception as exc:
-			logger.error(f"Error executing scheduled campaign '{campaign_name}': {exc}")
-			frappe.log_error(
-				title=f"Scheduled campaign execution error: {campaign_name}",
-				message=frappe.get_traceback(),
-			)
-
-	return executed
+	return send_due_campaign_schedules()
 
 
 def recalculate_campaign_funnel_counts(doc_or_name: Any) -> dict:
@@ -465,15 +394,17 @@ def recalculate_campaign_funnel_counts(doc_or_name: Any) -> dict:
 			doc_or_name.whatsapp_read_count = res["read_count"]
 		doc_or_name.whatsapp_failed_count = res["failed_count"]
 	else:
-		updates: dict[str, Any] = {
-			"whatsapp_sent_count": res["sent_count"],
-			"whatsapp_failed_count": res["failed_count"],
-		}
+		updates: dict[str, Any] = {}
+		if frappe.db.has_column("UTM Campaign", "whatsapp_sent_count"):
+			updates["whatsapp_sent_count"] = res["sent_count"]
+		if frappe.db.has_column("UTM Campaign", "whatsapp_failed_count"):
+			updates["whatsapp_failed_count"] = res["failed_count"]
 		if frappe.db.has_column("UTM Campaign", "whatsapp_delivered_count"):
 			updates["whatsapp_delivered_count"] = res["delivered_count"]
 		if frappe.db.has_column("UTM Campaign", "whatsapp_read_count"):
 			updates["whatsapp_read_count"] = res["read_count"]
-		frappe.db.set_value("UTM Campaign", campaign_name, updates, update_modified=False)
+		if updates:
+			frappe.db.set_value("UTM Campaign", campaign_name, updates, update_modified=False)
 
 	return res
 
@@ -590,13 +521,9 @@ def create_campaign(
 	campaign_description: str | None = None,
 	whatsapp_account: str | None = None,
 	whatsapp_template: str | None = None,
-	scheduled_at: str | None = None,
-	recipients: Any = None,
-	whatsapp_start_date: str | None = None,
-	whatsapp_recipient_list: str | None = None,
 	schedules: Any = None,
 ) -> dict:
-	"""Create a draft UTM Campaign without leaving Nudg."""
+	"""Create a draft UTM Campaign. Audience and dates live on WhatsApp Campaign."""
 	frappe.has_permission("UTM Campaign", "create", throw=True)
 	name = (name or "").strip()
 	if not name:
@@ -612,18 +539,9 @@ def create_campaign(
 			"slug": _unique_slug(name),
 			"campaign_description": (campaign_description or "").strip(),
 			"whatsapp_account": account,
-			"whatsapp_status": "Draft",
 		}
 	)
-	_apply_campaign_plan(
-		doc,
-		whatsapp_start_date=whatsapp_start_date,
-		scheduled_at=scheduled_at,
-		whatsapp_recipient_list=whatsapp_recipient_list,
-		recipients=recipients,
-		schedules=schedules,
-		whatsapp_template=template,
-	)
+	_apply_campaign_plan(doc, schedules=schedules, whatsapp_template=template)
 	doc.insert()
 	return get_campaign(doc.name)
 
@@ -634,18 +552,13 @@ def update_campaign(
 	campaign_description: str | None = None,
 	whatsapp_account: str | None = None,
 	whatsapp_template: str | None = None,
-	scheduled_at: str | None = None,
-	recipients: Any = None,
-	whatsapp_start_date: str | None = None,
-	whatsapp_recipient_list: str | None = None,
 	schedules: Any = None,
 ) -> dict:
-	"""Update a draft or scheduled campaign from Nudg."""
+	"""Update a campaign that has not already created a bulk message."""
 	doc = frappe.get_doc("UTM Campaign", name)
 	frappe.has_permission("UTM Campaign", "write", doc=doc, throw=True)
-	status = doc.get("whatsapp_status") or "Draft"
-	if status not in ("Draft", "Scheduled"):
-		frappe.throw(_("Only a draft or scheduled campaign can be edited."))
+	if _campaign_has_sent(doc.name):
+		frappe.throw(_("This campaign already sent a bulk message and cannot be edited."))
 	account = _account_or_throw(whatsapp_account)
 	template = _template_or_throw(whatsapp_template)
 	new_name = (campaign_name or "").strip() or doc.name
@@ -659,28 +572,25 @@ def update_campaign(
 		doc.slug = _unique_slug(new_name, ignore=new_name)
 	doc.campaign_description = (campaign_description or "").strip()
 	doc.whatsapp_account = account
-	_apply_campaign_plan(
-		doc,
-		whatsapp_start_date=whatsapp_start_date,
-		scheduled_at=scheduled_at,
-		whatsapp_recipient_list=whatsapp_recipient_list,
-		recipients=recipients,
-		schedules=schedules,
-		whatsapp_template=template,
-	)
+	_apply_campaign_plan(doc, schedules=schedules, whatsapp_template=template)
 	doc.save()
 	return get_campaign(doc.name)
 
 
 def delete_campaign(name: str) -> dict:
-	"""Remove a campaign that has not been sent."""
+	"""Remove a campaign that has not sent a bulk message."""
 	doc = frappe.get_doc("UTM Campaign", name)
 	frappe.has_permission("UTM Campaign", "delete", doc=doc, throw=True)
-	status = doc.get("whatsapp_status") or "Draft"
-	if status not in ("Draft", "Scheduled", "Cancelled"):
-		frappe.throw(_("Only a draft, scheduled, or cancelled campaign can be deleted."))
+	if _campaign_has_sent(doc.name):
+		frappe.throw(_("This campaign already sent a bulk message and cannot be deleted."))
 	frappe.delete_doc("UTM Campaign", doc.name, ignore_permissions=True)
 	return {"name": name, "deleted": True}
+
+
+def _campaign_has_sent(name: str) -> bool:
+	if not frappe.db.exists("DocType", "WA Bulk Message"):
+		return False
+	return bool(frappe.db.exists("WA Bulk Message", {"campaign": name, "docstatus": 1}))
 
 
 def _campaign_template(doc) -> str | None:
@@ -757,16 +667,6 @@ def _parse_schedules(raw: Any) -> list[dict] | None:
 	return [row for row in raw if isinstance(row, dict)]
 
 
-def _apply_recipient_list(doc, list_name: str | None) -> None:
-	list_name = (list_name or "").strip()
-	if not list_name:
-		doc.whatsapp_recipient_list = None
-		return
-	if not frappe.db.exists("WA Recipient List", list_name):
-		frappe.throw(_("Recipient List {0} was not found.").format(list_name))
-	doc.whatsapp_recipient_list = list_name
-
-
 def _apply_schedules(doc, schedules: list[dict]) -> None:
 	doc.set("whatsapp_schedules", [])
 	for row in schedules:
@@ -778,45 +678,20 @@ def _apply_schedules(doc, schedules: list[dict]) -> None:
 			{
 				"whatsapp_template": template,
 				"send_after_days": int(row.get("send_after_days") or 0),
-				"whatsapp_account": row.get("whatsapp_account") or doc.get("whatsapp_account"),
-				"recipient_list": row.get("recipient_list") or doc.get("whatsapp_recipient_list"),
+				"recipient_list": row.get("recipient_list"),
 				"variable_type": row.get("variable_type") or "Common",
 				"template_variables": row.get("template_variables"),
 			},
 		)
 
 
-def _apply_campaign_plan(
-	doc,
-	whatsapp_start_date: str | None,
-	scheduled_at: str | None,
-	whatsapp_recipient_list: str | None,
-	recipients: Any,
-	schedules: Any,
-	whatsapp_template: str | None,
-) -> None:
-	"""Write the schedule, start date, and recipient list. Phone blobs stay a fallback."""
-	start = whatsapp_start_date if whatsapp_start_date is not None else scheduled_at
-	_apply_schedule(doc, start)
+def _apply_campaign_plan(doc, schedules: Any, whatsapp_template: str | None) -> None:
+	"""Write the template schedule. Audience and dates belong to WhatsApp Campaign."""
 	parsed = _parse_schedules(schedules)
-	if whatsapp_recipient_list is not None:
-		_apply_recipient_list(doc, whatsapp_recipient_list)
-	elif recipients is not None:
-		_apply_recipients(doc, recipients)
 	if parsed is not None:
 		_apply_schedules(doc, parsed)
 	elif whatsapp_template:
 		_apply_template(doc, whatsapp_template)
-
-
-def _apply_schedule(doc, scheduled_at: str | None) -> None:
-	if scheduled_at is None:
-		return
-	value = (scheduled_at or "").strip()
-	doc.whatsapp_start_date = value[:10] if value else None
-	status = doc.get("whatsapp_status") or "Draft"
-	if status in ("Draft", "Scheduled"):
-		doc.whatsapp_status = "Scheduled" if value else "Draft"
 
 
 def _apply_template(doc, template: str | None) -> None:
@@ -835,52 +710,7 @@ def _apply_template(doc, template: str | None) -> None:
 		{
 			"whatsapp_template": template,
 			"send_after_days": 0,
-			"whatsapp_account": doc.get("whatsapp_account"),
-			"recipient_list": doc.get("whatsapp_recipient_list"),
 		},
 	)
 
 
-def _phone_list(recipients: Any) -> list[str]:
-	if isinstance(recipients, str):
-		return [line.strip() for line in recipients.replace(",", "\n").splitlines() if line.strip()]
-	if not isinstance(recipients, (list, tuple)):
-		return []
-	phones = []
-	for item in recipients:
-		if isinstance(item, dict):
-			phone = item.get("phone_number") or item.get("phone") or item.get("mobile_number") or ""
-		else:
-			phone = str(item)
-		phone = str(phone).strip()
-		if phone:
-			phones.append(phone)
-	return phones
-
-
-def _apply_recipients(doc, recipients: Any) -> None:
-	if recipients is None:
-		return
-	phones = _phone_list(recipients)
-	if not frappe.db.exists("DocType", "WA Recipient List"):
-		return
-	list_name = doc.get("whatsapp_recipient_list")
-	if list_name and frappe.db.exists("WA Recipient List", list_name):
-		recipient_list = frappe.get_doc("WA Recipient List", list_name)
-		recipient_list.set("recipients", [])
-	else:
-		label = f"{doc.name} recipients"[:140]
-		recipient_list = frappe.get_doc(
-			{
-				"doctype": "WA Recipient List",
-				"list_name": label,
-				"whatsapp_account": doc.get("whatsapp_account"),
-			}
-		)
-	for phone in phones:
-		recipient_list.append("recipients", {"mobile_number": phone})
-	if recipient_list.is_new():
-		recipient_list.insert(ignore_permissions=True)
-	else:
-		recipient_list.save(ignore_permissions=True)
-	doc.whatsapp_recipient_list = recipient_list.name

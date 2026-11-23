@@ -7,4 +7,6 @@ nudg.patches.v1_0.restore_signup_app_secret
 nudg.patches.v1_0.fold_conversation_and_site
 nudg.patches.v1_0.chatbot_per_account
 nudg.patches.v1_0.drop_obsolete_campaign_fields
+nudg.patches.v1_0.drop_campaign_broadcast_fields
 nudg.patches.v1_0.drop_site_outbox
+nudg.patches.v1_0.catalog_item_account

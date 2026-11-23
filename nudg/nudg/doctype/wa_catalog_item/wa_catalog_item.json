@@ -6,7 +6,7 @@
  "engine": "InnoDB",
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-11-06 12:00:00.000000",
+ "modified": "2026-11-23 11:30:00.000000",
  "modified_by": "Administrator",
  "module": "Nudg",
  "name": "WA Catalog Item",
@@ -43,7 +43,7 @@
  "track_changes": 1,
  "autoname": "hash",
  "title_field": "item_name",
- "search_fields": "item_name,sku",
+ "search_fields": "item_name,sku,whatsapp_account",
  "fields": [
   {
    "fieldname": "catalog",
@@ -53,6 +53,17 @@
    "reqd": 1,
    "in_list_view": 1,
    "in_standard_filter": 1
+  },
+  {
+   "fieldname": "whatsapp_account",
+   "fieldtype": "Link",
+   "options": "WA Account",
+   "label": "WhatsApp Account",
+   "fetch_from": "catalog.whatsapp_account",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Copied from the catalog so User Permission on WhatsApp Account applies to this item."
   },
   {
    "fieldname": "item_name",
@@ -112,6 +123,7 @@
  ],
  "field_order": [
   "catalog",
+  "whatsapp_account",
   "item_name",
   "sku",
   "description",

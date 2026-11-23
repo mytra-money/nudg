@@ -219,9 +219,9 @@ def _profile_totals_from_todos(accounts: list[str], account_filter: dict) -> tup
 
 
 def _campaign_totals(accounts: list[str], account_filter: dict) -> int:
-	if not frappe.db.exists("DocType", "UTM Campaign"):
+	if not frappe.db.exists("DocType", "WA Campaign"):
 		return 0
-	rows = _grouped("UTM Campaign", accounts, ["whatsapp_status"])
+	rows = _grouped("WA Campaign", accounts, ["status"])
 	if rows is None:
-		return frappe.db.count("UTM Campaign", {**account_filter, "whatsapp_status": "Completed"})
-	return sum(int(row.get("cnt") or 0) for row in rows if row.get("whatsapp_status") == "Completed")
+		return frappe.db.count("WA Campaign", {**account_filter, "status": "Completed"})
+	return sum(int(row.get("cnt") or 0) for row in rows if row.get("status") == "Completed")

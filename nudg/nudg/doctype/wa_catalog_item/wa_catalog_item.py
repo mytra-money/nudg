@@ -6,8 +6,28 @@ from frappe.model.document import Document
 
 
 class WACatalogItem(Document):
+	def has_permission(self, permtype="read", *, debug=False, user=None) -> bool:
+		# Permission runs before validate. Copy the catalog account first so a
+		# missing client value cannot skip the WhatsApp Account check.
+		self._set_whatsapp_account()
+		return super().has_permission(permtype, debug=debug, user=user)
+
 	def validate(self):
+		self._set_whatsapp_account()
 		self._sync_from_erpnext_item()
+
+	def _set_whatsapp_account(self):
+		"""Keep the item on the same WhatsApp account as its catalog."""
+		catalog = getattr(self, "catalog", None)
+		if not catalog or not getattr(frappe.local, "db", None):
+			return
+		try:
+			if not frappe.db.exists("DocType", "WA Catalog"):
+				return
+			account = frappe.db.get_value("WA Catalog", catalog, "whatsapp_account")
+		except Exception:
+			return
+		self.whatsapp_account = account or None
 
 	def _sync_from_erpnext_item(self):
 		"""Sync standard Item properties if erpnext_item/item_code is optionally linked."""

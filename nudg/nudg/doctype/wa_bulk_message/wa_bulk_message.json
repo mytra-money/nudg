@@ -23,6 +23,7 @@
   "scheduled_time",
   "column_break_campaign",
   "campaign",
+  "whatsapp_campaign",
   "schedule_row",
   "section_mpm",
   "is_mpm",
@@ -153,6 +154,13 @@
    "fieldtype": "Link",
    "label": "Campaign",
    "options": "UTM Campaign"
+  },
+  {
+   "fieldname": "whatsapp_campaign",
+   "fieldtype": "Link",
+   "label": "WhatsApp Campaign",
+   "options": "WA Campaign",
+   "read_only": 1
   },
   {
    "fieldname": "schedule_row",

@@ -1,0 +1,176 @@
+{
+ "actions": [],
+ "autoname": "format:WA-CAMP-{YYYY}-{#####}",
+ "creation": "2026-11-23 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "campaign",
+  "whatsapp_account",
+  "recipient_type",
+  "recipient",
+  "column_break_dates",
+  "start_date",
+  "trigger_time",
+  "end_date",
+  "status",
+  "section_recipients",
+  "recipients",
+  "section_dispatches",
+  "dispatches"
+ ],
+ "fields": [
+  {
+   "fieldname": "campaign",
+   "fieldtype": "Link",
+   "label": "Campaign",
+   "options": "UTM Campaign",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "whatsapp_account",
+   "fieldtype": "Link",
+   "label": "WhatsApp Account",
+   "options": "WA Account",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Copied from the campaign. The schedule rows do not choose a number."
+  },
+  {
+   "fieldname": "recipient_type",
+   "fieldtype": "Select",
+   "label": "Recipient Type",
+   "options": "WA Profile\nWA Recipient List",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "recipient",
+   "fieldtype": "Dynamic Link",
+   "label": "Recipient",
+   "options": "recipient_type",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "A WhatsApp profile, or a recipient list. The table below is filled from that choice."
+  },
+  {
+   "fieldname": "column_break_dates",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "start_date",
+   "fieldtype": "Date",
+   "label": "Start Date",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "trigger_time",
+   "fieldtype": "Time",
+   "label": "Trigger Time",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "On the scheduled day, the bulk message is created once the clock reaches this time. Each client can use a different time."
+  },
+  {
+   "fieldname": "end_date",
+   "fieldtype": "Date",
+   "label": "End Date",
+   "read_only": 1,
+   "in_list_view": 1,
+   "description": "Start date plus the longest Send After (days) on the campaign schedule. This is not entered by hand."
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Draft\nScheduled\nIn Progress\nCompleted\nCancelled",
+   "default": "Draft",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "section_recipients",
+   "fieldtype": "Section Break",
+   "label": "Recipients",
+   "description": "Loaded from the selected profile or recipient list. These people are copied onto the bulk message."
+  },
+  {
+   "fieldname": "recipients",
+   "fieldtype": "Table",
+   "label": "Recipients",
+   "options": "WA Recipient",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_dispatches",
+   "fieldtype": "Section Break",
+   "label": "Bulk Messages",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "dispatches",
+   "fieldtype": "Table",
+   "label": "Bulk Messages",
+   "options": "WA Campaign Dispatch",
+   "read_only": 1,
+   "description": "Each due schedule on the campaign creates one bulk message while the start and end dates are open."
+  }
+ ],
+ "links": [],
+ "modified": "2026-11-23 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Nudg",
+ "name": "WA Campaign",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "share": 1,
+   "print": 1,
+   "email": 1
+  },
+  {
+   "role": "WhatsApp Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "share": 1,
+   "print": 1,
+   "email": 1
+  },
+  {
+   "role": "WhatsApp User",
+   "read": 1,
+   "write": 0,
+   "create": 0,
+   "delete": 0,
+   "report": 1,
+   "export": 0,
+   "share": 0,
+   "print": 1,
+   "email": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1,
+ "title_field": "campaign",
+ "search_fields": "campaign,recipient,status,whatsapp_account"
+}

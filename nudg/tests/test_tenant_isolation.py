@@ -12,8 +12,10 @@ from nudg.security import (
 	get_tenant_campaign_query,
 	get_tenant_quick_reply_query,
 	get_tenant_catalog_query,
+	get_tenant_catalog_item_query,
 	get_tenant_template_query,
 )
+from nudg.nudg.doctype.wa_catalog_item.wa_catalog_item import WACatalogItem
 
 
 class TestTenantIsolation(unittest.TestCase):
@@ -89,6 +91,32 @@ class TestTenantIsolation(unittest.TestCase):
 			cond = get_tenant_template_query(user="agent_a@example.com")
 			self.assertIn("`tabWA Template`.whatsapp_account IN ('ACC-ALPHA')", cond)
 			self.assertNotIn("IS NULL", cond)
+
+	def test_catalog_item_query_limits_rows_to_assigned_accounts(self):
+		"""Catalog products follow the same WhatsApp Account boundary as catalogs."""
+		with patch("nudg.security._get_roles", return_value=["WhatsApp User"]), \
+		     patch("nudg.security.get_user_wa_accounts", return_value=["ACC-ALPHA"]):
+			self.mock_db.escape.side_effect = lambda v: f"'{v}'"
+			cond = get_tenant_catalog_item_query(user="agent_a@example.com")
+			self.assertIn("`tabWA Catalog Item`.whatsapp_account IN ('ACC-ALPHA')", cond)
+			self.assertNotIn("IS NULL", cond)
+
+	def test_catalog_item_query_hides_rows_without_an_account_assignment(self):
+		with patch("nudg.security._get_roles", return_value=["WhatsApp Manager"]), \
+		     patch("nudg.security.get_user_wa_accounts", return_value=[]):
+			self.assertEqual(get_tenant_catalog_item_query(user="agent_a@example.com"), "1=0")
+
+	def test_catalog_item_copies_account_from_catalog(self):
+		item = WACatalogItem.__new__(WACatalogItem)
+		item.catalog = "Spices"
+		item.whatsapp_account = None
+		item.erpnext_item = None
+		item.item_code = None
+		self.mock_db.exists.return_value = True
+		self.mock_db.get_value.return_value = "ACC-ALPHA"
+		item.validate()
+		self.assertEqual(item.whatsapp_account, "ACC-ALPHA")
+		self.mock_db.get_value.assert_called_with("WA Catalog", "Spices", "whatsapp_account")
 
 	def test_template_query_lets_system_manager_see_every_account(self):
 		with patch("nudg.security._get_roles", return_value=["System Manager"]):

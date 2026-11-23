@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import datetime
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -72,15 +71,12 @@ class TestCampaignParity(unittest.TestCase):
 		allowed = campaigns.check_recipient_consent(profile="contact_opted_in")
 		self.assertTrue(allowed)
 
-	def test_scheduled_campaign_runner_due_campaigns(self):
-		"""check_and_run_scheduled_campaigns triggers only campaigns where scheduled_at <= now."""
-		now = datetime.datetime(2026, 11, 8, 12, 0, 0)
-		with patch("nudg.services.campaigns.now_datetime", return_value=now), \
-		     patch.object(frappe, "get_all", return_value=["CAMP-DUE-1", "CAMP-DUE-2"]), \
-		     patch("nudg.services.campaigns.enqueue_run") as mock_enqueue:
+	def test_scheduled_campaign_runner_uses_whatsapp_campaign(self):
+		"""The minute job creates bulk messages from WhatsApp Campaign, not UTM Campaign."""
+		with patch("nudg.services.campaign_schedules.send_due_campaign_schedules", return_value=["BULK-1"]) as mock_send:
 			executed = campaigns.check_and_run_scheduled_campaigns(now=False)
-			self.assertEqual(executed, ["CAMP-DUE-1", "CAMP-DUE-2"])
-			self.assertEqual(mock_enqueue.call_count, 2)
+		self.assertEqual(executed, ["BULK-1"])
+		mock_send.assert_called_once_with()
 
 	def test_recalculate_campaign_funnel_counts(self):
 		"""Funnel aggregation correctly tallies Sent, Delivered, Read, and Failed."""

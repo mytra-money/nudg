@@ -468,6 +468,11 @@ def get_tenant_catalog_query(user: str | None = None) -> str:
 	return _account_query_for("WA Catalog", "whatsapp_account", user)
 
 
+def get_tenant_catalog_item_query(user: str | None = None) -> str:
+	"""Limit catalog products to the WhatsApp accounts this user may see."""
+	return _account_query_for("WA Catalog Item", "whatsapp_account", user)
+
+
 def get_tenant_template_query(user: str | None = None) -> str:
 	"""Limit WA Template rows to accounts this user may see.
 
@@ -491,6 +496,10 @@ def _optional_account_query(doctype: str, user: str | None = None) -> str:
 
 def get_tenant_bulk_query(user: str | None = None) -> str:
 	return _account_query_for("WA Bulk Message", "whatsapp_account", user)
+
+
+def get_tenant_whatsapp_campaign_query(user: str | None = None) -> str:
+	return _account_query_for("WA Campaign", "whatsapp_account", user)
 
 
 def get_tenant_recipient_list_query(user: str | None = None) -> str:

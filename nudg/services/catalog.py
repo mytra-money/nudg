@@ -64,6 +64,7 @@ def list_items(
 		fields=[
 			"name",
 			"catalog",
+			"whatsapp_account",
 			"item_name",
 			"sku",
 			"description",
@@ -435,7 +436,20 @@ def _item_dict(name: str) -> dict:
 	row = frappe.db.get_value(
 		"WA Catalog Item",
 		name,
-		["name", "catalog", "item_name", "sku", "description", "price", "currency", "image", "meta_retailer_id", "status", "sort_order"],
+		[
+			"name",
+			"catalog",
+			"whatsapp_account",
+			"item_name",
+			"sku",
+			"description",
+			"price",
+			"currency",
+			"image",
+			"meta_retailer_id",
+			"status",
+			"sort_order",
+		],
 		as_dict=True,
 	)
 	return row or {"name": name}
@@ -468,6 +482,7 @@ def create_catalog_item(
 		{
 			"doctype": "WA Catalog Item",
 			"catalog": catalog,
+			"whatsapp_account": catalog_doc.whatsapp_account,
 			"item_name": item_name,
 			"sku": (sku or "").strip(),
 			"description": (description or "").strip(),
