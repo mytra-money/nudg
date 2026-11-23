@@ -29,8 +29,6 @@ const showDetail = ref(false)
 const query = ref('')
 const selectedCategory = ref<'all' | 'Utility' | 'Marketing' | 'Authentication'>('all')
 const selectedStatus = ref<string>('All')
-const selectedAccount = ref<string>('all')
-
 const selected = ref<string | null>(null)
 
 const sending = ref<Template | null>(null)
@@ -45,7 +43,14 @@ const theme: Record<string, 'green' | 'amber' | 'red' | 'gray'> = {
   Deleted: 'gray',
 }
 
-const templates = computed(() => desk.inbox.value?.templates || [])
+const { selectedAccount: currentAccount } = useAccountGate()
+
+// Templates for the navbar number only (templates without an account are shared).
+const templates = computed(() =>
+  (desk.inbox.value?.templates || []).filter(
+    (template) => !currentAccount.value || !template.whatsapp_account || template.whatsapp_account === currentAccount.value,
+  ),
+)
 
 // KPI metrics
 const countTotal = computed(() => templates.value.length)
@@ -124,16 +129,6 @@ const headerTypeOptions = [
   { label: 'Video', value: 'Video' },
 ]
 
-// Account options
-const { accountOptions } = useAccountGate({ includeAll: true, allLabel: 'All Accounts' })
-
-const editorAccountOptions = computed(() =>
-  (desk.inbox.value?.accounts || []).map((a) => ({
-    label: a.account_name || a.name,
-    value: a.name,
-  })),
-)
-
 // Filtered templates list
 const visible = computed(() =>
   templates.value.filter((template) => {
@@ -153,12 +148,6 @@ const visible = computed(() =>
     if (selectedStatus.value !== 'All' && template.status !== selectedStatus.value) {
       return false
     }
-
-    // Account
-    if (selectedAccount.value !== 'all' && template.whatsapp_account && template.whatsapp_account !== selectedAccount.value) {
-      return false
-    }
-
     return true
   }),
 )
@@ -169,7 +158,7 @@ const current = computed(
 
 const recipients = computed(() =>
   (desk.inbox.value?.conversations || [])
-    .filter((row) => desk.account.value === 'all' || row.profile.whatsapp_account === desk.account.value)
+    .filter((row) => !currentAccount.value || row.profile.whatsapp_account === currentAccount.value)
     .map((row) => ({
       label: `${row.profile.profile_name} · ${row.profile.phone_number}`,
       value: row.profile.name,
@@ -288,7 +277,7 @@ function validateTemplateForm(forMeta: boolean): string | null {
     return 'Label and message are required.'
   }
   if (!templateForm.value.whatsapp_account) {
-    return 'Choose a WhatsApp account.'
+    return 'Select a WhatsApp number in the top bar first.'
   }
   const buttons = templateForm.value.buttons.filter((row) => row.button_text.trim())
   if (buttons.length > 3) {
@@ -311,7 +300,6 @@ function validateTemplateForm(forMeta: boolean): string | null {
 
 async function openTemplateEditor(template?: Template) {
   if (live && !languageRows.value.length) await loadLanguages()
-  const accounts = desk.inbox.value?.accounts || []
   templateForm.value = {
     name: template?.name && template.name !== 'new' ? template.name : '',
     template_label: template?.template_label || '',
@@ -322,7 +310,7 @@ async function openTemplateEditor(template?: Template) {
     header_type: template?.header_type || 'Text',
     header_media: template?.header_media || '',
     language: template?.language || defaultLanguageCode(),
-    whatsapp_account: template?.whatsapp_account || accounts[0]?.name || '',
+    whatsapp_account: currentAccount.value || template?.whatsapp_account || '',
     status: template?.status || '',
     whatsapp_template_id: '',
     buttons: (template?.buttons || []).map((row) => ({
@@ -412,12 +400,9 @@ async function syncTemplates() {
     toast.success('Sample templates are already loaded.')
     return
   }
-  if (selectedAccount.value === 'all') {
-    toast.success('Syncing templates for every WhatsApp account you can manage…')
-  }
   syncingTemplates.value = true
   try {
-    const account = selectedAccount.value !== 'all' ? selectedAccount.value : undefined
+    const account = currentAccount.value || undefined
     const result = await syncWhatsappTemplates(account)
     const created = result?.total_synced ?? result?.accounts?.reduce((sum: number, row: any) => sum + (row.total_synced || 0), 0) ?? 0
     toast.success(created ? `Synced ${created} new template${created === 1 ? '' : 's'} from Meta.` : 'Templates are up to date with Meta.')
@@ -450,7 +435,6 @@ function clearFilters() {
   query.value = ''
   selectedCategory.value = 'all'
   selectedStatus.value = 'All'
-  selectedAccount.value = 'all'
 }
 </script>
 
@@ -544,13 +528,6 @@ function clearFilters() {
             :model-value="selectedStatus"
             :options="statuses"
             @update:model-value="(val) => (selectedStatus = String(val || 'All'))"
-          />
-
-          <Select
-            class="w-36 text-xs"
-            :model-value="selectedAccount"
-            :options="accountOptions"
-            @update:model-value="(val) => (selectedAccount = String(val || 'all'))"
           />
         </div>
       </div>
@@ -796,15 +773,6 @@ function clearFilters() {
               :disabled="editorLocked || editorOnMeta"
             />
             <FormControl
-              v-model="templateForm.whatsapp_account"
-              type="select"
-              label="WhatsApp account"
-              :options="editorAccountOptions"
-              :disabled="editorLocked || editorOnMeta"
-            />
-          </div>
-          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <FormControl
               v-model="templateForm.language"
               type="select"
               label="Language"
@@ -812,14 +780,14 @@ function clearFilters() {
               :disabled="editorLocked || editorOnMeta || languagesLoading"
               :description="languagesLoading ? 'Loading languages…' : languageOptions.length ? undefined : 'No WA Language records on this site'"
             />
-            <FormControl
-              v-model="templateForm.header_type"
-              type="select"
-              label="Header type"
-              :options="headerTypeOptions"
-              :disabled="editorLocked"
-            />
           </div>
+          <FormControl
+            v-model="templateForm.header_type"
+            type="select"
+            label="Header type"
+            :options="headerTypeOptions"
+            :disabled="editorLocked"
+          />
           <FormControl
             v-if="templateForm.header_type === 'Text'"
             v-model="templateForm.header_text"

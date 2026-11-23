@@ -191,7 +191,7 @@ const allRows = computed(() => {
   const rows = [...(desk.inbox.value?.conversations || [])]
   rows.sort((a, b) => (b.preview?.creation || '').localeCompare(a.preview?.creation || ''))
   const selected = desk.account.value
-  if (!selected || selected === 'all') return rows
+  if (!selected) return rows
   return rows.filter((row) => row.profile.whatsapp_account === selected)
 })
 const conversations = computed(() => {
@@ -326,7 +326,7 @@ async function ensureQuickReplies() {
   if (quickLoading.value || quickReplies.value.length) return
   quickLoading.value = true
   try {
-    quickReplies.value = await listQuickReplies(desk.account.value === 'all' ? undefined : desk.account.value)
+    quickReplies.value = await listQuickReplies(desk.account.value || undefined)
   } catch (caught) {
     toast.error(errorText(caught))
   } finally {

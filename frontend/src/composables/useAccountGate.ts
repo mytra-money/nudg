@@ -1,4 +1,5 @@
 import { computed, type ComputedRef, type Ref } from 'vue'
+import { accountArg as toAccountArg, chooseAccount } from '@/utils/accountSelection'
 import { useDesk } from '@/stores/desk'
 import { isManager } from '@/stores/session'
 
@@ -6,12 +7,9 @@ export type AccountOption = { label: string; value: string }
 
 /**
  * Shared WhatsApp-account gate for manager pages.
- * Use `hasAccount` + DeskEmpty kind="account", and `accountOptions` for selects.
+ * Desk always has a single selected number (navbar); pages should use that.
  */
 export function useAccountGate(options?: {
-  /** Include an "All accounts" option for filters. */
-  includeAll?: boolean
-  allLabel?: string
   /** Local account ref to keep in sync with desk.account when possible. */
   account?: Ref<string>
 }) {
@@ -19,17 +17,14 @@ export function useAccountGate(options?: {
 
   const accounts = computed(() => desk.inbox.value?.accounts || [])
   const hasAccount = computed(() => accounts.value.length > 0)
+  const selectedAccount = computed(() => toAccountArg(desk.account.value) || '')
 
-  const accountOptions: ComputedRef<AccountOption[]> = computed(() => {
-    const rows = accounts.value.map((row: { name: string; account_name?: string }) => ({
+  const accountOptions: ComputedRef<AccountOption[]> = computed(() =>
+    accounts.value.map((row: { name: string; account_name?: string }) => ({
       label: row.account_name || row.name,
       value: row.name,
-    }))
-    if (options?.includeAll) {
-      return [{ label: options.allLabel || 'All accounts', value: 'all' }, ...rows]
-    }
-    return rows
-  })
+    })),
+  )
 
   const accountGateDescription = computed(() =>
     isManager.value
@@ -39,12 +34,7 @@ export function useAccountGate(options?: {
 
   /** Prefer desk.account when it is a real linked number; else first account. */
   function pickAccount(): string {
-    const names = accounts.value.map((row: { name: string }) => row.name)
-    const selected = desk.account.value
-    if (selected && selected !== 'all' && names.includes(selected)) return selected
-    const current = options?.account?.value
-    if (current && names.includes(current)) return current
-    return names[0] || ''
+    return chooseAccount(accounts.value, desk.account.value || null)
   }
 
   function syncAccount() {
@@ -57,6 +47,7 @@ export function useAccountGate(options?: {
     desk,
     accounts,
     hasAccount,
+    selectedAccount,
     accountOptions,
     accountGateDescription,
     pickAccount,

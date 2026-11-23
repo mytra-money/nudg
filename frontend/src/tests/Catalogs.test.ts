@@ -31,7 +31,8 @@ describe('CatalogsView', () => {
 
     // Page title lives in AppShell; the view owns badges + catalog content.
     expect(wrapper.text()).toContain('Sundarban Signature Spices')
-    expect(wrapper.text()).toContain('Festive Hampers & Spice Trunks')
+    // Only the navbar number's catalogs are listed (demo default is Sundarban Sales).
+    expect(wrapper.text()).not.toContain('Festive Hampers & Spice Trunks')
     expect(wrapper.text()).toContain('Royal Green Cardamom')
     expect(wrapper.text()).toContain('Tellicherry Black Pepper')
     expect(wrapper.text()).toContain('Stored on this site')

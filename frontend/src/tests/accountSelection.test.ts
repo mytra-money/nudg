@@ -21,8 +21,12 @@ describe('number dropdown', () => {
     expect(chooseAccount([sales(), other()], 'WhatsApp 0564')).toBe('WhatsApp 0564')
   })
 
-  it('keeps All numbers when that was the choice', () => {
-    expect(chooseAccount([sales({ assigned: true })], 'all')).toBe('all')
+  it('never returns all, even when "all" was saved earlier', () => {
+    expect(chooseAccount([sales({ assigned: true })], 'all')).toBe('WhatsApp 0564')
+  })
+
+  it('returns an empty string when there are no numbers', () => {
+    expect(chooseAccount([], null)).toBe('')
   })
 
   it('opens on the assigned number when nothing was saved', () => {
@@ -34,8 +38,12 @@ describe('number dropdown', () => {
     expect(chooseAccount(accounts, null)).toBe('WhatsApp 1000')
   })
 
-  it('opens on All numbers when this user has no assigned number', () => {
-    expect(chooseAccount([sales({ is_default: true }), other()], null)).toBe('all')
+  it('opens on the default visible number when this user has no assigned number', () => {
+    expect(chooseAccount([other(), sales({ is_default: true })], null)).toBe('WhatsApp 0564')
+  })
+
+  it('opens on the first visible number when none is assigned or default', () => {
+    expect(chooseAccount([other(), sales()], null)).toBe('WhatsApp 1000')
   })
 
   it('drops a saved number this user can no longer open', () => {

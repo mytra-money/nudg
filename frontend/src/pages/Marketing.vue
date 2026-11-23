@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
 import { Badge, Button, Dialog, dialog, FormControl, Select, TextInput, toast } from 'frappe-ui'
 import { NumberCard } from 'frappe-ui/charts'
@@ -11,6 +11,7 @@ import { errorText, formatDay, formatTime, initials } from '@/utils/format'
 import { formatErrorMessage } from '@/utils/errors'
 import { createCampaign, deleteCampaign, getCampaign, listCampaigns, listRecipientLists, runCampaign, updateCampaign } from '@/services/catalogApi'
 import { isManager, useDesk } from '@/stores/desk'
+import { accountArg } from '@/utils/accountSelection'
 
 const desk = useDesk()
 const live = Boolean(window.csrf_token)
@@ -125,33 +126,47 @@ const sampleCampaigns: any[] = [
   },
 ]
 
+const currentAccount = computed(() => accountArg(desk.account.value) || '')
+
+function forAccount<T extends { whatsapp_account?: string }>(list: T[]): T[] {
+  const account = currentAccount.value
+  if (!account) return list
+  return list.filter((row) => !row.whatsapp_account || row.whatsapp_account === account)
+}
+
+const demoCampaigns = ref<any[]>([...sampleCampaigns])
+
+function loadSample() {
+  recipientLists.value = forAccount([
+    { name: 'Sales opted-in', list_name: 'Sales opted-in', whatsapp_account: 'Sundarban Sales' },
+    { name: 'Dispatch customers', list_name: 'Dispatch customers', whatsapp_account: 'Sundarban Dispatch' },
+  ])
+  rows.value = forAccount(demoCampaigns.value)
+  const current = selected.value && rows.value.find((row) => row.name === selected.value.name)
+  selected.value = current || rows.value[0] || null
+}
+
 async function load() {
   loading.value = true
   error.value = null
   try {
     if (!live) {
-      recipientLists.value = [
-        { name: 'Sales opted-in', list_name: 'Sales opted-in', whatsapp_account: 'Sundarban Sales' },
-        { name: 'Dispatch customers', list_name: 'Dispatch customers', whatsapp_account: 'Sundarban Dispatch' },
-      ]
-      rows.value = sampleCampaigns
-      if (!selected.value && rows.value.length) {
-        selected.value = rows.value[0]
-      }
+      loadSample()
       return
     }
-    recipientLists.value = (await listRecipientLists().catch(() => [])) || []
-    const result = await listCampaigns()
+    const account = currentAccount.value || undefined
+    recipientLists.value = (await listRecipientLists(account).catch(() => [])) || []
+    const result = await listCampaigns(account)
     rows.value = result || []
-    if (selected.value) {
-      selected.value = await getCampaign(selected.value.name).catch(() => selected.value)
-    } else if (rows.value.length) {
-      selected.value = rows.value[0]
+    const current = selected.value && rows.value.find((row) => row.name === selected.value.name)
+    if (current) {
+      selected.value = await getCampaign(current.name).catch(() => current)
+    } else {
+      selected.value = rows.value[0] || null
     }
   } catch (caught) {
     if (!live) {
-      rows.value = sampleCampaigns
-      selected.value = rows.value[0]
+      loadSample()
     } else {
       error.value = errorText(caught)
     }
@@ -201,13 +216,6 @@ async function run(name: string) {
   }
 }
 
-const accountOptions = computed(() =>
-  (desk.inbox.value?.accounts || []).map((row) => ({
-    label: row.account_name || row.name,
-    value: row.name,
-  })),
-)
-
 const templateOptions = computed(() => {
   const account = form.value.whatsapp_account
   return (desk.inbox.value?.templates || [])
@@ -232,7 +240,7 @@ function blankForm() {
   return {
     name: '',
     description: '',
-    whatsapp_account: accountOptions.value[0]?.value || '',
+    whatsapp_account: currentAccount.value,
     whatsapp_recipient_list: '',
     whatsapp_template: '',
     whatsapp_start_date: '',
@@ -261,7 +269,7 @@ function fillForm(row: any) {
   form.value = {
     name: row.campaign_name || row.name || '',
     description: row.description || row.campaign_description || '',
-    whatsapp_account: row.whatsapp_account || '',
+    whatsapp_account: currentAccount.value || row.whatsapp_account || '',
     whatsapp_recipient_list: row.whatsapp_recipient_list || schedule?.recipient_list || '',
     whatsapp_template: schedule?.whatsapp_template || row.whatsapp_template || row.template || '',
     whatsapp_start_date: dateOnly(row.whatsapp_start_date || row.scheduled_at),
@@ -316,6 +324,7 @@ function removeCampaign() {
       busy.value = true
       try {
         if (live) await deleteCampaign(campaign.name)
+        else demoCampaigns.value = demoCampaigns.value.filter((row) => row.name !== campaign.name)
         rows.value = rows.value.filter((row) => row.name !== campaign.name)
         selected.value = null
         toast.success('Campaign deleted')
@@ -362,6 +371,10 @@ async function saveCampaign() {
       } else {
         rows.value = [row, ...rows.value]
         selected.value = row
+      }
+      demoCampaigns.value = [row, ...demoCampaigns.value.filter((item) => item.name !== row.name)]
+      if (editorMode.value === 'edit' && selected.value) {
+        demoCampaigns.value = demoCampaigns.value.map((item) => (item.name === selected.value.name ? selected.value : item))
       }
       editorOpen.value = false
       toast.success(editorMode.value === 'edit' ? 'Campaign updated' : 'Campaign created')
@@ -455,6 +468,11 @@ onMounted(() => {
   if (!desk.inbox.value) void desk.load()
   void load()
 })
+
+watch(
+  () => desk.account.value,
+  () => void load(),
+)
 </script>
 
 <template>
@@ -835,12 +853,6 @@ onMounted(() => {
           label="Description"
           :rows="3"
           placeholder="Optional note for this broadcast"
-        />
-        <FormControl
-          v-model="form.whatsapp_account"
-          type="select"
-          label="WhatsApp account"
-          :options="accountOptions"
         />
         <FormControl
           v-model="form.whatsapp_recipient_list"

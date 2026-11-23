@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { Badge, Button, Dialog, FormControl, Select, TextInput, dialog, toast } from 'frappe-ui'
 import { NumberCard } from 'frappe-ui/charts'
 import DeskCard from '@/components/desk/DeskCard.vue'
@@ -8,6 +8,7 @@ import DeskPage from '@/components/desk/DeskPage.vue'
 import DeskSplit from '@/components/desk/DeskSplit.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import { errorText } from '@/utils/format'
+import { accountArg } from '@/utils/accountSelection'
 import { useDesk } from '@/stores/desk'
 import {
   createCatalog,
@@ -173,14 +174,21 @@ const editingItemName = ref('')
 const itemForm = ref({ item_name: '', sku: '', description: '', price: '', currency: 'INR', status: 'Active', image: '' })
 const savingCatalog = ref(false)
 
-const accountOptions = computed(() => desk.inbox.value?.accounts || [])
+const currentAccount = computed(() => accountArg(desk.account.value) || '')
+
+/** Demo-mode helper: keep rows that belong to the selected number. */
+function forAccount<T extends { whatsapp_account?: string }>(rows: T[]): T[] {
+  const account = currentAccount.value
+  if (!account) return rows
+  return rows.filter((row) => !row.whatsapp_account || row.whatsapp_account === account)
+}
 
 function startCatalog(existing?: any) {
   catalogEditorMode.value = existing ? 'edit' : 'create'
   editingCatalogName.value = existing?.name || ''
   catalogForm.value = {
     catalog_name: existing?.catalog_name || '',
-    whatsapp_account: existing?.whatsapp_account || accountOptions.value[0]?.name || '',
+    whatsapp_account: currentAccount.value || existing?.whatsapp_account || '',
     description: existing?.description || '',
     status: existing?.status || 'Draft',
   }
@@ -393,38 +401,37 @@ async function saveItemForm() {
   }
 }
 
+function ensureSelection() {
+  const stillThere = catalogs.value.some((c) => c.name === selectedCatalogName.value)
+  if (!stillThere) selectedCatalogName.value = catalogs.value[0]?.name || null
+}
+
+function loadSample() {
+  catalogs.value = forAccount(sampleCatalogs)
+  ensureSelection()
+  items.value = selectedCatalogName.value ? sampleItemsByCatalog[selectedCatalogName.value] || [] : []
+}
+
 async function load() {
   loading.value = true
   error.value = null
   const isLive = Boolean(window.csrf_token)
   try {
     if (!isLive) {
-      catalogs.value = sampleCatalogs
-      if (!selectedCatalogName.value && catalogs.value.length) {
-        selectedCatalogName.value = catalogs.value[0].name
-      }
-      if (selectedCatalogName.value) {
-        items.value = sampleItemsByCatalog[selectedCatalogName.value] || []
-      }
+      loadSample()
       return
     }
-    const result = await listCatalogs()
+    const result = await listCatalogs(currentAccount.value || undefined)
     catalogs.value = result || []
-    if (!selectedCatalogName.value && catalogs.value.length) {
-      selectedCatalogName.value = catalogs.value[0].name
-    }
+    ensureSelection()
     if (selectedCatalogName.value) {
       await open(selectedCatalogName.value)
+    } else {
+      items.value = []
     }
   } catch (caught) {
     if (!isLive) {
-      catalogs.value = sampleCatalogs
-      if (catalogs.value.length) {
-        selectedCatalogName.value = catalogs.value[0].name
-        if (selectedCatalogName.value) {
-          items.value = sampleItemsByCatalog[selectedCatalogName.value] || []
-        }
-      }
+      loadSample()
     } else {
       error.value = errorText(caught)
     }
@@ -574,13 +581,6 @@ const itemStatusFilterOptions = computed(() => [
   { label: 'Active', value: 'Active' },
   { label: 'Inactive', value: 'Inactive' },
 ])
-const accountSelectOptions = computed(() => [
-  { label: 'No account', value: '' },
-  ...accountOptions.value.map((account: any) => ({
-    label: account.account_name || account.name,
-    value: account.name,
-  })),
-])
 const recipientOptions = computed(() => [
   { label: 'Select customer...', value: '' },
   ...(desk.inbox.value?.conversations || []).map((conv: any) => ({
@@ -601,6 +601,11 @@ onMounted(() => {
   desk.load()
   load()
 })
+
+watch(
+  () => desk.account.value,
+  () => void load(),
+)
 </script>
 
 <template>
@@ -828,12 +833,6 @@ onMounted(() => {
     <Dialog v-model="catalogEditorOpen" :title="catalogEditorMode === 'edit' ? 'Edit catalog' : 'New catalog'">
       <div class="space-y-3 py-1">
         <FormControl v-model="catalogForm.catalog_name" type="text" label="Catalog name" />
-        <FormControl
-          v-model="catalogForm.whatsapp_account"
-          type="select"
-          label="WhatsApp account"
-          :options="accountSelectOptions"
-        />
         <FormControl v-model="catalogForm.description" type="textarea" label="Description" :rows="3" />
         <FormControl v-model="catalogForm.status" type="select" label="Status" :options="catalogStatusOptions" />
       </div>

@@ -13,7 +13,6 @@ import type { LogRow } from '@/types'
 const desk = useDesk()
 const levelFilter = ref<string>('All')
 const eventFilter = ref<string>('All')
-const accountFilter = ref<string>('All')
 const searchQuery = ref<string>('')
 const expandedLogId = ref<string | null>(null)
 const inspectingPayloadLog = ref<LogRow | null>(null)
@@ -276,11 +275,8 @@ const filteredRows = computed(() => {
     // Event filter
     if (eventFilter.value !== 'All' && row.event_type !== eventFilter.value) return false
 
-    // Account filter
-    if (accountFilter.value !== 'All' && row.account !== accountFilter.value) return false
-
-    // Desk active account filter
-    if (desk.account.value !== 'all' && row.account && row.account !== desk.account.value) return false
+    // Navbar account filter
+    if (desk.account.value && row.account && row.account !== desk.account.value) return false
 
     // Search query
     if (searchQuery.value) {

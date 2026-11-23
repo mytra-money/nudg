@@ -8,7 +8,7 @@ import { applyConversation, isNewIncoming, type InboxLiveEvent } from '@/stores/
 import { isLiveSession } from '@/stores/session'
 import { playSound } from '@/stores/sounds'
 import { getSocket, onDeskEvent } from '@/socket'
-import { chooseAccount, readSavedAccount, writeSavedAccount } from '@/utils/accountSelection'
+import { accountArg as toAccountArg, chooseAccount, readSavedAccount, writeSavedAccount } from '@/utils/accountSelection'
 import { deskCacheKey } from '@/utils/deskCache'
 import type { Inbox, LogRow, Template } from '@/types'
 
@@ -20,7 +20,7 @@ export interface InboxLiveHandlers {
 export type PresenceRow = { user: string; name: string; typing: boolean; viewing: boolean }
 
 export const useInboxStore = defineStore('nudg-inbox', () => {
-  const account = ref(readSavedAccount() || 'all')
+  const account = ref(readSavedAccount() || '')
   const presence = ref<Record<string, PresenceRow[]>>({})
   const error = ref<string | null>(null)
   const loading = ref(true)
@@ -76,7 +76,7 @@ export const useInboxStore = defineStore('nudg-inbox', () => {
   const mode = computed(() => inbox.value?.mode || (isLiveSession() ? 'live' : 'sample'))
 
   function accountArg() {
-    return account.value && account.value !== 'all' ? account.value : undefined
+    return toAccountArg(account.value)
   }
 
   function fetchTemplates() {
@@ -177,6 +177,9 @@ export const useInboxStore = defineStore('nudg-inbox', () => {
       if (!isLiveSession()) {
         inboxResource.setData(sampleInbox())
         logsResource.setData(sampleLogs())
+        const next = chooseAccount(inboxResource.data?.accounts || [], readSavedAccount())
+        account.value = next
+        writeSavedAccount(next)
         return
       }
       const remembered = readSavedAccount()
@@ -187,9 +190,12 @@ export const useInboxStore = defineStore('nudg-inbox', () => {
       const next = chooseAccount(inboxResource.data?.accounts || [], remembered)
       if (next !== account.value) {
         account.value = next
+        writeSavedAccount(next)
         await inboxResource.fetch({ account: accountArg() })
         conversationOffset = inboxResource.data?.conversations?.length || 0
         void fetchTemplates()
+      } else if (next) {
+        writeSavedAccount(next)
       }
     } catch (caught) {
       error.value = errorText(caught)
@@ -224,7 +230,13 @@ export const useInboxStore = defineStore('nudg-inbox', () => {
   }
 
   async function setAccount(name: string) {
-    account.value = name || 'all'
+    const next = name && name !== 'all' ? name : chooseAccount(inbox.value?.accounts || [], null)
+    if (!next) {
+      account.value = ''
+      writeSavedAccount('')
+      return
+    }
+    account.value = next
     writeSavedAccount(account.value)
     const selected = accountArg()
     if (!isLiveSession() || !inbox.value) return

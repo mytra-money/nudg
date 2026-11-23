@@ -32,7 +32,7 @@ const visibleNav = computed(() => shellNav.filter((link) => !link.managerOnly ||
 const accounts = ref<Array<{ name: string; account_name: string }>>([])
 const selectedAccountLabel = computed(() => {
   const selected = desk.account.value
-  if (!selected || selected === 'all') return selected === 'all' ? 'All numbers' : ''
+  if (!selected || selected === 'all') return ''
   const fromInbox = desk.inbox.value?.accounts?.find((row) => row.name === selected)
   if (fromInbox) return fromInbox.account_name || fromInbox.name
   const fromList = accounts.value.find((row) => row.name === selected)
@@ -81,7 +81,7 @@ const userMenu = computed<DropdownOptions>(() =>
           hideLabel: true,
           options: [
             { label: sessionUser || 'Signed in', description: 'Session user', disabled: true },
-            ...(desk.account.value && desk.account.value !== 'all' && selectedAccountLabel.value
+            ...(desk.account.value && selectedAccountLabel.value
               ? [{ label: selectedAccountLabel.value, description: 'Account', disabled: true }]
               : []),
             ...(sessionSite ? [{ label: sessionSite, description: 'Site', disabled: true }] : []),

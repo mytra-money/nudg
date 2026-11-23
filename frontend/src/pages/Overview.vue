@@ -59,13 +59,13 @@ function handleOpenProfile(name: string) {
 const selectedAccount = computed(() => desk.account.value)
 const conversations = computed(() => {
   const rows = desk.inbox.value?.conversations ?? []
-  if (!selectedAccount.value || selectedAccount.value === 'all') return rows
+  if (!selectedAccount.value) return rows
   return rows.filter((item) => item.profile.whatsapp_account === selectedAccount.value)
 })
 const accounts = computed(() => desk.inbox.value?.accounts ?? [])
 const templates = computed(() => {
   const rows = desk.inbox.value?.templates ?? []
-  if (!selectedAccount.value || selectedAccount.value === 'all') return rows
+  if (!selectedAccount.value) return rows
   return rows.filter((item) => !item.whatsapp_account || item.whatsapp_account === selectedAccount.value)
 })
 const logs = computed(() => desk.logs.value ?? [])

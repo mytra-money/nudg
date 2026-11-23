@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { Alert, Badge, Button, FormControl, Spinner, toast } from 'frappe-ui'
+import { Alert, Badge, Button, Spinner, toast } from 'frappe-ui'
 import { NumberCard } from 'frappe-ui/charts'
 import DeskCard from '@/components/desk/DeskCard.vue'
 import DeskEmpty from '@/components/desk/DeskEmpty.vue'
@@ -12,10 +12,7 @@ import { getAnalytics, refreshAnalytics } from '@/services/catalogApi'
 import { useDesk } from '@/stores/desk'
 
 const desk = useDesk()
-const { accountOptions, accountGateDescription } = useAccountGate({
-  includeAll: true,
-  allLabel: 'All Accounts',
-})
+const { selectedAccount, accountGateDescription } = useAccountGate()
 const live = Boolean(window.csrf_token)
 
 const loading = ref(true)
@@ -24,13 +21,12 @@ const latest = ref<any | null>(null)
 const refreshing = ref<any | null>(null)
 const history = ref<any[]>([])
 const busy = ref(false)
-const selectedAccount = ref('all')
 let timer = 0
 
 const sampleLatest = {
   name: 'snp-today',
   snapshot_date: new Date().toISOString().slice(0, 10),
-  whatsapp_account: 'All Accounts',
+  whatsapp_account: '',
   status: 'Ready',
   messages_in: 342,
   messages_out: 588,
@@ -188,8 +184,7 @@ async function load() {
       history.value = sampleHistory
       return
     }
-    const accArg = selectedAccount.value === 'all' ? undefined : selectedAccount.value
-    const payload = await getAnalytics(accArg)
+    const payload = await getAnalytics(selectedAccount.value || undefined)
     if (payload.has_accounts === false) {
       serverBlocked.value = true
       latest.value = null
@@ -233,8 +228,7 @@ async function refresh() {
       }
       return
     }
-    const accArg = selectedAccount.value === 'all' ? undefined : selectedAccount.value
-    await refreshAnalytics(accArg)
+    await refreshAnalytics(selectedAccount.value || undefined)
     toast.success('Analytics computation queued')
     await load()
   } catch (caught) {
@@ -269,12 +263,12 @@ function exportCsv() {
 
 watch(
   () => linkedAccounts.value.map((row) => row.name).join(','),
-  () => {
-    if (selectedAccount.value !== 'all' && !linkedAccounts.value.some((row) => row.name === selectedAccount.value)) {
-      selectedAccount.value = 'all'
-    }
-    void load()
-  },
+  () => void load(),
+)
+
+watch(
+  () => desk.account.value,
+  () => void load(),
 )
 
 onMounted(() => {
@@ -290,13 +284,6 @@ onUnmounted(() => window.clearInterval(timer))
 <template>
   <DeskPage variant="studio">
     <template v-if="!needsAccount" #actions>
-      <FormControl
-        type="select"
-        class="w-40"
-        :model-value="selectedAccount"
-        :options="accountOptions"
-        @update:model-value="(val: unknown) => { selectedAccount = String(val || 'all'); load(); }"
-      />
       <Button
         variant="subtle"
         size="sm"

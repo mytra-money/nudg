@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { Alert, Badge, Button, call, Checkbox, Dialog, dialog, FormControl, Password, TabButtons, TextInput, toast } from 'frappe-ui'
 import { NumberCard } from 'frappe-ui/charts'
 import DeskCard from '@/components/desk/DeskCard.vue'
@@ -18,7 +18,6 @@ const error = ref<string | null>(null)
 const replies = ref<any[]>([])
 const activeTab = ref<'replies' | 'hours' | 'routing' | 'profile' | 'team'>('replies')
 const searchQuery = ref('')
-const channelFilter = ref('all')
 const isRefreshing = ref(false)
 const showCreateModal = ref(false)
 const copiedShortcut = ref<string | null>(null)
@@ -213,11 +212,6 @@ const accountOptions = computed(() =>
   })),
 )
 const defaultAccountOptions = computed(() => [{ label: 'None', value: '' }, ...accountOptions.value])
-const replyChannelOptions = computed(() => [
-  { label: 'Global (All Channels)', value: '' },
-  ...channelOptions.value,
-])
-
 function openIntegrations() {
   void router.push('/integrations')
 }
@@ -227,7 +221,7 @@ function startReply(row?: any) {
   newTitle.value = row?.title || ''
   newShortcut.value = row?.shortcut || ''
   newBody.value = row?.body || ''
-  newChannel.value = row?.whatsapp_account || ''
+  newChannel.value = desk.account.value || row?.whatsapp_account || ''
   replyStatus.value = row?.status === 'Inactive' ? 'Inactive' : 'Active'
   showCreateModal.value = true
 }
@@ -265,7 +259,7 @@ async function load() {
       replies.value = fallbackQuickReplies
       return
     }
-    const result = await listQuickReplies()
+    const result = await listQuickReplies(desk.account.value || undefined)
     replies.value = result || []
   } catch (caught) {
     if (!isLive) {
@@ -380,22 +374,10 @@ async function handleSaveQuickReply() {
 
 const allReplies = computed(() => replies.value)
 
-const channelOptions = computed(() => {
-  if (desk.mode.value === 'live') {
-    return (desk.inbox.value?.accounts || []).map((account) => ({
-      value: account.name,
-      label: account.account_name || account.name,
-    }))
-  }
-  return [
-    { value: 'Sundarban Sales', label: 'Sundarban Sales' },
-    { value: 'Sundarban Dispatch', label: 'Sundarban Dispatch' },
-  ]
-})
-
 const filteredReplies = computed(() => {
+  const account = desk.account.value
   return allReplies.value.filter((row) => {
-    if (channelFilter.value !== 'all' && row.whatsapp_account && row.whatsapp_account !== channelFilter.value) {
+    if (account && row.whatsapp_account && row.whatsapp_account !== account) {
       return false
     }
     if (searchQuery.value) {
@@ -449,9 +431,7 @@ const selectedTeamAccount = ref('')
 function openInviteModal() {
   inviteEmails.value = ''
   newMemberRole.value = 'WhatsApp Manager'
-  if (!selectedTeamAccount.value) {
-    selectedTeamAccount.value = accountOptions.value[0]?.value || ''
-  }
+  selectedTeamAccount.value = desk.account.value || accountOptions.value[0]?.value || ''
   showAddMemberModal.value = true
 }
 
@@ -599,6 +579,13 @@ function removeReply() {
     },
   })
 }
+
+watch(
+  () => desk.account.value,
+  () => {
+    void load()
+  },
+)
 
 onMounted(() => {
   desk.load()
@@ -757,7 +744,7 @@ onMounted(() => {
           size="sm"
           class="bg-[#075E54] text-white hover:bg-[#128C7E]"
           label="Reset Filters"
-          @click="searchQuery = ''; channelFilter = 'all'"
+          @click="searchQuery = ''"
         />
       </EmptyState>
       </template>
@@ -1042,20 +1029,12 @@ onMounted(() => {
           required
         />
 
-        <div class="grid grid-cols-2 gap-3">
-          <FormControl
-            v-model="newMemberRole"
-            type="select"
-            label="Role"
-            :options="roleOptions"
-          />
-          <FormControl
-            v-model="selectedTeamAccount"
-            type="select"
-            label="Assign WhatsApp Account"
-            :options="accountOptions"
-          />
-        </div>
+        <FormControl
+          v-model="newMemberRole"
+          type="select"
+          label="Role"
+          :options="roleOptions"
+        />
       </div>
 
       <template #actions>
@@ -1173,12 +1152,6 @@ onMounted(() => {
             type="select"
             label="Status"
             :options="statusOptions"
-          />
-          <FormControl
-            v-model="newChannel"
-            type="select"
-            label="Channel"
-            :options="replyChannelOptions"
           />
         </div>
 

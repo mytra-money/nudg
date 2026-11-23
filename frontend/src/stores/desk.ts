@@ -37,11 +37,11 @@ export function useDesk() {
   }
 
   async function setAccount(name: string) {
-    const selected = name && name !== 'all' ? name : undefined
+    const selected = name && name !== 'all' ? name : ''
     if (threadStore.thread && selected && threadStore.thread.profile.whatsapp_account !== selected) {
       await threadStore.openProfile(null)
     }
-    await inboxStore.setAccount(name)
+    await inboxStore.setAccount(selected)
   }
 
   return {

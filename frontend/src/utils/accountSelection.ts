@@ -12,7 +12,8 @@ function storageKey() {
 export function readSavedAccount(): string | null {
   try {
     const value = localStorage.getItem(storageKey())
-    return value || null
+    if (!value || value === 'all') return null
+    return value
   } catch {
     return null
   }
@@ -20,22 +21,34 @@ export function readSavedAccount(): string | null {
 
 export function writeSavedAccount(name: string) {
   try {
-    localStorage.setItem(storageKey(), name || 'all')
+    if (!name || name === 'all') {
+      localStorage.removeItem(storageKey())
+      return
+    }
+    localStorage.setItem(storageKey(), name)
   } catch {
     /* ignore quota / private mode */
   }
 }
 
 /**
- * Keep a saved choice across refresh.
- * With nothing saved, use the user's assigned number (the default one when they
- * have several). Someone with no assigned number stays on All numbers.
+ * Always pick exactly one WhatsApp account.
+ * Prefer the saved choice when still allowed, else the assigned default,
+ * else the first assigned (or first visible) number. Empty string when none.
  */
 export function chooseAccount(accounts: Account[], saved: string | null): string {
   const names = new Set(accounts.map((row) => row.name))
-  if (saved === 'all') return 'all'
-  if (saved && names.has(saved)) return saved
+  const remembered = saved && saved !== 'all' ? saved : null
+  if (remembered && names.has(remembered)) return remembered
+
   const assigned = accounts.filter((row) => row.assigned)
-  if (!assigned.length) return 'all'
-  return (assigned.find((row) => row.is_default) || assigned[0]).name
+  const pool = assigned.length ? assigned : accounts
+  if (!pool.length) return ''
+  return (pool.find((row) => row.is_default) || pool[0])!.name
+}
+
+/** Concrete account for API calls; undefined when none is selected. */
+export function accountArg(account: string | null | undefined): string | undefined {
+  if (!account || account === 'all') return undefined
+  return account
 }
