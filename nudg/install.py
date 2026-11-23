@@ -269,7 +269,7 @@ def setup_standard_custom_fields():
 				"label": "WhatsApp Broadcast",
 				"fieldtype": "Section Break",
 				"insert_after": "campaign_description",
-				"description": "Templates live here. Audience and send dates live on WhatsApp Campaign, which creates the bulk message.",
+				"description": "Audience and schedule live on WhatsApp Campaign.",
 			},
 			{
 				"fieldname": "whatsapp_account",
@@ -292,7 +292,7 @@ def setup_standard_custom_fields():
 				"label": "WhatsApp Campaign Schedules",
 				"fieldtype": "Section Break",
 				"insert_after": "whatsapp_last_error",
-				"description": "Each row waits Send After days from the WhatsApp Campaign start date, uses a WhatsApp template, and becomes a Bulk WhatsApp Message.",
+				"description": "Each row is a WhatsApp template and how many days after the start date it sends.",
 			},
 			{
 				"fieldname": "whatsapp_schedules",

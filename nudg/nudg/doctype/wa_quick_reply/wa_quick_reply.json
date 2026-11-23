@@ -61,6 +61,10 @@
    "in_list_view": 1
   },
   {
+   "fieldname": "column_break_reply",
+   "fieldtype": "Column Break"
+  },
+  {
    "fieldname": "body",
    "fieldtype": "Text",
    "label": "Body",
@@ -72,6 +76,10 @@
    "options": "WA Account",
    "label": "WhatsApp Account",
    "in_standard_filter": 1
+  },
+  {
+   "fieldname": "section_body",
+   "fieldtype": "Section Break"
   },
   {
    "fieldname": "status",
@@ -93,9 +101,11 @@
  "field_order": [
   "title",
   "shortcut",
-  "body",
+  "column_break_reply",
   "whatsapp_account",
   "status",
+  "section_body",
+  "body",
   "usage_count"
  ]
 }

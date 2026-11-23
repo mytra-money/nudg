@@ -812,9 +812,6 @@ watch(
 
     <Dialog v-model="editorOpen" :title="editorMode === 'edit' ? 'Edit campaign' : 'New campaign'">
       <div class="space-y-3 py-1 text-sm">
-        <p class="text-xs text-ink-gray-6">
-          Same timing as an email campaign. Pick a start date and the time this client should send. The end date is the start date plus the longest send-after on the schedule. The message uses a WhatsApp template and a profile or recipient list.
-        </p>
         <FormControl
           v-model="form.name"
           type="text"
@@ -848,14 +845,12 @@ watch(
           label="WhatsApp template"
           :options="templateOptions"
         />
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-3 gap-3">
           <FormControl v-model="form.start_date" type="date" label="Start date" />
+          <FormControl :model-value="previewEnd" type="date" label="End date" disabled />
           <FormControl v-model="form.trigger_time" type="time" label="Trigger time" />
         </div>
         <FormControl v-model="form.send_after_days" type="number" label="Send after (days)" />
-        <p v-if="previewEnd" class="text-xs text-ink-gray-6">
-          End date is set automatically to {{ formatDay(previewEnd) }}. It is not entered by hand.
-        </p>
       </div>
       <template #actions>
         <div class="flex justify-end gap-2">

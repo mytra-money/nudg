@@ -63,6 +63,10 @@
    "in_standard_filter": 1
   },
   {
+   "fieldname": "column_break_catalog",
+   "fieldtype": "Column Break"
+  },
+  {
    "fieldname": "status",
    "fieldtype": "Select",
    "label": "Status",
@@ -74,8 +78,12 @@
   {
    "fieldname": "meta_catalog_id",
    "fieldtype": "Data",
-   "label": "Meta Catalog ID",
-   "read_only": 0
+   "label": "Meta Catalog ID"
+  },
+  {
+   "fieldname": "section_sync",
+   "fieldtype": "Section Break",
+   "label": "Sync"
   },
   {
    "fieldname": "sync_status",
@@ -87,9 +95,17 @@
    "in_list_view": 1
   },
   {
+   "fieldname": "column_break_sync",
+   "fieldtype": "Column Break"
+  },
+  {
    "fieldname": "sync_error",
    "fieldtype": "Small Text",
    "label": "Sync Error"
+  },
+  {
+   "fieldname": "section_detail",
+   "fieldtype": "Section Break"
   },
   {
    "fieldname": "description",
@@ -100,10 +116,14 @@
  "field_order": [
   "catalog_name",
   "whatsapp_account",
+  "column_break_catalog",
   "status",
   "meta_catalog_id",
+  "section_sync",
   "sync_status",
+  "column_break_sync",
   "sync_error",
+  "section_detail",
   "description"
  ]
 }

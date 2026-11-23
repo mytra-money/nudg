@@ -52,8 +52,7 @@
    "reqd": 1,
    "unique": 1,
    "in_list_view": 1,
-   "in_standard_filter": 1,
-   "description": "This chatbot answers only this account. Create one for each customer account."
+   "in_standard_filter": 1
   },
   {
    "fieldname": "section_break_responses",

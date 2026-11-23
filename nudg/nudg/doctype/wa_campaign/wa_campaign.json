@@ -7,11 +7,13 @@
  "field_order": [
   "campaign",
   "whatsapp_account",
+  "column_break_audience",
   "recipient_type",
   "recipient",
-  "column_break_dates",
+  "section_schedule",
   "start_date",
   "trigger_time",
+  "column_break_schedule",
   "end_date",
   "status",
   "section_recipients",
@@ -37,7 +39,11 @@
    "read_only": 1,
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "description": "Copied from the campaign. The schedule rows do not choose a number."
+   "description": "Copied from the campaign."
+  },
+  {
+   "fieldname": "column_break_audience",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "recipient_type",
@@ -54,12 +60,12 @@
    "label": "Recipient",
    "options": "recipient_type",
    "reqd": 1,
-   "in_list_view": 1,
-   "description": "A WhatsApp profile, or a recipient list. The table below is filled from that choice."
+   "in_list_view": 1
   },
   {
-   "fieldname": "column_break_dates",
-   "fieldtype": "Column Break"
+   "fieldname": "section_schedule",
+   "fieldtype": "Section Break",
+   "label": "Schedule"
   },
   {
    "fieldname": "start_date",
@@ -73,8 +79,11 @@
    "fieldtype": "Time",
    "label": "Trigger Time",
    "reqd": 1,
-   "in_list_view": 1,
-   "description": "On the scheduled day, the bulk message is created once the clock reaches this time. Each client can use a different time."
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "column_break_schedule",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "end_date",
@@ -82,7 +91,7 @@
    "label": "End Date",
    "read_only": 1,
    "in_list_view": 1,
-   "description": "Start date plus the longest Send After (days) on the campaign schedule. This is not entered by hand."
+   "description": "Calculated from the campaign schedule."
   },
   {
    "fieldname": "status",
@@ -97,8 +106,7 @@
   {
    "fieldname": "section_recipients",
    "fieldtype": "Section Break",
-   "label": "Recipients",
-   "description": "Loaded from the selected profile or recipient list. These people are copied onto the bulk message."
+   "label": "Recipients"
   },
   {
    "fieldname": "recipients",
@@ -118,8 +126,7 @@
    "fieldtype": "Table",
    "label": "Bulk Messages",
    "options": "WA Campaign Dispatch",
-   "read_only": 1,
-   "description": "Each due schedule on the campaign creates one bulk message while the start and end dates are open."
+   "read_only": 1
   }
  ],
  "links": [],

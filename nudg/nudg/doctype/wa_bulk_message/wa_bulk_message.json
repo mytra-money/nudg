@@ -6,24 +6,29 @@
  "field_order": [
   "title",
   "whatsapp_account",
+  "column_break_header",
   "use_template",
   "template",
   "variable_type",
+  "section_content",
   "template_variables",
   "attach",
   "section_recipients",
   "recipient_type",
   "recipient_list",
-  "recipients",
+  "column_break_recipients",
   "recipient_count",
+  "recipients",
   "section_status",
   "status",
   "sent_count",
+  "column_break_status",
   "failed_count",
   "scheduled_time",
-  "column_break_campaign",
+  "section_source",
   "campaign",
   "whatsapp_campaign",
+  "column_break_source",
   "schedule_row",
   "section_mpm",
   "is_mpm",
@@ -49,6 +54,10 @@
    "in_list_view": 1
   },
   {
+   "fieldname": "column_break_header",
+   "fieldtype": "Column Break"
+  },
+  {
    "fieldname": "use_template",
    "fieldtype": "Check",
    "label": "Use Template",
@@ -59,20 +68,27 @@
    "fieldtype": "Link",
    "label": "WhatsApp Template",
    "options": "WA Template",
-   "in_list_view": 1
+   "in_list_view": 1,
+   "depends_on": "eval:doc.use_template"
   },
   {
    "fieldname": "variable_type",
    "fieldtype": "Select",
    "label": "Variable Type",
    "options": "Common\nUnique",
-   "default": "Unique"
+   "default": "Unique",
+   "depends_on": "eval:doc.use_template"
+  },
+  {
+   "fieldname": "section_content",
+   "fieldtype": "Section Break"
   },
   {
    "fieldname": "template_variables",
    "fieldtype": "Code",
    "label": "Template Variables",
-   "options": "JSON"
+   "options": "JSON",
+   "depends_on": "eval:doc.use_template"
   },
   {
    "fieldname": "attach",
@@ -97,13 +113,19 @@
    "fieldname": "recipient_list",
    "fieldtype": "Link",
    "label": "Recipient List",
-   "options": "WA Recipient List"
+   "options": "WA Recipient List",
+   "depends_on": "eval:doc.recipient_type=='Recipient List'"
+  },
+  {
+   "fieldname": "column_break_recipients",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "recipients",
    "fieldtype": "Table",
    "label": "Recipients",
-   "options": "WA Recipient"
+   "options": "WA Recipient",
+   "depends_on": "eval:doc.recipient_type!='Recipient List'"
   },
   {
    "fieldname": "recipient_count",
@@ -134,6 +156,10 @@
    "read_only": 1
   },
   {
+   "fieldname": "column_break_status",
+   "fieldtype": "Column Break"
+  },
+  {
    "fieldname": "failed_count",
    "fieldtype": "Int",
    "label": "Failed Count",
@@ -146,7 +172,13 @@
    "label": "Scheduled Time"
   },
   {
-   "fieldname": "column_break_campaign",
+   "fieldname": "section_source",
+   "fieldtype": "Section Break",
+   "label": "Source",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "column_break_source",
    "fieldtype": "Column Break"
   },
   {
@@ -183,17 +215,20 @@
    "fieldname": "product_ids",
    "fieldtype": "Small Text",
    "label": "Product IDs",
-   "description": "Comma-separated retailer ids, 30 maximum"
+   "depends_on": "eval:doc.is_mpm",
+   "description": "Comma-separated retailer ids, 30 maximum."
   },
   {
    "fieldname": "mpm_header",
    "fieldtype": "Data",
-   "label": "Section Title"
+   "label": "Section Title",
+   "depends_on": "eval:doc.is_mpm"
   },
   {
    "fieldname": "thumbnail_product_retailer_id",
    "fieldtype": "Data",
-   "label": "Thumbnail Product Id"
+   "label": "Thumbnail Product Id",
+   "depends_on": "eval:doc.is_mpm"
   },
   {
    "fieldname": "amended_from",

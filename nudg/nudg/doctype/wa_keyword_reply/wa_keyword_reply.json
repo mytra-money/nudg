@@ -9,6 +9,8 @@
   "priority",
   "column_break_basic",
   "whatsapp_account",
+  "active_from",
+  "active_until",
   "section_break_keywords",
   "keywords",
   "match_type",
@@ -28,9 +30,7 @@
   "section_break_script",
   "script",
   "section_break_conditions",
-  "conditions",
-  "active_from",
-  "active_until"
+  "conditions"
  ],
  "fields": [
   {
