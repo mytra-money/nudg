@@ -52,11 +52,16 @@ class WACampaign(Document):
 		return [int(row.get("send_after_days") or 0) for row in rows]
 
 	def _load_recipients(self):
+		from nudg.services.campaign_replies import phone_digits, remembered_unsubscribed
+
+		kept = remembered_unsubscribed(self.name)
 		rows = recipient_rows(self.recipient_type, self.recipient)
 		if not rows:
 			frappe.throw(_("This profile or recipient list has no phone numbers."))
 		self.set("recipients", [])
 		for row in rows:
+			if kept.get(phone_digits(row.get("mobile_number"))):
+				row["unsubscribed"] = 1
 			self.append("recipients", row)
 
 	def _set_status(self):
@@ -89,10 +94,13 @@ def recipient_rows(recipient_type: str | None, recipient: str | None) -> list[di
 def _rows_from_list(list_name: str) -> list[dict]:
 	if not frappe.db.exists("WA Recipient List", list_name):
 		frappe.throw(_("Recipient List {0} was not found.").format(list_name))
+	fields = ["mobile_number", "recipient_name", "recipient_data"]
+	if frappe.db.has_column("WA Recipient", "unsubscribed"):
+		fields.append("unsubscribed")
 	people = frappe.get_all(
 		"WA Recipient",
 		filters={"parent": list_name, "parenttype": "WA Recipient List"},
-		fields=["mobile_number", "recipient_name", "recipient_data"],
+		fields=fields,
 		limit_page_length=0,
 	)
 	if not isinstance(people, list):
@@ -102,6 +110,7 @@ def _rows_from_list(list_name: str) -> list[dict]:
 			"mobile_number": person.get("mobile_number"),
 			"recipient_name": person.get("recipient_name"),
 			"recipient_data": person.get("recipient_data"),
+			"unsubscribed": 1 if person.get("unsubscribed") else 0,
 		}
 		for person in people
 		if person.get("mobile_number")
@@ -115,7 +124,13 @@ def _rows_from_profile(profile: str) -> list[dict]:
 	phone = (row.get("phone_number") or "").strip()
 	if not phone:
 		frappe.throw(_("Profile {0} has no phone number.").format(profile))
-	return [{"mobile_number": phone, "recipient_name": row.get("profile_name") or profile}]
+	return [
+		{
+			"mobile_number": phone,
+			"recipient_name": row.get("profile_name") or profile,
+			"unsubscribed": 0,
+		}
+	]
 
 
 @frappe.whitelist()

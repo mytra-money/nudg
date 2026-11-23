@@ -1149,20 +1149,13 @@ class RemoteStore:
 			try:
 				from nudg.services import consent
 
-				matched, _status_name = consent.handle_incoming_consent(
+				consent.handle_incoming_consent(
 					contact_id=local_profile,
 					text=text,
 					channel_doc=None,
 					phone_number=phone,
 					send_acknowledgment=False,
 				)
-				if matched:
-					ack = (
-						"You have successfully unsubscribed and will no longer receive messages. Reply START to resubscribe."
-						if _status_name == "Opted-Out"
-						else "You have successfully subscribed to receive messages. Reply STOP at any time to unsubscribe."
-					)
-					send_text(phone, self.account, ack)
 			except Exception:
 				frappe.log_error(title="Remote consent")
 		kind = parsed["kind"]

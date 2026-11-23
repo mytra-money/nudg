@@ -97,6 +97,62 @@ export async function unassignConversation(profile: string, user?: string) {
   return call<any>('nudg.desk_api.unassign_conversation', user ? { profile, user } : { profile })
 }
 
+export async function listUtmCampaigns(account?: string) {
+  return call<any[]>('nudg.desk_api.list_utm_campaigns', { account })
+}
+
+export async function getUtmCampaign(name: string) {
+  return call<any>('nudg.desk_api.get_utm_campaign', { name })
+}
+
+export async function createUtmCampaign(payload: {
+  name: string
+  campaign_description?: string
+  whatsapp_account?: string
+  schedules?: Array<{ whatsapp_template: string; send_after_days?: number }>
+}) {
+  return call<any>('nudg.desk_api.create_utm_campaign', payload)
+}
+
+export async function updateUtmCampaign(payload: {
+  name: string
+  campaign_name?: string
+  campaign_description?: string
+  whatsapp_account?: string
+  schedules?: Array<{ whatsapp_template: string; send_after_days?: number }>
+}) {
+  return call<any>('nudg.desk_api.update_utm_campaign', payload)
+}
+
+export async function deleteUtmCampaign(name: string) {
+  return call<any>('nudg.desk_api.delete_utm_campaign', { name })
+}
+
+export async function createWhatsappSchedule(payload: {
+  campaign: string
+  recipient_type?: string
+  recipient?: string
+  start_date?: string
+  trigger_time?: string
+}) {
+  return call<any>('nudg.desk_api.create_whatsapp_schedule', payload)
+}
+
+export async function updateWhatsappSchedule(payload: {
+  name: string
+  campaign?: string
+  recipient_type?: string
+  recipient?: string
+  start_date?: string
+  trigger_time?: string
+}) {
+  return call<any>('nudg.desk_api.update_whatsapp_schedule', payload)
+}
+
+export async function listBulkResults(account?: string) {
+  return call<any[]>('nudg.desk_api.list_bulk_results', { account })
+}
+
 export async function listCampaigns(account?: string) {
   return call<any[]>('nudg.desk_api.list_campaigns', { account })
 }
@@ -169,20 +225,6 @@ export async function updateWhatsappAccount(payload: {
   is_default?: number
 }) {
   return call<any>('nudg.desk_api.update_whatsapp_account', payload)
-}
-
-export async function getWhatsappSettings() {
-  return call<any>('nudg.desk_api.get_whatsapp_settings')
-}
-
-export async function saveWhatsappSettings(payload: {
-  default_account?: string
-  whatsapp_api_url?: string
-  whatsapp_api_version?: string
-  webhook_verify_token?: string
-  webhook_secret?: string
-}) {
-  return call<any>('nudg.desk_api.save_whatsapp_settings', payload)
 }
 
 export async function deleteQuickReply(name: string) {

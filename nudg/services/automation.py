@@ -62,7 +62,7 @@ def on_wa_message(doc, method=None):
 					text=doc.message or "",
 					channel_doc=channel_doc,
 					phone_number=getattr(doc, "from", None),
-					send_acknowledgment=True,
+					send_acknowledgment=False,
 				)
 			except Exception:
 				pass

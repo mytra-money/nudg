@@ -154,22 +154,37 @@ def send_whatsapp_campaign(name: str, on_date=None, at=None) -> list[str]:
 	return created
 
 
+def recipient_receives_campaign(unsubscribed, consent_ok: bool = True) -> bool:
+	"""A row is sent only when it is still subscribed and consent allows it."""
+	if unsubscribed in (1, True, "1"):
+		return False
+	return bool(consent_ok)
+
+
 def create_bulk_from_whatsapp_campaign(wa_campaign, campaign, row) -> str | None:
 	"""Build and submit the bulk message for one schedule row and one audience."""
 	account = campaign.get("whatsapp_account")
 	if not account or not row.whatsapp_template:
 		frappe.log_error(title=f"WhatsApp Campaign {wa_campaign.name} needs an account and a template")
 		return None
+	from nudg.services.campaigns import check_recipient_consent
+
 	recipients = []
 	for person in wa_campaign.recipients or []:
-		phone = getattr(person, "mobile_number", None) or (person.get("mobile_number") if isinstance(person, dict) else None)
+		phone = _value(person, "mobile_number")
 		if not phone:
 			continue
-		name = getattr(person, "recipient_name", None) or (person.get("recipient_name") if isinstance(person, dict) else None)
-		data = getattr(person, "recipient_data", None) or (person.get("recipient_data") if isinstance(person, dict) else None)
-		recipients.append({"mobile_number": phone, "recipient_name": name, "recipient_data": data})
+		if not recipient_receives_campaign(_value(person, "unsubscribed"), check_recipient_consent(phone_number=phone)):
+			continue
+		recipients.append(
+			{
+				"mobile_number": phone,
+				"recipient_name": _value(person, "recipient_name"),
+				"recipient_data": _value(person, "recipient_data"),
+				"unsubscribed": 0,
+			}
+		)
 	if not recipients:
-		frappe.log_error(title=f"WhatsApp Campaign {wa_campaign.name} has no recipients")
 		return None
 	doc = frappe.get_doc(
 		{
@@ -232,6 +247,88 @@ def list_recipient_profiles(account: str | None = None) -> list[dict]:
 		fields=["name", "profile_name", "phone_number", "whatsapp_account"],
 		order_by="modified desc",
 		limit_page_length=100,
+	)
+	return rows if isinstance(rows, list) else []
+
+
+def schedule_whatsapp_campaign(
+	campaign: str,
+	recipient_type: str | None = None,
+	recipient: str | None = None,
+	start_date: str | None = None,
+	trigger_time: str | None = None,
+) -> dict:
+	"""Attach an audience and a send time to a campaign that already exists."""
+	frappe.has_permission("WA Campaign", "create", throw=True)
+	campaign = (campaign or "").strip()
+	if not campaign or not frappe.db.exists("UTM Campaign", campaign):
+		frappe.throw(_("Select a campaign."))
+	doc = frappe.get_doc(
+		{
+			"doctype": "WA Campaign",
+			"campaign": campaign,
+			"recipient_type": recipient_type,
+			"recipient": recipient,
+			"start_date": _date_or_none(start_date),
+			"trigger_time": (trigger_time or "").strip() or None,
+		}
+	)
+	doc.insert()
+	return present(doc)
+
+
+def update_whatsapp_schedule(
+	name: str,
+	campaign: str | None = None,
+	recipient_type: str | None = None,
+	recipient: str | None = None,
+	start_date: str | None = None,
+	trigger_time: str | None = None,
+) -> dict:
+	"""Change the audience or the clock on a WhatsApp Campaign that has not sent."""
+	doc = frappe.get_doc("WA Campaign", name)
+	frappe.has_permission("WA Campaign", "write", doc=doc, throw=True)
+	if any(row.bulk_message for row in (doc.dispatches or [])):
+		frappe.throw(_("This schedule already created a bulk message and cannot be edited."))
+	campaign_name = (campaign or doc.campaign or "").strip()
+	if not campaign_name or not frappe.db.exists("UTM Campaign", campaign_name):
+		frappe.throw(_("Select a campaign."))
+	doc.campaign = campaign_name
+	doc.recipient_type = recipient_type
+	doc.recipient = recipient
+	doc.start_date = _date_or_none(start_date)
+	doc.trigger_time = (trigger_time or "").strip() or None
+	doc.save()
+	return present(doc)
+
+
+def list_bulk_results(account: str | None = None) -> list[dict]:
+	"""Submitted and draft bulk messages for the marketing results tab."""
+	if not frappe.db.exists("DocType", "WA Bulk Message"):
+		return []
+	frappe.has_permission("WA Bulk Message", "read", throw=True)
+	filters = {}
+	if account:
+		filters["whatsapp_account"] = account
+	rows = frappe.get_list(
+		"WA Bulk Message",
+		filters=filters,
+		fields=[
+			"name",
+			"title",
+			"status",
+			"sent_count",
+			"failed_count",
+			"recipient_count",
+			"campaign",
+			"whatsapp_campaign",
+			"template",
+			"whatsapp_account",
+			"modified",
+			"docstatus",
+		],
+		order_by="modified desc",
+		limit_page_length=50,
 	)
 	return rows if isinstance(rows, list) else []
 
@@ -304,22 +401,11 @@ def update_whatsapp_campaign(
 
 
 def delete_whatsapp_campaign(name: str) -> dict:
-	from nudg.services.campaigns import delete_campaign
-
+	"""Remove one schedule. The campaign and its template stay."""
 	doc = frappe.get_doc("WA Campaign", name)
 	frappe.has_permission("WA Campaign", "delete", doc=doc, throw=True)
 	if any(row.bulk_message for row in (doc.dispatches or [])):
-		frappe.throw(_("This broadcast already created a bulk message and cannot be deleted."))
-	campaign_name = doc.campaign
-	others = []
-	if campaign_name:
-		others = frappe.get_all(
-			"WA Campaign",
-			filters={"campaign": campaign_name, "name": ["!=", doc.name]},
-			limit=1,
-		)
-	if campaign_name and not others:
-		delete_campaign(campaign_name)
+		frappe.throw(_("This schedule already created a bulk message and cannot be deleted."))
 	frappe.delete_doc("WA Campaign", doc.name, ignore_permissions=True)
 	return {"name": name, "deleted": True}
 
@@ -340,6 +426,7 @@ def present(doc) -> dict:
 				"profile": _value(row, "recipient_name") or _value(row, "mobile_number"),
 				"phone_number": _value(row, "mobile_number"),
 				"recipient_name": _value(row, "recipient_name"),
+				"unsubscribed": 1 if _value(row, "unsubscribed") else 0,
 			}
 		)
 	return {

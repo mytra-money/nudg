@@ -55,7 +55,10 @@ class DeskContactRepository:
 		consent_status: str,
 		reason: str | None = None,
 	) -> None:
-		"""Update contact opt-in or opt-out status (e.g. on STOP keyword)."""
-		# consent_status and consent_reason were removed. Callers still record the
-		# keyword; profile status is what later sends check.
-		return
+		"""Record a consent keyword without changing the WhatsApp profile.
+
+		Unsubscribe is the checkbox on the campaign audience. Blocking a profile
+		is a separate action and is not done from a reply.
+		"""
+		if not contact_id or not consent_status:
+			return

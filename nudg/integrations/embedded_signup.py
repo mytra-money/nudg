@@ -514,6 +514,76 @@ def _log_meta(detail: str) -> None:
 		return
 
 
+# Meta returns these. After Embedded Signup they stay as stored.
+_LOCKED_ACCOUNT_FIELDS = ("account_name", "business_id", "phone_id", "app_id")
+_LOCKED_ACCOUNT_SECRETS = ("access_token", "two_step_pin")
+_LOCKED_ACCOUNT_LABELS = {
+	"account_name": "Account name",
+	"business_id": "Business ID",
+	"phone_id": "Phone ID",
+	"app_id": "App ID",
+	"access_token": "Access token",
+	"two_step_pin": "Two-step PIN",
+}
+
+
+def meta_has_embedded_signup() -> bool:
+	try:
+		return bool(frappe.get_meta("WA Account").get_field("embedded_signup"))
+	except Exception:
+		return False
+
+
+def lock_embedded_signup_account(doc, method=None):
+	"""Refuse edits to the Meta details Embedded Signup stored."""
+	if doc.flags.get("allow_embedded_credential_update") or doc.is_new():
+		return
+	if not meta_has_embedded_signup() or not frappe.utils.cint(doc.get("embedded_signup")):
+		return
+	previous = frappe.db.get_value(
+		"WA Account",
+		doc.name,
+		["embedded_signup", *_LOCKED_ACCOUNT_FIELDS],
+		as_dict=True,
+	)
+	if not previous or not frappe.utils.cint(previous.get("embedded_signup")):
+		return
+	doc.embedded_signup = 1
+	meta = frappe.get_meta("WA Account")
+	changed = [
+		_(_LOCKED_ACCOUNT_LABELS[field])
+		for field in _LOCKED_ACCOUNT_FIELDS
+		if (doc.get(field) or "") != (previous.get(field) or "")
+	]
+	for field in _LOCKED_ACCOUNT_SECRETS:
+		if meta.get_field(field) and _secret_changed(doc, field):
+			changed.append(_(_LOCKED_ACCOUNT_LABELS[field]))
+	if changed:
+		frappe.throw(
+			_("This number was connected with Embedded Signup. {0} cannot be changed.").format(", ".join(changed))
+		)
+
+
+def block_embedded_signup_rename(doc, method=None, old=None, new=None, merge=False):
+	"""The account name is the mobile number Embedded Signup stored."""
+	if doc.flags.get("allow_embedded_credential_update"):
+		return
+	if not meta_has_embedded_signup() or not frappe.utils.cint(doc.get("embedded_signup")):
+		return
+	if old and new and str(old) != str(new):
+		frappe.throw(_("This number was connected with Embedded Signup. Its name cannot be changed."))
+
+
+def _secret_changed(doc, fieldname: str) -> bool:
+	incoming = doc.get(fieldname)
+	if incoming in (None, "") or set(str(incoming)) == {"*"}:
+		return False
+	from frappe.utils.password import get_decrypted_password
+
+	stored = get_decrypted_password("WA Account", doc.name, fieldname, raise_exception=False) or ""
+	return str(incoming) != str(stored)
+
+
 def _upsert_account(
 	account_name: str,
 	phone_id: str,
@@ -538,9 +608,13 @@ def _upsert_account(
 	doc.access_token = access_token
 	doc.app_id = app_id
 	doc.status = "Active"
-	if pin and frappe.get_meta("WA Account").get_field("two_step_pin"):
-		doc.two_step_pin = pin
+	# Embedded Signup is the only writer of these Meta fields after this save.
+	doc.flags.allow_embedded_credential_update = True
 	meta = frappe.get_meta("WA Account")
+	if meta.get_field("embedded_signup"):
+		doc.embedded_signup = 1
+	if pin and meta.get_field("two_step_pin"):
+		doc.two_step_pin = pin
 	if meta.get_field("coexistence"):
 		doc.coexistence = 1 if coexistence else 0
 	if platform_type and meta.get_field("platform_type"):

@@ -333,7 +333,7 @@ def _process_incoming_message(msg: dict, channel_doc: Any, contact_profile: dict
 		text=saved.get("content") or "",
 		channel_doc=channel_doc,
 		phone_number=wa_id,
-		send_acknowledgment=True,
+		send_acknowledgment=False,
 	)
 
 	# Auto Read Receipts

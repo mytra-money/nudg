@@ -102,7 +102,7 @@
    "fieldname": "response_type",
    "fieldtype": "Select",
    "label": "Response Type",
-   "options": "Text\nTemplate\nMedia\nFlow\nScript",
+   "options": "Text\nTemplate\nMedia\nFlow\nScript\nUnsubscribe\nSubscribe",
    "reqd": 1,
    "default": "Text",
    "in_list_view": 1

@@ -12,6 +12,7 @@ app_include_js = ["/assets/nudg/js/nudg_navbar.js"]
 app_include_css = ["/assets/nudg/css/nudg_navbar.css"]
 
 doctype_js = {
+	"WA Account": "public/js/wa_account.js",
 	"WA Message": "public/js/wa_message.js",
 	"WA Bulk Message": "public/js/wa_bulk_message.js",
 	"WA Campaign": "public/js/wa_campaign.js",
@@ -108,7 +109,11 @@ doc_events = {
 		],
 	},
 	"WA Account": {
-		"validate": "nudg.integrations.erpnext.service.validate_account_site",
+		"validate": [
+			"nudg.integrations.embedded_signup.lock_embedded_signup_account",
+			"nudg.integrations.erpnext.service.validate_account_site",
+		],
+		"before_rename": "nudg.integrations.embedded_signup.block_embedded_signup_rename",
 		"after_insert": [
 			"nudg.security.undo_autoselected_default",
 			"nudg.security.mark_first_account_default",

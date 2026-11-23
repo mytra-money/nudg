@@ -191,6 +191,11 @@ class ChatbotProcessor:
 			return response
 		if kind == "Script":
 			return self.execute_script(keyword_doc.script)
+		if kind in ("Unsubscribe", "Subscribe"):
+			from nudg.services.campaign_replies import set_audience_unsubscribed
+
+			set_audience_unsubscribed(self.phone_number, 0 if kind == "Subscribe" else 1)
+			return keyword_doc.response_text
 		return None
 
 	def execute_script(self, script):

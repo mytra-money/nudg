@@ -371,6 +371,114 @@ def auto_assign_round_robin(profile: str) -> dict:
 
 
 @frappe.whitelist()
+def list_utm_campaigns(account: str | None = None, start: int | None = 0, limit: int | None = None) -> list:
+	"""Campaigns. These hold the template schedule and do not send."""
+	_require_manager()
+	return campaigns.list_campaigns(account, start, limit)
+
+
+@frappe.whitelist()
+def get_utm_campaign(name: str) -> dict:
+	_require_manager()
+	return campaigns.get_campaign(name)
+
+
+@frappe.whitelist()
+def create_utm_campaign(
+	name: str,
+	campaign_description: str | None = None,
+	whatsapp_account: str | None = None,
+	whatsapp_template: str | None = None,
+	schedules: str | list | None = None,
+) -> dict:
+	_require_manager()
+	return campaigns.create_campaign(
+		name,
+		campaign_description,
+		whatsapp_account,
+		whatsapp_template=whatsapp_template,
+		schedules=schedules,
+	)
+
+
+@frappe.whitelist()
+def update_utm_campaign(
+	name: str,
+	campaign_name: str | None = None,
+	campaign_description: str | None = None,
+	whatsapp_account: str | None = None,
+	whatsapp_template: str | None = None,
+	schedules: str | list | None = None,
+) -> dict:
+	_require_manager()
+	return campaigns.update_campaign(
+		name,
+		campaign_name,
+		campaign_description,
+		whatsapp_account,
+		whatsapp_template=whatsapp_template,
+		schedules=schedules,
+	)
+
+
+@frappe.whitelist()
+def delete_utm_campaign(name: str) -> dict:
+	_require_manager()
+	return campaigns.delete_campaign(name)
+
+
+@frappe.whitelist()
+def create_whatsapp_schedule(
+	campaign: str,
+	recipient_type: str | None = None,
+	recipient: str | None = None,
+	start_date: str | None = None,
+	trigger_time: str | None = None,
+) -> dict:
+	"""Schedule an existing campaign for one audience."""
+	_require_manager()
+	from nudg.services.campaign_schedules import schedule_whatsapp_campaign
+
+	return schedule_whatsapp_campaign(
+		campaign,
+		recipient_type=recipient_type,
+		recipient=recipient,
+		start_date=start_date,
+		trigger_time=trigger_time,
+	)
+
+
+@frappe.whitelist()
+def update_whatsapp_schedule(
+	name: str,
+	campaign: str | None = None,
+	recipient_type: str | None = None,
+	recipient: str | None = None,
+	start_date: str | None = None,
+	trigger_time: str | None = None,
+) -> dict:
+	_require_manager()
+	from nudg.services.campaign_schedules import update_whatsapp_schedule as _update
+
+	return _update(
+		name,
+		campaign=campaign,
+		recipient_type=recipient_type,
+		recipient=recipient,
+		start_date=start_date,
+		trigger_time=trigger_time,
+	)
+
+
+@frappe.whitelist()
+def list_bulk_results(account: str | None = None) -> list:
+	_require_manager()
+	from nudg.services.campaign_schedules import list_bulk_results as _results
+
+	return _results(account)
+
+
+@frappe.whitelist()
 def list_campaigns(account: str | None = None, start: int | None = 0, limit: int | None = None) -> list:
 	_require_manager()
 	from nudg.services.campaign_schedules import list_whatsapp_campaigns
@@ -603,6 +711,8 @@ def _wa_account_fields() -> list[str]:
 	fields = ["name", "account_name", "status", "phone_id", "business_id", "app_id", "auto_read_receipts"]
 	if frappe.db.has_column("WA Account", "is_default"):
 		fields.append("is_default")
+	if frappe.db.has_column("WA Account", "embedded_signup"):
+		fields.append("embedded_signup")
 	return fields
 
 

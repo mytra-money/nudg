@@ -27,7 +27,7 @@ class WAKeywordReply(Document):
 					frappe.throw(_("Invalid regex '{0}': {1}").format(keyword, exc))
 
 	def validate_response(self):
-		if self.response_type == "Text" and not self.response_text:
+		if self.response_type in ("Text", "Unsubscribe", "Subscribe") and not self.response_text:
 			frappe.throw(_("Enter the response text."))
 		elif self.response_type == "Template" and not self.response_template:
 			frappe.throw(_("Select a WhatsApp template."))

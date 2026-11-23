@@ -159,8 +159,8 @@ def save_keyword(account: str | None, payload: dict) -> dict:
 	if match_type not in _MATCH:
 		frappe.throw(_("Choose how the keyword should match."))
 	response_type = payload.get("response_type") or "Text"
-	if response_type not in ("Text", "Flow"):
-		frappe.throw(_("A keyword can send text or start a flow."))
+	if response_type not in ("Text", "Flow", "Unsubscribe", "Subscribe"):
+		frappe.throw(_("A keyword can send a reply, start a flow, or change unsubscribe."))
 	name = (payload.get("name") or "").strip()
 	doc = frappe.get_doc("WA Keyword Reply", name) if name and frappe.db.exists("WA Keyword Reply", name) else frappe.new_doc("WA Keyword Reply")
 	if doc.get("whatsapp_account") and doc.whatsapp_account != account:
@@ -170,7 +170,7 @@ def save_keyword(account: str | None, payload: dict) -> dict:
 	doc.keywords = keywords
 	doc.match_type = match_type
 	doc.response_type = response_type
-	if response_type == "Text":
+	if response_type in ("Text", "Unsubscribe", "Subscribe"):
 		doc.response_text = (payload.get("response_text") or "").strip()
 		doc.trigger_flow = None
 	else:

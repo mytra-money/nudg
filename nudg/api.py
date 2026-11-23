@@ -982,6 +982,8 @@ def _accounts(default_account: str | None) -> list:
 		fields = list(ACCOUNT_FIELDS)
 		if frappe.db.has_column("WA Account", "is_default"):
 			fields.append("is_default")
+		if frappe.db.has_column("WA Account", "embedded_signup"):
+			fields.append("embedded_signup")
 		rows = frappe.get_all(
 			"WA Account",
 			filters={"name": ["in", user_accounts]},

@@ -108,8 +108,6 @@ def send_one(bulk_name: str, recipient: dict):
 
 	doc = frappe.get_doc("WA Bulk Message", bulk_name)
 	if not check_recipient_consent(phone_number=phone):
-		_bump(doc.name, "failed_count")
-		doc.db_set("status", "Partially Failed", update_modified=False)
 		_finish(doc.name)
 		return
 

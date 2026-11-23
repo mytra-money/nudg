@@ -314,6 +314,15 @@ def setup_standard_custom_fields():
 				"description": "The first number a user connects is the default. Later numbers stay off until this is checked. Inbox and assignment use the default among the numbers assigned to that user.",
 			},
 			{
+				"fieldname": "embedded_signup",
+				"label": "Embedded Signup",
+				"fieldtype": "Check",
+				"insert_after": "is_default",
+				"default": "0",
+				"read_only": 1,
+				"description": "Set when this number is connected with Embedded Signup. Account name, Business ID, Phone ID, App ID, and the access token stay as Meta returned them.",
+			},
+			{
 				"fieldname": "two_step_pin",
 				"label": "Two-step PIN",
 				"fieldtype": "Password",
@@ -467,6 +476,59 @@ def setup_standard_custom_fields():
 				frappe.clear_cache(doctype=dt)
 		except Exception:
 			frappe.log_error(title="Nudg setup_standard_custom_fields error")
+
+	_lock_embedded_signup_fields()
+	_mark_embedded_signup_accounts()
+
+
+def _lock_embedded_signup_fields() -> None:
+	"""Desk fields Meta filled are read-only once Embedded Signup connected the number."""
+	if not frappe.db.exists("DocType", "WA Account"):
+		return
+	if not frappe.db.exists("Custom Field", {"dt": "WA Account", "fieldname": "embedded_signup"}):
+		return
+	from frappe.custom.doctype.property_setter.property_setter import make_property_setter
+
+	value = "eval:doc.embedded_signup"
+	for fieldname in ("account_name", "business_id", "phone_id", "app_id", "access_token"):
+		current = frappe.db.get_value(
+			"Property Setter",
+			{"doc_type": "WA Account", "field_name": fieldname, "property": "read_only_depends_on"},
+			["name", "value"],
+			as_dict=True,
+		)
+		if current:
+			if current.value != value:
+				frappe.db.set_value("Property Setter", current.name, "value", value, update_modified=False)
+			continue
+		make_property_setter(
+			"WA Account",
+			fieldname,
+			"read_only_depends_on",
+			value,
+			"Data",
+			validate_fields_for_doctype=False,
+		)
+	frappe.clear_cache(doctype="WA Account")
+
+
+def _mark_embedded_signup_accounts() -> None:
+	"""Numbers already connected by Embedded Signup keep the same lock."""
+	if not frappe.db.has_column("WA Account", "embedded_signup"):
+		return
+	fields = ["name", "embedded_signup"]
+	has_coexistence = frappe.db.has_column("WA Account", "coexistence")
+	has_pin = frappe.db.has_column("WA Account", "two_step_pin")
+	if has_coexistence:
+		fields.append("coexistence")
+	if has_pin:
+		fields.append("two_step_pin")
+	for row in frappe.get_all("WA Account", fields=fields, limit_page_length=0):
+		if frappe.utils.cint(row.embedded_signup):
+			continue
+		signed_up = (has_coexistence and frappe.utils.cint(row.coexistence)) or (has_pin and row.two_step_pin)
+		if signed_up:
+			frappe.db.set_value("WA Account", row.name, "embedded_signup", 1, update_modified=False)
 
 
 def _drop_custom_fields(doctype: str, fieldnames: tuple[str, ...]) -> None:

@@ -120,3 +120,122 @@ class TestEmbeddedSignup(unittest.TestCase):
 		self.assertEqual(secret, "legacy-secret")
 		store.assert_called_once_with("WA Signup Settings", "WA Signup Settings", "legacy-secret", "app_secret")
 		remove.assert_called_once_with("WhatsApp Signup Settings", "WhatsApp Signup Settings", "app_secret")
+
+
+def _locked_account(values: dict):
+	doc = MagicMock()
+	doc.flags = {}
+	doc.is_new.return_value = False
+	doc.name = "15551212"
+	doc.get.side_effect = lambda field: values.get(field)
+	return doc
+
+
+class TestEmbeddedSignupLock(unittest.TestCase):
+	def test_business_id_cannot_change(self):
+		doc = _locked_account(
+			{
+				"embedded_signup": 1,
+				"account_name": "15551212",
+				"business_id": "999",
+				"phone_id": "111",
+				"app_id": "222",
+				"access_token": "*****",
+				"two_step_pin": "*****",
+			}
+		)
+		meta = MagicMock()
+		meta.get_field.return_value = True
+		previous = {
+			"embedded_signup": 1,
+			"account_name": "15551212",
+			"business_id": "111",
+			"phone_id": "111",
+			"app_id": "222",
+		}
+		with (
+			patch.object(embedded_signup.frappe, "get_meta", return_value=meta),
+			patch.object(embedded_signup.frappe.db, "get_value", return_value=previous),
+			patch.object(embedded_signup.frappe, "throw", side_effect=frappe.ValidationError("locked")) as thrown,
+		):
+			with self.assertRaises(frappe.ValidationError):
+				embedded_signup.lock_embedded_signup_account(doc)
+		self.assertIn("Business ID", str(thrown.call_args))
+
+	def test_signup_save_may_refresh_credentials(self):
+		doc = _locked_account({"embedded_signup": 1, "business_id": "999"})
+		doc.flags["allow_embedded_credential_update"] = True
+		with patch.object(embedded_signup.frappe, "throw") as thrown:
+			embedded_signup.lock_embedded_signup_account(doc)
+		thrown.assert_not_called()
+
+	def test_unchanged_embedded_account_saves(self):
+		doc = _locked_account(
+			{
+				"embedded_signup": 1,
+				"account_name": "15551212",
+				"business_id": "111",
+				"phone_id": "111",
+				"app_id": "222",
+				"access_token": "*****",
+				"two_step_pin": "",
+			}
+		)
+		meta = MagicMock()
+		meta.get_field.return_value = True
+		previous = {
+			"embedded_signup": 1,
+			"account_name": "15551212",
+			"business_id": "111",
+			"phone_id": "111",
+			"app_id": "222",
+		}
+		with (
+			patch.object(embedded_signup.frappe, "get_meta", return_value=meta),
+			patch.object(embedded_signup.frappe.db, "get_value", return_value=previous),
+			patch.object(embedded_signup.frappe, "throw") as thrown,
+		):
+			embedded_signup.lock_embedded_signup_account(doc)
+		thrown.assert_not_called()
+
+	def test_new_token_cannot_replace_the_stored_one(self):
+		doc = _locked_account(
+			{
+				"embedded_signup": 1,
+				"account_name": "15551212",
+				"business_id": "111",
+				"phone_id": "111",
+				"app_id": "222",
+				"access_token": "new-token",
+				"two_step_pin": "*****",
+			}
+		)
+		meta = MagicMock()
+		meta.get_field.return_value = True
+		previous = {
+			"embedded_signup": 1,
+			"account_name": "15551212",
+			"business_id": "111",
+			"phone_id": "111",
+			"app_id": "222",
+		}
+		with (
+			patch.object(embedded_signup.frappe, "get_meta", return_value=meta),
+			patch.object(embedded_signup.frappe.db, "get_value", return_value=previous),
+			patch("frappe.utils.password.get_decrypted_password", return_value="stored-token"),
+			patch.object(embedded_signup.frappe, "throw", side_effect=frappe.ValidationError("locked")) as thrown,
+		):
+			with self.assertRaises(frappe.ValidationError):
+				embedded_signup.lock_embedded_signup_account(doc)
+		self.assertIn("Access token", str(thrown.call_args))
+
+	def test_rename_is_blocked(self):
+		doc = _locked_account({"embedded_signup": 1})
+		meta = MagicMock()
+		meta.get_field.return_value = True
+		with (
+			patch.object(embedded_signup.frappe, "get_meta", return_value=meta),
+			patch.object(embedded_signup.frappe, "throw", side_effect=frappe.ValidationError("locked")),
+		):
+			with self.assertRaises(frappe.ValidationError):
+				embedded_signup.block_embedded_signup_rename(doc, "before_rename", "15551212", "Support")

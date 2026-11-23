@@ -6,11 +6,8 @@
  "field_order": [
   "whatsapp_template",
   "send_after_days",
-  "recipient_list",
   "variable_type",
-  "template_variables",
-  "bulk_message",
-  "sent_on"
+  "template_variables"
  ],
  "fields": [
   {
@@ -30,13 +27,6 @@
    "default": "0"
   },
   {
-   "fieldname": "recipient_list",
-   "fieldtype": "Link",
-   "label": "Recipient List",
-   "options": "WA Recipient List",
-   "in_list_view": 1
-  },
-  {
    "fieldname": "variable_type",
    "fieldtype": "Select",
    "label": "Variable Type",
@@ -49,19 +39,6 @@
    "fieldtype": "Code",
    "label": "Template Variables",
    "options": "JSON"
-  },
-  {
-   "fieldname": "bulk_message",
-   "fieldtype": "Link",
-   "label": "Bulk Message",
-   "options": "WA Bulk Message",
-   "read_only": 1
-  },
-  {
-   "fieldname": "sent_on",
-   "fieldtype": "Date",
-   "label": "Sent On",
-   "read_only": 1
   }
  ],
  "links": [],

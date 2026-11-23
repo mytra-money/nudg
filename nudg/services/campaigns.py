@@ -66,7 +66,7 @@ def list_campaigns(account: str | None = None, start: int | None = 0, limit: int
 		limit_start=page_start(start),
 		limit_page_length=page_limit(limit, default=50, maximum=50),
 	)
-	templates = _schedule_templates([c.name for c in raw_list])
+	templates, days = _schedule_templates([c.name for c in raw_list])
 	result = []
 	for c in raw_list:
 		template = templates.get(c.name)
@@ -79,6 +79,7 @@ def list_campaigns(account: str | None = None, start: int | None = 0, limit: int
 			"whatsapp_channel": c.get("whatsapp_account"),
 			"template": template,
 			"whatsapp_template": template,
+			"send_after_days": int(days.get(c.name) or 0),
 			"status": "Draft",
 			"last_error": c.get("whatsapp_last_error"),
 			"modified": c.modified,
@@ -602,25 +603,28 @@ def _campaign_template(doc) -> str | None:
 	return doc.get("whatsapp_template") or doc.get("template")
 
 
-def _schedule_templates(names: list[str]) -> dict[str, str]:
+def _schedule_templates(names: list[str]) -> tuple[dict[str, str], dict[str, int]]:
 	if not names or not frappe.db.exists("DocType", "WA Campaign Schedule"):
-		return {}
+		return {}, {}
 	rows = frappe.get_all(
 		"WA Campaign Schedule",
 		filters={"parent": ["in", names], "parenttype": "UTM Campaign"},
-		fields=["parent", "whatsapp_template", "idx"],
+		fields=["parent", "whatsapp_template", "send_after_days", "idx"],
 		order_by="idx asc",
 		limit_page_length=max(len(names) * 5, 1),
 	)
 	if not isinstance(rows, list):
-		return {}
+		return {}, {}
 	found: dict[str, str] = {}
+	longest: dict[str, int] = {}
 	for row in rows:
 		parent = row.get("parent")
 		template = row.get("whatsapp_template")
 		if parent and template and parent not in found:
 			found[parent] = template
-	return found
+		if parent:
+			longest[parent] = max(longest.get(parent, 0), int(row.get("send_after_days") or 0))
+	return found, longest
 
 
 def _recipient_rows(doc) -> list:
@@ -678,7 +682,6 @@ def _apply_schedules(doc, schedules: list[dict]) -> None:
 			{
 				"whatsapp_template": template,
 				"send_after_days": int(row.get("send_after_days") or 0),
-				"recipient_list": row.get("recipient_list"),
 				"variable_type": row.get("variable_type") or "Common",
 				"template_variables": row.get("template_variables"),
 			},

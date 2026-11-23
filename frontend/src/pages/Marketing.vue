@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
-import { Badge, Button, Dialog, dialog, FormControl, TextInput, toast } from 'frappe-ui'
+import { Badge, Button, Dialog, dialog, FormControl, TabButtons, TextInput, toast } from 'frappe-ui'
 import { NumberCard } from 'frappe-ui/charts'
 import DeskCard from '@/components/desk/DeskCard.vue'
 import DeskEmpty from '@/components/desk/DeskEmpty.vue'
@@ -9,7 +9,7 @@ import DeskPage from '@/components/desk/DeskPage.vue'
 import DeskSplit from '@/components/desk/DeskSplit.vue'
 import { errorText, formatDay, initials } from '@/utils/format'
 import { formatErrorMessage } from '@/utils/errors'
-import { createCampaign, deleteCampaign, getCampaign, listCampaigns, listRecipientLists, listRecipientProfiles, runCampaign, updateCampaign } from '@/services/catalogApi'
+import { createUtmCampaign, createWhatsappSchedule, deleteCampaign, deleteUtmCampaign, getCampaign, getUtmCampaign, listBulkResults, listCampaigns, listRecipientLists, listRecipientProfiles, listUtmCampaigns, runCampaign, updateUtmCampaign, updateWhatsappSchedule } from '@/services/catalogApi'
 import { isManager, useDesk } from '@/stores/desk'
 import { accountArg } from '@/utils/accountSelection'
 
@@ -18,7 +18,14 @@ const live = Boolean(window.csrf_token)
 
 const loading = ref(true)
 const error = ref<string | null>(null)
+const tab = ref<'campaigns' | 'schedules' | 'results'>('campaigns')
+
+function setTab(value: unknown) {
+  if (value === 'campaigns' || value === 'schedules' || value === 'results') tab.value = value
+}
 const rows = ref<any[]>([])
+const utmCampaigns = ref<any[]>([])
+const bulkRows = ref<any[]>([])
 const selected = ref<any | null>(null)
 const narrow = useMediaQuery('(max-width: 767px)')
 const showDetail = ref(false)
@@ -39,6 +46,7 @@ const form = ref({
   name: '',
   description: '',
   whatsapp_account: '',
+  campaign: '',
   recipient_type: 'WA Recipient List',
   recipient: '',
   whatsapp_template: '',
@@ -46,6 +54,14 @@ const form = ref({
   trigger_time: '',
   send_after_days: '0',
 })
+const campaignForm = ref({
+  name: '',
+  description: '',
+  schedules: [{ whatsapp_template: '', send_after_days: '0', variable_type: 'Common', template_variables: '' }],
+})
+const campaignEditorOpen = ref(false)
+const campaignEditorMode = ref<'create' | 'edit'>('create')
+const editingCampaign = ref('')
 const recipientTypeOptions = [
   { label: 'Recipient list', value: 'WA Recipient List' },
   { label: 'Profile', value: 'WA Profile' },
@@ -151,9 +167,35 @@ function loadSample() {
     { name: 'Meera Iyer', profile_name: 'Meera Iyer', phone_number: '+91 98450 22119', whatsapp_account: 'Sundarban Sales' },
     { name: 'Rafiq Traders', profile_name: 'Rafiq Traders', phone_number: '+91 33 4065 1180', whatsapp_account: 'Sundarban Dispatch' },
   ])
+  utmCampaigns.value = forAccount(
+    demoCampaigns.value.map((row) => ({
+      name: row.campaign_name,
+      campaign_name: row.campaign_name,
+      description: row.description || '',
+      whatsapp_account: row.whatsapp_account,
+      template: row.template,
+      whatsapp_template: row.template,
+      send_after_days: row.send_after_days || 0,
+    })),
+  )
+  bulkRows.value = demoCampaigns.value
+    .filter((row) => row.sent_count)
+    .map((row) => ({
+      name: `BULK-${row.name}`,
+      title: row.campaign_name,
+      campaign: row.campaign_name,
+      whatsapp_campaign: row.name,
+      status: row.status === 'Completed' ? 'Completed' : 'In Progress',
+      sent_count: row.sent_count,
+      failed_count: row.failed_count,
+      recipient_count: (row.recipients || []).length,
+      whatsapp_account: row.whatsapp_account,
+      template: row.template,
+    }))
   rows.value = forAccount(demoCampaigns.value)
   const current = selected.value && rows.value.find((row) => row.name === selected.value.name)
   selected.value = current || rows.value[0] || null
+  selectedCampaign.value = utmCampaigns.value.find((row) => row.name === selectedCampaign.value?.name) || utmCampaigns.value[0] || null
 }
 
 async function load() {
@@ -167,6 +209,9 @@ async function load() {
     const account = currentAccount.value || undefined
     recipientLists.value = (await listRecipientLists(account).catch(() => [])) || []
     profiles.value = (await listRecipientProfiles(account).catch(() => [])) || []
+    utmCampaigns.value = (await listUtmCampaigns(account).catch(() => [])) || []
+    selectedCampaign.value = utmCampaigns.value.find((row) => row.name === selectedCampaign.value?.name) || utmCampaigns.value[0] || null
+    bulkRows.value = (await listBulkResults(account).catch(() => [])) || []
     const result = await listCampaigns(account)
     rows.value = result || []
     const current = selected.value && rows.value.find((row) => row.name === selected.value.name)
@@ -226,7 +271,7 @@ async function run(name: string) {
 }
 
 const templateOptions = computed(() => {
-  const account = form.value.whatsapp_account
+  const account = currentAccount.value || form.value.whatsapp_account
   return (desk.inbox.value?.templates || [])
     .filter((row) => !account || !row.whatsapp_account || row.whatsapp_account === account)
     .map((row) => ({
@@ -270,6 +315,7 @@ function blankForm() {
     name: '',
     description: '',
     whatsapp_account: currentAccount.value,
+    campaign: utmCampaigns.value[0]?.name || '',
     recipient_type: 'WA Recipient List',
     recipient: '',
     whatsapp_template: '',
@@ -301,10 +347,15 @@ function timeOnly(value: string | null | undefined) {
   return String(value).slice(0, 5)
 }
 
+const scheduleDays = computed(() => {
+  const match = utmCampaigns.value.find((row) => row.name === form.value.campaign)
+  return Number(match?.send_after_days || 0)
+})
+
 const previewEnd = computed(() => {
   if (!form.value.start_date) return ''
   const start = new Date(`${form.value.start_date}T00:00:00`)
-  start.setDate(start.getDate() + Number(form.value.send_after_days || 0))
+  start.setDate(start.getDate() + scheduleDays.value)
   const month = String(start.getMonth() + 1).padStart(2, '0')
   const day = String(start.getDate()).padStart(2, '0')
   return `${start.getFullYear()}-${month}-${day}`
@@ -316,6 +367,7 @@ function fillForm(row: any) {
     name: row.campaign_name || row.name || '',
     description: row.description || row.campaign_description || '',
     whatsapp_account: currentAccount.value || row.whatsapp_account || '',
+    campaign: row.campaign || row.campaign_name || '',
     recipient_type: row.recipient_type || 'WA Recipient List',
     recipient: row.recipient || '',
     whatsapp_template: schedule?.whatsapp_template || row.whatsapp_template || row.template || '',
@@ -364,8 +416,8 @@ function removeCampaign() {
   if (!selected.value || !canEdit(selected.value)) return
   const campaign = selected.value
   dialog.danger({
-    title: 'Delete campaign?',
-    message: `Remove “${campaign.campaign_name || campaign.name}”?`,
+    title: 'Delete schedule?',
+    message: `Remove the schedule for “${campaign.campaign_name || campaign.name}”? The campaign stays.`,
     onConfirm: async () => {
       busy.value = true
       try {
@@ -373,7 +425,7 @@ function removeCampaign() {
         else demoCampaigns.value = demoCampaigns.value.filter((row) => row.name !== campaign.name)
         rows.value = rows.value.filter((row) => row.name !== campaign.name)
         selected.value = null
-        toast.success('Campaign deleted')
+        toast.success('Schedule deleted')
       } finally {
         busy.value = false
       }
@@ -382,9 +434,9 @@ function removeCampaign() {
 }
 
 async function saveCampaign() {
-  const name = form.value.name.trim()
-  if (!name) {
-    toast.error('Campaign name is required.')
+  const campaign = form.value.campaign
+  if (!campaign) {
+    toast.error('Select a campaign.')
     return
   }
   if (!form.value.recipient) {
@@ -403,8 +455,9 @@ async function saveCampaign() {
   try {
     if (!live) {
       const row = {
-        name: editorMode.value === 'edit' ? editingName.value || name : name,
-        campaign_name: name,
+        name: editorMode.value === 'edit' ? editingName.value : `sched-${Date.now()}`,
+        campaign: campaign,
+        campaign_name: campaign,
         description: form.value.description.trim(),
         campaign_description: form.value.description.trim(),
         whatsapp_channel: form.value.whatsapp_account,
@@ -436,34 +489,28 @@ async function saveCampaign() {
         demoCampaigns.value = demoCampaigns.value.map((item) => (item.name === selected.value.name ? selected.value : item))
       }
       editorOpen.value = false
-      toast.success(editorMode.value === 'edit' ? 'Campaign updated' : 'Campaign created')
+      toast.success(editorMode.value === 'edit' ? 'Schedule updated' : 'Schedule created')
       return
     }
     const saved =
       editorMode.value === 'edit'
-        ? await updateCampaign({
+        ? await updateWhatsappSchedule({
             name: editingName.value,
-            campaign_name: name,
-            campaign_description: form.value.description.trim(),
-            whatsapp_account: form.value.whatsapp_account || undefined,
+            campaign,
             recipient_type: form.value.recipient_type,
             recipient: form.value.recipient,
             start_date: form.value.start_date,
             trigger_time: form.value.trigger_time,
-            schedules: schedulePayload(),
           })
-        : await createCampaign({
-            name,
-            campaign_description: form.value.description.trim(),
-            whatsapp_account: form.value.whatsapp_account || undefined,
+        : await createWhatsappSchedule({
+            campaign,
             recipient_type: form.value.recipient_type,
             recipient: form.value.recipient,
             start_date: form.value.start_date,
             trigger_time: form.value.trigger_time,
-            schedules: schedulePayload(),
           })
     editorOpen.value = false
-    toast.success(editorMode.value === 'edit' ? 'Campaign updated' : 'Campaign created')
+    toast.success(editorMode.value === 'edit' ? 'Schedule updated' : 'Schedule created')
     await load()
     if (saved?.name) selected.value = await getCampaign(saved.name).catch(() => saved)
   } catch (caught) {
@@ -474,6 +521,171 @@ async function saveCampaign() {
 }
 
 // Top KPI metrics
+const campaignOptions = computed(() =>
+  utmCampaigns.value.map((row) => ({
+    label: row.campaign_name || row.name,
+    value: row.name,
+  })),
+)
+
+const bulkSent = computed(() => bulkRows.value.reduce((sum, row) => sum + Number(row.sent_count || 0), 0))
+const bulkFailed = computed(() => bulkRows.value.reduce((sum, row) => sum + Number(row.failed_count || 0), 0))
+const bulkRecipients = computed(() => bulkRows.value.reduce((sum, row) => sum + Number(row.recipient_count || 0), 0))
+
+const variableTypeOptions = [
+  { label: 'Common', value: 'Common' },
+  { label: 'Unique', value: 'Unique' },
+]
+
+function blankScheduleRow() {
+  return { whatsapp_template: '', send_after_days: '0', variable_type: 'Common', template_variables: '' }
+}
+
+function blankCampaignForm() {
+  return {
+    name: '',
+    description: '',
+    schedules: [blankScheduleRow()],
+  }
+}
+
+function addScheduleRow() {
+  campaignForm.value.schedules.push(blankScheduleRow())
+}
+
+function removeScheduleRow(index: number) {
+  campaignForm.value.schedules.splice(index, 1)
+  if (!campaignForm.value.schedules.length) addScheduleRow()
+}
+
+function scheduleRowsFrom(source: any) {
+  const rows = Array.isArray(source?.whatsapp_schedules) ? source.whatsapp_schedules : []
+  const mapped = rows
+    .map((row: any) => ({
+      whatsapp_template: row.whatsapp_template || row.template || '',
+      send_after_days: String(row.send_after_days ?? 0),
+      variable_type: row.variable_type || 'Common',
+      template_variables: typeof row.template_variables === 'string' ? row.template_variables : row.template_variables ? JSON.stringify(row.template_variables) : '',
+    }))
+    .filter((row: { whatsapp_template: string }) => row.whatsapp_template)
+  if (mapped.length) return mapped
+  const template = source?.whatsapp_template || source?.template || ''
+  if (!template) return [blankScheduleRow()]
+  return [{ whatsapp_template: template, send_after_days: String(source?.send_after_days ?? 0), variable_type: 'Common', template_variables: '' }]
+}
+
+function startCampaign() {
+  campaignEditorMode.value = 'create'
+  editingCampaign.value = ''
+  campaignForm.value = blankCampaignForm()
+  campaignEditorOpen.value = true
+}
+
+async function editCampaign(row: any) {
+  campaignEditorMode.value = 'edit'
+  editingCampaign.value = row.name
+  campaignForm.value = {
+    name: row.campaign_name || row.name || '',
+    description: row.description || row.campaign_description || '',
+    schedules: scheduleRowsFrom(row),
+  }
+  campaignEditorOpen.value = true
+  if (!live) return
+  try {
+    const full = await getUtmCampaign(row.name)
+    campaignForm.value = {
+      name: full.campaign_name || full.name || '',
+      description: full.campaign_description || full.description || '',
+      schedules: scheduleRowsFrom(full),
+    }
+  } catch (caught) {
+    toast.error(errorText(caught))
+  }
+}
+
+async function saveUtmCampaign() {
+  const name = campaignForm.value.name.trim()
+  if (!name) {
+    toast.error('Campaign name is required.')
+    return
+  }
+  const schedules = campaignForm.value.schedules
+    .map((row) => ({
+      whatsapp_template: String(row.whatsapp_template || '').trim(),
+      send_after_days: Number(row.send_after_days || 0),
+      variable_type: row.variable_type === 'Unique' ? 'Unique' : 'Common',
+      template_variables: row.variable_type === 'Unique' ? '' : String(row.template_variables || '').trim(),
+    }))
+    .filter((row) => row.whatsapp_template)
+  if (!schedules.length) {
+    toast.error('Add at least one WhatsApp template.')
+    return
+  }
+  saving.value = true
+  try {
+    if (!live) {
+      const row = {
+        name: campaignEditorMode.value === 'edit' ? editingCampaign.value : name,
+        campaign_name: name,
+        description: campaignForm.value.description.trim(),
+        whatsapp_account: currentAccount.value,
+        template: schedules[0].whatsapp_template,
+        whatsapp_template: schedules[0].whatsapp_template,
+        send_after_days: Math.max(...schedules.map((row) => row.send_after_days)),
+        whatsapp_schedules: schedules,
+      }
+      utmCampaigns.value = [row, ...utmCampaigns.value.filter((item) => item.name !== row.name)]
+      campaignEditorOpen.value = false
+      toast.success(campaignEditorMode.value === 'edit' ? 'Campaign updated' : 'Campaign created')
+      return
+    }
+    const saved =
+      campaignEditorMode.value === 'edit'
+        ? await updateUtmCampaign({
+            name: editingCampaign.value,
+            campaign_name: name,
+            campaign_description: campaignForm.value.description.trim(),
+            whatsapp_account: currentAccount.value || undefined,
+            schedules,
+          })
+        : await createUtmCampaign({
+            name,
+            campaign_description: campaignForm.value.description.trim(),
+            whatsapp_account: currentAccount.value || undefined,
+            schedules,
+          })
+    campaignEditorOpen.value = false
+    toast.success(campaignEditorMode.value === 'edit' ? 'Campaign updated' : 'Campaign created')
+    await load()
+    selectedCampaign.value = saved
+  } catch (caught) {
+    toast.error(errorText(caught))
+  } finally {
+    saving.value = false
+  }
+}
+
+function removeUtmCampaign(row: any) {
+  dialog.danger({
+    title: 'Delete campaign?',
+    message: `Remove “${row.campaign_name || row.name}”? Delete any schedules that still use it first.`,
+    onConfirm: async () => {
+      busy.value = true
+      try {
+        if (live) await deleteUtmCampaign(row.name)
+        utmCampaigns.value = utmCampaigns.value.filter((item) => item.name !== row.name)
+        if (selectedCampaign.value?.name === row.name) selectedCampaign.value = utmCampaigns.value[0] || null
+        toast.success('Campaign deleted')
+      } catch (caught) {
+        toast.error(errorText(caught))
+      } finally {
+        busy.value = false
+      }
+    },
+  })
+}
+
+const selectedCampaign = ref<any | null>(null)
 const totalCampaignsCount = computed(() => rows.value.length)
 const totalRecipients = computed(() => rows.value.reduce((acc, c) => acc + (c.recipients?.length || 0), 0))
 const totalSent = computed(() => rows.value.reduce((acc, c) => acc + (c.sent_count || 0), 0))
@@ -520,49 +732,125 @@ watch(
 <template>
   <DeskPage variant="studio">
     <template #actions>
-      <Button
-        variant="subtle"
-        size="sm"
-        icon="lucide-refresh-cw"
-        label="Refresh"
-        :loading="loading"
-        @click="load"
-      />
-      <Button
-        v-if="isManager"
-        variant="solid"
-        size="sm"
-        class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-        icon-left="lucide-plus"
-        label="New Campaign"
-        @click="startCreate()"
-      />
-    </template>
-
-    <!-- Top KPI Performance Funnel Bar -->
-    <template #kpi>
-      <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <NumberCard title="Broadcasts" :value="totalCampaignsCount" color="#374151" delta-caption="whatsapp campaigns" />
-        <NumberCard title="Recipients" :value="totalRecipients" color="#075E54" delta-caption="loaded from profile or list" />
-        <NumberCard title="Messages Sent" :value="totalSent" color="#047857" delta-caption="from bulk messages" />
-        <NumberCard title="Failed Sends" :value="totalFailed" color="#B91C1C" delta-caption="from bulk messages" />
+      <div class="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <TabButtons
+          :model-value="tab"
+          :options="[
+            { label: 'Campaigns', value: 'campaigns' },
+            { label: 'Schedules', value: 'schedules' },
+            { label: 'Results', value: 'results' },
+          ]"
+          variant="underline"
+          @update:model-value="setTab"
+        />
+        <div class="flex items-center justify-end gap-2">
+          <Button
+            variant="subtle"
+            size="sm"
+            icon="lucide-refresh-cw"
+            label="Refresh"
+            :loading="loading"
+            @click="load"
+          />
+          <Button
+            v-if="isManager && tab === 'campaigns'"
+            variant="solid"
+            size="sm"
+            class="bg-[#075E54] text-white hover:bg-[#128C7E]"
+            icon-left="lucide-plus"
+            label="New campaign"
+            @click="startCampaign()"
+          />
+          <Button
+            v-else-if="isManager && tab === 'schedules'"
+            variant="solid"
+            size="sm"
+            class="bg-[#075E54] text-white hover:bg-[#128C7E]"
+            icon-left="lucide-plus"
+            label="New schedule"
+            @click="startCreate()"
+          />
+        </div>
       </div>
     </template>
 
+    <div v-if="tab === 'campaigns'" class="min-h-0 flex-1 overflow-y-auto p-4">
+      <div class="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <NumberCard title="Campaigns" :value="utmCampaigns.length" color="#374151" delta-caption="template and send-after" />
+        <NumberCard title="Schedules" :value="rows.length" color="#075E54" delta-caption="audiences waiting to send" />
+        <NumberCard title="Sent" :value="bulkSent" color="#047857" delta-caption="from bulk messages" />
+      </div>
+      <DeskEmpty v-if="loading && !utmCampaigns.length" kind="loading" title="Loading campaigns…" />
+      <DeskEmpty v-else-if="!utmCampaigns.length" kind="empty" title="No campaigns yet" description="A campaign stores the WhatsApp template and how many days after the start it sends. The audience and the clock live on a schedule.">
+        <Button v-if="isManager" variant="solid" class="mt-4 bg-[#075E54] text-white hover:bg-[#128C7E]" label="New campaign" icon-left="lucide-plus" @click="startCampaign()" />
+      </DeskEmpty>
+      <div v-else class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <button
+          v-for="row in utmCampaigns"
+          :key="row.name"
+          type="button"
+          class="rounded-xl border border-outline-gray-2 bg-white p-4 text-left hover:border-[#075E54]"
+          @click="isManager && editCampaign(row)"
+        >
+          <p class="font-semibold text-ink-gray-9">{{ row.campaign_name || row.name }}</p>
+          <p class="mt-1 text-xs text-ink-gray-5">{{ row.whatsapp_account || 'No account' }}</p>
+          <p class="mt-3 text-sm text-ink-gray-8">{{ row.template || row.whatsapp_template || 'No template' }}</p>
+          <p class="mt-1 text-xs text-ink-gray-5">Sends {{ row.send_after_days || 0 }} day(s) after the schedule starts</p>
+          <div class="mt-3 flex justify-end">
+            <Button variant="ghost" size="sm" theme="red" label="Delete" @click.stop="removeUtmCampaign(row)" />
+          </div>
+        </button>
+      </div>
+    </div>
+
+    <div v-else-if="tab === 'results'" class="min-h-0 flex-1 overflow-y-auto p-4">
+      <div class="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <NumberCard title="Bulk messages" :value="bulkRows.length" color="#374151" delta-caption="one per send day" />
+        <NumberCard title="Recipients" :value="bulkRecipients" color="#075E54" delta-caption="subscribed rows only" />
+        <NumberCard title="Sent" :value="bulkSent" color="#047857" delta-caption="delivered to WhatsApp" />
+        <NumberCard title="Failed" :value="bulkFailed" color="#B91C1C" delta-caption="not accepted" />
+      </div>
+      <DeskEmpty v-if="loading && !bulkRows.length" kind="loading" title="Loading results…" />
+      <DeskEmpty v-else-if="!bulkRows.length" kind="empty" title="No bulk messages yet" description="When a schedule reaches its start date and trigger time, one bulk message is created and each subscribed recipient is sent individually." />
+      <ul v-else class="divide-y divide-outline-gray-2 rounded-xl border border-outline-gray-2 bg-white">
+        <li v-for="row in bulkRows" :key="row.name" class="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <Badge :label="row.status || 'Draft'" :theme="row.status === 'Completed' ? 'green' : row.status === 'Failed' ? 'red' : 'blue'" />
+              <span class="truncate text-sm font-semibold text-ink-gray-9">{{ row.title || row.name }}</span>
+            </div>
+            <p class="mt-1 text-xs text-ink-gray-5">{{ row.campaign || 'No campaign' }} · {{ row.template || 'No template' }}</p>
+          </div>
+          <div class="flex gap-6 text-xs text-ink-gray-7">
+            <span><strong class="text-ink-gray-9">{{ row.recipient_count || 0 }}</strong> recipients</span>
+            <span><strong class="text-emerald-700">{{ row.sent_count || 0 }}</strong> sent</span>
+            <span><strong class="text-red-700">{{ row.failed_count || 0 }}</strong> failed</span>
+          </div>
+        </li>
+      </ul>
+    </div>
+
+    <template v-else>
+    <div class="hidden shrink-0 grid-cols-2 gap-3 border-b border-outline-gray-2 px-4 py-3 sm:grid sm:grid-cols-4">
+      <NumberCard title="Schedules" :value="totalCampaignsCount" color="#374151" delta-caption="whatsapp campaigns" />
+      <NumberCard title="Recipients" :value="totalRecipients" color="#075E54" delta-caption="including unsubscribed" />
+      <NumberCard title="Sent" :value="totalSent" color="#047857" delta-caption="from bulk messages" />
+      <NumberCard title="Failed" :value="totalFailed" color="#B91C1C" delta-caption="from bulk messages" />
+    </div>
     <!-- Content State Handlers -->
-    <DeskEmpty v-if="loading && !rows.length" kind="loading" title="Loading campaigns…" />
+    <DeskEmpty v-if="loading && !rows.length" kind="loading" title="Loading schedules…" />
     <DeskEmpty v-else-if="error" kind="error" :message="error" allow-retry @retry="load" />
     <DeskEmpty
       v-else-if="!rows.length"
       kind="empty"
-      title="No broadcasts yet"
-      description="Create a WhatsApp Campaign with a template, a profile or recipient list, and the dates that send the bulk message."
+      title="No schedules yet"
+      description="Pick a campaign, an audience, a start date, and the time this client should send. Unsubscribed rows are left out of the bulk message."
     >
       <Button
         variant="solid"
         class="mt-4 bg-[#075E54] text-white hover:bg-[#128C7E]"
         v-if="isManager"
-        label="Create Your First Campaign"
+        label="New schedule"
         icon-left="lucide-plus"
         @click="startCreate()"
       />
@@ -582,7 +870,7 @@ watch(
           <TextInput
             v-model="query"
             type="text"
-            placeholder="Search campaigns or templates…"
+            placeholder="Search schedules…"
             class="w-full text-xs"
           >
             <template v-if="query" #suffix>
@@ -648,7 +936,7 @@ watch(
           </button>
 
           <div v-if="filteredRows.length === 0" class="p-8 text-center text-xs text-ink-gray-5">
-            No campaigns found matching your search.
+            No schedules match this search.
           </div>
         </div>
       </template>
@@ -657,7 +945,7 @@ watch(
       <template #detail>
       <div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
         <div v-if="narrow && selected" class="px-4 pt-3">
-          <Button variant="ghost" icon-left="lucide-arrow-left" label="All campaigns" @click="showDetail = false" />
+          <Button variant="ghost" icon-left="lucide-arrow-left" label="All schedules" @click="showDetail = false" />
         </div>
         <!-- Active Campaign Inspector -->
         <div v-if="selected" class="p-5 sm:p-6 space-y-6">
@@ -675,13 +963,19 @@ watch(
                 {{ selected.campaign_name }}
               </h2>
               <p class="text-xs text-ink-gray-5 mt-0.5">
-                Template: <strong class="font-mono text-[#075E54]">{{ selected.template || '—' }}</strong>
                 <span v-if="selected.start_date">
-                  · {{ formatDay(selected.start_date) }}<span v-if="selected.end_date"> – {{ formatDay(selected.end_date) }}</span>
+                  {{ formatDay(selected.start_date) }}<span v-if="selected.end_date"> – {{ formatDay(selected.end_date) }}</span>
                 </span>
                 <span v-if="selected.trigger_time"> · {{ timeOnly(selected.trigger_time) }}</span>
                 <span v-if="selected.recipient"> · {{ selected.recipient }}</span>
               </p>
+              <ul v-if="selected.whatsapp_schedules?.length" class="mt-2 space-y-1 text-xs text-ink-gray-7">
+                <li v-for="(row, index) in selected.whatsapp_schedules" :key="index">
+                  <span class="font-mono text-[#075E54]">{{ row.whatsapp_template }}</span>
+                  · day {{ row.send_after_days || 0 }}
+                  · {{ row.variable_type || 'Common' }}
+                </li>
+              </ul>
             </div>
 
             <div class="flex items-center gap-2 shrink-0">
@@ -779,6 +1073,7 @@ watch(
                       <p class="text-[11px] font-mono text-ink-gray-5">
                         {{ rec.phone_number || rec.profile }}
                       </p>
+                      <p v-if="rec.unsubscribed" class="text-[11px] text-ink-gray-6">Unsubscribed</p>
                       <p v-if="rec.error_message" class="text-[11px] text-red-600 mt-0.5">
                         {{ formatErrorMessage(rec.error_message) }}
                       </p>
@@ -800,31 +1095,24 @@ watch(
             <div class="mx-auto grid size-12 place-items-center rounded-xl bg-teal-50 text-[#075E54]">
               <span class="lucide-megaphone size-6" />
             </div>
-            <p class="text-sm font-semibold text-ink-gray-9">Select a Campaign</p>
+            <p class="text-sm font-semibold text-ink-gray-9">Select a schedule</p>
             <p class="text-ink-gray-5 leading-relaxed">
-              Click any campaign from the list on the left to inspect its delivery funnel, target audience, and message delivery status.
+              Click a schedule to see its audience, send window, and who was left out because they unsubscribed.
             </p>
           </div>
         </div>
       </div>
       </template>
     </DeskSplit>
+    </template>
 
-    <Dialog v-model="editorOpen" :title="editorMode === 'edit' ? 'Edit campaign' : 'New campaign'">
+    <Dialog v-model="editorOpen" :title="editorMode === 'edit' ? 'Edit schedule' : 'New schedule'">
       <div class="space-y-3 py-1 text-sm">
         <FormControl
-          v-model="form.name"
-          type="text"
-          label="Name"
-          placeholder="Festive allocation"
-          required
-        />
-        <FormControl
-          v-model="form.description"
-          type="textarea"
-          label="Description"
-          :rows="3"
-          placeholder="Optional note for this broadcast"
+          v-model="form.campaign"
+          type="select"
+          label="Campaign"
+          :options="campaignOptions"
         />
         <FormControl
           :model-value="form.recipient_type"
@@ -839,18 +1127,11 @@ watch(
           :label="form.recipient_type === 'WA Profile' ? 'Profile' : 'Recipient list'"
           :options="recipientOptions"
         />
-        <FormControl
-          v-model="form.whatsapp_template"
-          type="select"
-          label="WhatsApp template"
-          :options="templateOptions"
-        />
         <div class="grid grid-cols-3 gap-3">
           <FormControl v-model="form.start_date" type="date" label="Start date" />
           <FormControl :model-value="previewEnd" type="date" label="End date" disabled />
           <FormControl v-model="form.trigger_time" type="time" label="Trigger time" />
         </div>
-        <FormControl v-model="form.send_after_days" type="number" label="Send after (days)" />
       </div>
       <template #actions>
         <div class="flex justify-end gap-2">
@@ -858,11 +1139,56 @@ watch(
           <Button
             variant="solid"
             class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-            :label="editorMode === 'edit' ? 'Save' : 'Create campaign'"
+            :label="editorMode === 'edit' ? 'Save' : 'Create schedule'"
             :loading="saving || (editorMode === 'edit' && !recipientsReady)"
             :disabled="editorMode === 'edit' && !recipientsReady"
             @click="saveCampaign"
           />
+        </div>
+      </template>
+    </Dialog>
+
+    <Dialog v-model="campaignEditorOpen" :title="campaignEditorMode === 'edit' ? 'Edit campaign' : 'New campaign'" size="lg">
+      <div class="space-y-3 py-1 text-sm">
+        <FormControl v-model="campaignForm.name" type="text" label="Name" placeholder="Festive allocation" required />
+        <FormControl v-model="campaignForm.description" type="textarea" label="Description" :rows="3" />
+        <div class="space-y-2">
+          <p class="text-sm font-medium text-ink-gray-8">Templates</p>
+          <div class="overflow-hidden rounded-lg border border-outline-gray-2">
+            <div class="grid grid-cols-[minmax(0,1fr)_6.5rem_7rem_2rem] gap-2 bg-surface-gray-1 px-3 py-2 text-xs font-medium text-ink-gray-6">
+              <span>WhatsApp template</span>
+              <span>Send after (days)</span>
+              <span>Variables</span>
+              <span />
+            </div>
+            <div
+              v-for="(row, index) in campaignForm.schedules"
+              :key="index"
+              class="space-y-2 border-t border-outline-gray-2 px-3 py-2"
+            >
+              <div class="grid grid-cols-[minmax(0,1fr)_6.5rem_7rem_2rem] items-center gap-2">
+                <FormControl v-model="row.whatsapp_template" type="select" :options="templateOptions" />
+                <FormControl v-model="row.send_after_days" type="number" />
+                <FormControl v-model="row.variable_type" type="select" :options="variableTypeOptions" />
+                <Button variant="ghost" size="sm" icon="lucide-x" aria-label="Remove row" @click="removeScheduleRow(index)" />
+              </div>
+              <FormControl
+                v-if="row.variable_type !== 'Unique'"
+                v-model="row.template_variables"
+                type="text"
+                placeholder='Common variables, for example {"1":"Name"}'
+              />
+            </div>
+            <div class="border-t border-outline-gray-2 px-2 py-1.5">
+              <Button variant="ghost" size="sm" label="Add row" icon-left="lucide-plus" @click="addScheduleRow" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <template #actions>
+        <div class="flex justify-end gap-2">
+          <Button label="Cancel" @click="campaignEditorOpen = false" />
+          <Button variant="solid" class="bg-[#075E54] text-white hover:bg-[#128C7E]" :label="campaignEditorMode === 'edit' ? 'Save' : 'Create campaign'" :loading="saving" @click="saveUtmCampaign" />
         </div>
       </template>
     </Dialog>
@@ -875,7 +1201,7 @@ watch(
             <span class="lucide-alert-triangle size-4 text-amber-600" /> Confirm Outbound Send
           </p>
           <p class="mt-1">
-            This creates a bulk message for <strong>{{ selected.campaign_name }}</strong> to <strong>{{ selected.recipients?.length || 0 }} recipients</strong> on <strong>{{ selected.whatsapp_account }}</strong>. It sends only while today is between the start and end dates.
+            This creates one bulk message for <strong>{{ selected.campaign_name }}</strong> on <strong>{{ selected.whatsapp_account }}</strong>. Each subscribed recipient is sent individually. Unsubscribed numbers are left out.
           </p>
         </div>
 

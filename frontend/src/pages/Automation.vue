@@ -89,6 +89,8 @@ const matchTypeOptions = ['Contains', 'Exact', 'Starts With'].map((value) => ({ 
 const responseTypeOptions = [
   { label: 'Send a reply', value: 'Text' },
   { label: 'Start a flow', value: 'Flow' },
+  { label: 'Unsubscribe', value: 'Unsubscribe' },
+  { label: 'Subscribe again', value: 'Subscribe' },
 ]
 const inputTypeOptions = ['Text', 'Email', 'Phone', 'Number'].map((value) => ({ label: value, value }))
 const flowSelectOptions = computed(() => [
@@ -199,13 +201,20 @@ async function saveBot() {
   }
 }
 
+function keywordResult(row: any) {
+  if (row.response_type === 'Flow') return `Flow · ${row.trigger_flow || ''}`
+  if (row.response_type === 'Unsubscribe') return `Unsubscribe · ${row.response_text || ''}`
+  if (row.response_type === 'Subscribe') return `Subscribe · ${row.response_text || ''}`
+  return row.response_text || ''
+}
+
 function openKeyword(row?: any) {
   keywordForm.value = row
     ? {
         name: row.name,
         keywords: row.keywords || '',
         match_type: row.match_type || 'Contains',
-        response_type: row.response_type === 'Flow' ? 'Flow' : 'Text',
+        response_type: ['Flow', 'Unsubscribe', 'Subscribe'].includes(row.response_type) ? row.response_type : 'Text',
         response_text: row.response_text || '',
         trigger_flow: row.trigger_flow || '',
         enabled: row.enabled ? 1 : 0,
@@ -490,7 +499,7 @@ onMounted(async () => {
             <tr v-for="row in keywords" :key="row.name" class="border-b border-outline-gray-1 last:border-b-0">
               <td class="px-4 py-3 font-medium text-ink-gray-9">{{ row.keywords }}</td>
               <td class="px-4 py-3 text-ink-gray-6">{{ row.match_type }}</td>
-              <td class="max-w-xs truncate px-4 py-3 text-ink-gray-7">{{ row.response_type === 'Flow' ? `Flow · ${row.trigger_flow}` : row.response_text }}</td>
+              <td class="max-w-xs truncate px-4 py-3 text-ink-gray-7">{{ keywordResult(row) }}</td>
               <td class="px-4 py-3">
                 <div class="flex justify-end gap-1">
                   <Button variant="ghost" size="sm" label="Edit" @click="openKeyword(row)" />
@@ -581,7 +590,7 @@ onMounted(async () => {
           />
         </div>
         <FormControl
-          v-if="keywordForm.response_type === 'Text'"
+          v-if="keywordForm.response_type !== 'Flow'"
           v-model="keywordForm.response_text"
           type="textarea"
           label="Reply"

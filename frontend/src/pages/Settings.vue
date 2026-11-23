@@ -8,8 +8,8 @@ import DeskPage from '@/components/desk/DeskPage.vue'
 import DeskTable from '@/components/desk/DeskTable.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import { errorText } from '@/utils/format'
-import { deleteQuickReply, getWhatsappSettings, listQuickReplies, saveQuickReply, saveWhatsappSettings, updateWhatsappAccount } from '@/services/catalogApi'
-import { isManager, isSiteAdmin, useDesk } from '@/stores/desk'
+import { deleteQuickReply, listQuickReplies, saveQuickReply, updateWhatsappAccount } from '@/services/catalogApi'
+import { isManager, useDesk } from '@/stores/desk'
 import { router } from '@/router'
 
 const desk = useDesk()
@@ -96,18 +96,9 @@ const accountEditor = ref<{
   business_id: string
   app_id: string
   access_token: string
+  embedded_signup: boolean
 } | null>(null)
 const accountEditorOpen = ref(false)
-const siteSettings = ref({
-  default_account: '',
-  whatsapp_api_url: '',
-  whatsapp_api_version: '',
-  webhook_verify_token: '',
-  webhook_secret: '',
-  has_webhook_secret: false,
-  callback_method: 'whatsapp.whatsapp.webhook.handler',
-})
-const savingSite = ref(false)
 
 // Enriched sample quick replies for demo/preview mode
 const fallbackQuickReplies: any[] = [
@@ -211,7 +202,6 @@ const accountOptions = computed(() =>
     value: account.name,
   })),
 )
-const defaultAccountOptions = computed(() => [{ label: 'None', value: '' }, ...accountOptions.value])
 function openIntegrations() {
   void router.push('/integrations')
 }
@@ -246,6 +236,7 @@ async function startAccountEdit(account: any) {
     business_id: source.business_id || '',
     app_id: source.app_id || '',
     access_token: '',
+    embedded_signup: Boolean(Number(source.embedded_signup)),
   }
   accountEditorOpen.value = true
 }
@@ -280,16 +271,28 @@ async function saveAccount() {
     return
   }
   try {
-    await updateWhatsappAccount({
+    const payload: {
+      name: string
+      status: string
+      auto_read_receipts: number
+      is_default: number
+      phone_id?: string
+      business_id?: string
+      app_id?: string
+      access_token?: string
+    } = {
       name: accountEditor.value.name,
       status: accountEditor.value.status,
       auto_read_receipts: accountEditor.value.auto_read_receipts ? 1 : 0,
       is_default: accountEditor.value.is_default ? 1 : 0,
-      phone_id: accountEditor.value.phone_id.trim() || undefined,
-      business_id: accountEditor.value.business_id.trim() || undefined,
-      app_id: accountEditor.value.app_id.trim() || undefined,
-      access_token: accountEditor.value.access_token.trim() || undefined,
-    })
+    }
+    if (!accountEditor.value.embedded_signup) {
+      payload.phone_id = accountEditor.value.phone_id.trim() || undefined
+      payload.business_id = accountEditor.value.business_id.trim() || undefined
+      payload.app_id = accountEditor.value.app_id.trim() || undefined
+      payload.access_token = accountEditor.value.access_token.trim() || undefined
+    }
+    await updateWhatsappAccount(payload)
     showToast('WhatsApp account updated.')
     accountEditor.value = null
     accountEditorOpen.value = false
@@ -522,45 +525,6 @@ async function handleUpdateMember() {
   }
 }
 
-async function loadSiteSettings() {
-  if (!isSiteAdmin.value || desk.mode.value !== 'live') return
-  try {
-    const result = await getWhatsappSettings()
-    siteSettings.value = {
-      default_account: result?.default_account || '',
-      whatsapp_api_url: result?.whatsapp_api_url || '',
-      whatsapp_api_version: result?.whatsapp_api_version || '',
-      webhook_verify_token: result?.webhook_verify_token || '',
-      webhook_secret: '',
-      has_webhook_secret: Boolean(result?.has_webhook_secret),
-      callback_method: result?.callback_method || 'whatsapp.whatsapp.webhook.handler',
-    }
-  } catch (caught) {
-    showToast(errorText(caught), true)
-  }
-}
-
-async function saveSiteSettings() {
-  if (!isSiteAdmin.value || desk.mode.value !== 'live') return
-  savingSite.value = true
-  try {
-    const saved = await saveWhatsappSettings({
-      default_account: siteSettings.value.default_account,
-      whatsapp_api_url: siteSettings.value.whatsapp_api_url,
-      whatsapp_api_version: siteSettings.value.whatsapp_api_version,
-      webhook_verify_token: siteSettings.value.webhook_verify_token,
-      webhook_secret: siteSettings.value.webhook_secret,
-    })
-    siteSettings.value.webhook_secret = ''
-    siteSettings.value.has_webhook_secret = Boolean(saved?.has_webhook_secret)
-    showToast('WhatsApp settings saved.')
-  } catch (caught) {
-    showToast(errorText(caught), true)
-  } finally {
-    savingSite.value = false
-  }
-}
-
 function removeReply() {
   if (!editingReply.value) return
   const name = editingReply.value
@@ -591,7 +555,6 @@ onMounted(() => {
   desk.load()
   load()
   loadTeamMembers()
-  loadSiteSettings()
 })
 </script>
 
@@ -821,51 +784,6 @@ onMounted(() => {
             />
           </div>
         </DeskCard>
-        <DeskCard
-          v-if="isSiteAdmin"
-          title="WhatsApp settings"
-          :description="`Site-wide. Only an Administrator or System Manager can see this. Callback: ${siteSettings.callback_method}`"
-        >
-          <p class="text-xs leading-relaxed text-ink-gray-6">
-            Optional. Leave this empty on a multi-client site. Connecting or removing a number does not fill it.
-            It is used only when a webhook or send does not name a number and that number cannot be matched by phone id.
-            People still message only from numbers they are allowed to use.
-          </p>
-          <div class="mt-4 grid gap-3 sm:grid-cols-2">
-            <FormControl
-              v-model="siteSettings.default_account"
-              type="select"
-              label="Default account"
-              :options="defaultAccountOptions"
-            />
-            <FormControl
-              v-model="siteSettings.whatsapp_api_version"
-              type="text"
-              label="API version"
-              placeholder="v23.0"
-            />
-            <FormControl
-              v-model="siteSettings.whatsapp_api_url"
-              type="text"
-              label="API URL"
-              class="sm:col-span-2"
-              placeholder="https://graph.facebook.com"
-            />
-            <FormControl
-              v-model="siteSettings.webhook_verify_token"
-              type="text"
-              label="Webhook verify token"
-            />
-            <Password
-              v-model="siteSettings.webhook_secret"
-              label="Webhook secret"
-              :placeholder="siteSettings.has_webhook_secret ? 'Saved. Type a new secret to replace it.' : 'App secret from Meta'"
-            />
-          </div>
-          <div class="mt-4 flex justify-end">
-            <Button variant="solid" class="bg-[#075E54] text-white hover:bg-[#128C7E]" label="Save settings" :loading="savingSite" @click="saveSiteSettings" />
-          </div>
-        </DeskCard>
       </template>
       <DeskCard v-else>
         <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between border-b border-outline-gray-2 pb-5">
@@ -1091,15 +1009,35 @@ onMounted(() => {
     <!-- MODAL: Edit WhatsApp account -->
     <Dialog v-model="accountEditorOpen" :title="accountEditor ? 'Edit ' + accountEditor.account_name : 'WhatsApp account'">
       <div v-if="accountEditor" class="space-y-4 py-1">
-        <p class="text-xs text-ink-gray-6">A new number is connected from Integrations. Update the credentials Meta issued for this number. Leave the token blank to keep the current one.</p>
-        <FormControl v-model="accountEditor.phone_id" type="text" label="Phone number ID" />
-        <FormControl v-model="accountEditor.business_id" type="text" label="Business ID" />
-        <FormControl v-model="accountEditor.app_id" type="text" label="App ID" />
+        <p v-if="accountEditor.embedded_signup" class="text-xs text-ink-gray-6">
+          Connected with Embedded Signup. Business ID, phone number ID, app ID, and the access token come from Meta and cannot be changed.
+        </p>
+        <p v-else class="text-xs text-ink-gray-6">A new number is connected from Integrations. Update the credentials Meta issued for this number. Leave the token blank to keep the current one.</p>
+        <FormControl
+          v-model="accountEditor.phone_id"
+          type="text"
+          label="Phone number ID"
+          :disabled="accountEditor.embedded_signup"
+        />
+        <FormControl
+          v-model="accountEditor.business_id"
+          type="text"
+          label="Business ID"
+          :disabled="accountEditor.embedded_signup"
+        />
+        <FormControl
+          v-model="accountEditor.app_id"
+          type="text"
+          label="App ID"
+          :disabled="accountEditor.embedded_signup"
+        />
         <Password
+          v-if="!accountEditor.embedded_signup"
           v-model="accountEditor.access_token"
           label="Access token"
           placeholder="Leave blank to keep the current token"
         />
+        <p v-else class="text-xs text-ink-gray-6">The access token is stored from Embedded Signup.</p>
         <FormControl
           v-model="accountEditor.status"
           type="select"

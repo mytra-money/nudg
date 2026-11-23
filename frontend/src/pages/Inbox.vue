@@ -67,6 +67,7 @@ const pickerQuery = ref('')
 const quickLoading = ref(false)
 const quickReplies = ref<any[]>([])
 const pickerRef = ref<InstanceType<typeof CannedReplyPicker> | null>(null)
+const composerRoot = ref<HTMLElement | null>(null)
 const notesOpen = ref(false)
 const noteText = ref('')
 const savingNote = ref(false)
@@ -126,7 +127,10 @@ onMounted(() => {
       filterUsers.value = []
     })
 })
-onUnmounted(() => window.clearInterval(clock))
+onUnmounted(() => {
+  window.clearInterval(clock)
+  document.removeEventListener('pointerdown', onQuickReplyPointerDown, true)
+})
 
 function rowStatus(row: Conversation) {
   return conversationStatusAt(row, now.value)
@@ -334,8 +338,18 @@ async function ensureQuickReplies() {
   }
 }
 
+function onQuickReplyPointerDown(event: Event) {
+  if (!pickerOpen.value) return
+  const root = composerRoot.value
+  const target = event.target
+  if (root && target instanceof Node && root.contains(target)) return
+  closePicker()
+}
+
 watch(pickerOpen, (open) => {
   if (open) void ensureQuickReplies()
+  document.removeEventListener('pointerdown', onQuickReplyPointerDown, true)
+  if (open) document.addEventListener('pointerdown', onQuickReplyPointerDown, true)
 })
 
 watch(
@@ -349,6 +363,14 @@ async function openQuickReplies() {
   pickerQuery.value = ''
   pickerManual.value = true
   await ensureQuickReplies()
+}
+
+function toggleQuickReplies() {
+  if (pickerOpen.value) {
+    closePicker()
+    return
+  }
+  void openQuickReplies()
 }
 
 function closePicker() {
@@ -829,6 +851,7 @@ async function retryMessage(message: WhatsAppMessage) {
         <!-- Message Composer Input -->
         <div
           v-if="current.profile.status !== 'Blocked'"
+          ref="composerRoot"
           class="inbox-composer relative sticky bottom-0 z-10 shrink-0 border-t border-[#E9EDEF] bg-[#F0F2F5] px-2 py-2 sm:px-3"
           @keydown.capture="onComposerKeydown"
         >
@@ -854,8 +877,10 @@ async function retryMessage(message: WhatsAppMessage) {
                 type="button"
                 class="grid size-10 place-items-center rounded-full text-[#54656F] hover:bg-black/5"
                 :class="pickerOpen ? 'bg-black/5 text-[#00A884]' : ''"
-                title="Quick replies (/)"
-                @click="openQuickReplies"
+                :title="pickerOpen ? 'Close quick replies' : 'Quick replies (/)'"
+                :aria-label="pickerOpen ? 'Close quick replies' : 'Quick replies'"
+                :aria-expanded="pickerOpen"
+                @click="toggleQuickReplies"
               >
                 <span class="lucide-zap size-5" aria-hidden="true" />
               </button>

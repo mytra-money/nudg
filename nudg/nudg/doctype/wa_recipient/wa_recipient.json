@@ -6,6 +6,7 @@
  "field_order": [
   "mobile_number",
   "recipient_name",
+  "unsubscribed",
   "recipient_data"
  ],
  "fields": [
@@ -20,6 +21,13 @@
    "fieldname": "recipient_name",
    "fieldtype": "Data",
    "label": "Recipient Name",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "unsubscribed",
+   "fieldtype": "Check",
+   "label": "Unsubscribed",
+   "default": "0",
    "in_list_view": 1
   },
   {

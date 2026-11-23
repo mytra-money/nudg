@@ -39,7 +39,13 @@ function pick(row: QuickReplyRow) {
 }
 
 function onKeydown(event: KeyboardEvent) {
-  if (!props.open || !filtered.value.length) return
+  if (!props.open) return
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    emit('close')
+    return
+  }
+  if (!filtered.value.length) return
   if (event.key === 'ArrowDown') {
     event.preventDefault()
     active.value = (active.value + 1) % filtered.value.length
@@ -50,9 +56,6 @@ function onKeydown(event: KeyboardEvent) {
     event.preventDefault()
     const row = filtered.value[active.value]
     if (row) pick(row)
-  } else if (event.key === 'Escape') {
-    event.preventDefault()
-    emit('close')
   }
 }
 
@@ -62,22 +65,33 @@ defineExpose({ onKeydown, filtered })
 <template>
   <div
     v-if="open"
-    class="absolute bottom-full left-0 right-0 z-20 mb-2 overflow-hidden rounded-xl border border-[#E9EDEF] bg-white shadow-lg"
+    class="absolute bottom-full left-0 right-0 z-20 mb-2 flex max-h-[min(18rem,calc(100dvh-9rem))] flex-col overflow-hidden rounded-xl border border-[#E9EDEF] bg-white shadow-lg"
     role="listbox"
     aria-label="Quick replies"
   >
-    <div class="border-b border-[#E9EDEF] px-3 py-2">
-      <TextInput
-        v-model="localQuery"
-        class="w-full"
-        placeholder="Filter by shortcut, title, or body…"
-        @keydown="onKeydown"
-      />
+    <div class="shrink-0 border-b border-[#E9EDEF] px-3 py-2">
+      <div class="flex items-center gap-1">
+        <TextInput
+          v-model="localQuery"
+          class="min-w-0 flex-1"
+          placeholder="Filter by shortcut, title, or body…"
+          @keydown="onKeydown"
+        />
+        <button
+          type="button"
+          class="grid size-8 shrink-0 place-items-center rounded-full text-[#54656F] hover:bg-[#F0F2F5]"
+          title="Close quick replies"
+          aria-label="Close quick replies"
+          @click="emit('close')"
+        >
+          <span class="lucide-x size-4" aria-hidden="true" />
+        </button>
+      </div>
       <p class="mt-1 text-[11px] text-[#667781]">
         Tip: type <code class="rounded bg-[#F0F2F5] px-1">/</code> in the composer to open this picker.
       </p>
     </div>
-    <div class="max-h-64 overflow-y-auto">
+    <div class="min-h-0 flex-1 overflow-y-auto">
       <p v-if="loading" class="px-3 py-6 text-center text-xs text-[#667781]">Loading quick replies…</p>
       <p v-else-if="!filtered.length" class="px-3 py-6 text-center text-xs text-[#667781]">
         No quick replies match.

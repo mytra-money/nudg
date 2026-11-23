@@ -10,7 +10,14 @@ from nudg.chatbot.ai_responder import phone_variants
 from nudg.chatbot.flow_engine import next_step_name, substitute, validate_input
 from nudg.chatbot.keyword_matcher import rule_matches
 from nudg.services.bulk import clean_mobile
-from nudg.services.campaign_schedules import end_date_for, schedule_is_due, schedule_sends_on, trigger_time_reached
+from nudg.services.campaign_replies import phone_digits
+from nudg.services.campaign_schedules import (
+	end_date_for,
+	recipient_receives_campaign,
+	schedule_is_due,
+	schedule_sends_on,
+	trigger_time_reached,
+)
 
 
 class _Rule:
@@ -89,6 +96,15 @@ class TestChatbotMatching(unittest.TestCase):
 		self.assertFalse(trigger_time_reached("09:00:00", morning))
 		self.assertTrue(trigger_time_reached("09:00", due))
 		self.assertFalse(trigger_time_reached(None, due))
+
+	def test_unsubscribed_rows_stay_out_of_the_bulk_message(self):
+		self.assertFalse(recipient_receives_campaign(1, True))
+		self.assertFalse(recipient_receives_campaign(0, False))
+		self.assertTrue(recipient_receives_campaign(0, True))
+
+	def test_audience_phone_ignores_formatting(self):
+		self.assertEqual(phone_digits("+1 555-000-7777"), "15550007777")
+		self.assertEqual(phone_digits(""), "")
 
 
 if __name__ == "__main__":
