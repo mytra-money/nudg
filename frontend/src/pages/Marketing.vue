@@ -278,26 +278,20 @@ async function run(name: string) {
   }
 }
 
-const accountOptions = computed(() =>
-  (desk.inbox.value?.accounts || []).map((row) => ({
-    label: row.account_name || row.name,
-    value: row.name,
-  })),
-)
+const currentAccountLabel = computed(() => {
+  const match = (desk.inbox.value?.accounts || []).find((row) => row.name === currentAccount.value)
+  return match?.account_name || currentAccount.value
+})
 
-function templatesFor(account: string) {
+const templateOptions = computed(() => {
+  const account = currentAccount.value
   return (desk.inbox.value?.templates || [])
     .filter((row) => Boolean(account) && row.whatsapp_account === account)
     .map((row) => ({
       label: displayTitle(row.template_label, row.template_name) || 'Untitled template',
       value: row.name,
     }))
-}
-
-const templateOptions = computed(() => templatesFor(form.value.whatsapp_account || currentAccount.value))
-const campaignTemplateOptions = computed(() =>
-  templatesFor(campaignForm.value.whatsapp_account || currentAccount.value),
-)
+})
 
 const recipientListOptions = computed(() => {
   const account = form.value.whatsapp_account
@@ -338,35 +332,11 @@ function setScheduleFor(value: unknown) {
   else form.value.whatsapp_template = ''
 }
 
-function alignDeskAccount(account: string) {
-  if (account && account !== desk.account.value) void desk.setAccount(account)
-}
-
-function setFormAccount(value: unknown) {
-  const next = String(value || '')
-  if (next === form.value.whatsapp_account) return
-  form.value.whatsapp_account = next
-  form.value.campaign = ''
-  form.value.whatsapp_template = ''
-  form.value.recipient = ''
-  alignDeskAccount(next)
-}
-
-function setCampaignAccount(value: unknown) {
-  const next = String(value || '')
-  if (next === campaignForm.value.whatsapp_account) return
-  campaignForm.value.whatsapp_account = next
-  campaignForm.value.schedules.forEach((row) => {
-    row.whatsapp_template = ''
-  })
-  alignDeskAccount(next)
-}
-
 function blankForm() {
   return {
     name: '',
     description: '',
-    whatsapp_account: currentAccount.value || accountOptions.value[0]?.value || '',
+    whatsapp_account: currentAccount.value,
     schedule_for: 'Campaign',
     campaign: utmCampaigns.value[0]?.name || '',
     recipient_type: 'WA Recipient List',
@@ -422,7 +392,7 @@ function fillForm(row: any) {
   form.value = {
     name: row.campaign_name || row.name || '',
     description: row.description || row.campaign_description || '',
-    whatsapp_account: row.whatsapp_account || currentAccount.value || accountOptions.value[0]?.value || '',
+    whatsapp_account: currentAccount.value || row.whatsapp_account || '',
     schedule_for: templateMode ? 'Template' : 'Campaign',
     campaign: templateMode ? '' : row.campaign || row.campaign_name || '',
     recipient_type: row.recipient_type || 'WA Recipient List',
@@ -450,7 +420,6 @@ function startCreate() {
   editingName.value = ''
   recipientsReady.value = true
   form.value = blankForm()
-  alignDeskAccount(form.value.whatsapp_account)
   editorOpen.value = true
 }
 
@@ -459,7 +428,6 @@ async function startEdit(row: any) {
   editingName.value = row.name
   recipientsReady.value = !live
   fillForm(row)
-  alignDeskAccount(form.value.whatsapp_account)
   editorOpen.value = true
   if (!live || !row.name) return
   try {
@@ -496,10 +464,6 @@ function removeCampaign() {
 async function saveCampaign() {
   const templateMode = form.value.schedule_for === 'Template'
   const campaign = templateMode ? '' : form.value.campaign
-  if (!form.value.whatsapp_account) {
-    toast.error('Select a WhatsApp account.')
-    return
-  }
   if (templateMode && !form.value.whatsapp_template) {
     toast.error('Select a WhatsApp template.')
     return
@@ -608,7 +572,7 @@ async function saveCampaign() {
 
 // Top KPI metrics
 const campaignOptions = computed(() => {
-  const account = form.value.whatsapp_account || currentAccount.value
+  const account = currentAccount.value
   return utmCampaigns.value
     .filter((row) => Boolean(account) && row.whatsapp_account === account)
     .map((row) => ({
@@ -634,7 +598,7 @@ function blankCampaignForm() {
   return {
     name: '',
     description: '',
-    whatsapp_account: currentAccount.value || accountOptions.value[0]?.value || '',
+    whatsapp_account: currentAccount.value,
     schedules: [blankScheduleRow()],
   }
 }
@@ -677,7 +641,7 @@ async function editCampaign(row: any) {
   campaignForm.value = {
     name: row.campaign_name || row.name || '',
     description: row.description || row.campaign_description || '',
-    whatsapp_account: row.whatsapp_account || currentAccount.value || accountOptions.value[0]?.value || '',
+    whatsapp_account: currentAccount.value || row.whatsapp_account || '',
     schedules: scheduleRowsFrom(row),
   }
   campaignEditorOpen.value = true
@@ -701,10 +665,6 @@ async function saveUtmCampaign() {
     toast.error('Campaign name is required.')
     return
   }
-  if (!campaignForm.value.whatsapp_account) {
-    toast.error('Select a WhatsApp account.')
-    return
-  }
   const schedules = campaignForm.value.schedules
     .map((row) => ({
       whatsapp_template: String(row.whatsapp_template || '').trim(),
@@ -724,7 +684,7 @@ async function saveUtmCampaign() {
         name: campaignEditorMode.value === 'edit' ? editingCampaign.value : name,
         campaign_name: name,
         description: campaignForm.value.description.trim(),
-        whatsapp_account: campaignForm.value.whatsapp_account,
+        whatsapp_account: currentAccount.value,
         template: schedules[0].whatsapp_template,
         whatsapp_template: schedules[0].whatsapp_template,
         send_after_days: Math.max(...schedules.map((row) => row.send_after_days)),
@@ -741,13 +701,13 @@ async function saveUtmCampaign() {
             name: editingCampaign.value,
             campaign_name: name,
             campaign_description: campaignForm.value.description.trim(),
-            whatsapp_account: campaignForm.value.whatsapp_account,
+            whatsapp_account: currentAccount.value || undefined,
             schedules,
           })
         : await createUtmCampaign({
             name,
             campaign_description: campaignForm.value.description.trim(),
-            whatsapp_account: campaignForm.value.whatsapp_account,
+            whatsapp_account: currentAccount.value || undefined,
             schedules,
           })
     campaignEditorOpen.value = false
@@ -821,21 +781,7 @@ onMounted(() => {
 
 watch(
   () => desk.account.value,
-  (account) => {
-    if (editorOpen.value && account && account !== form.value.whatsapp_account) {
-      form.value.whatsapp_account = account
-      form.value.campaign = ''
-      form.value.whatsapp_template = ''
-      form.value.recipient = ''
-    }
-    if (campaignEditorOpen.value && account && account !== campaignForm.value.whatsapp_account) {
-      campaignForm.value.whatsapp_account = account
-      campaignForm.value.schedules.forEach((row) => {
-        row.whatsapp_template = ''
-      })
-    }
-    void load()
-  },
+  () => void load(),
 )
 </script>
 
@@ -1220,13 +1166,6 @@ watch(
     <Dialog v-model="editorOpen" :title="editorMode === 'edit' ? 'Edit schedule' : 'New schedule'">
       <div class="space-y-3 py-1 text-sm">
         <FormControl
-          :model-value="form.whatsapp_account"
-          type="select"
-          label="WhatsApp account"
-          :options="accountOptions"
-          @update:model-value="setFormAccount"
-        />
-        <FormControl
           :model-value="form.schedule_for"
           type="select"
           label="Schedule for"
@@ -1247,6 +1186,9 @@ watch(
           label="Campaign"
           :options="campaignOptions"
         />
+        <p class="text-xs text-ink-gray-5">
+          WhatsApp account: {{ displayTitle(currentAccountLabel) || 'Chosen on the campaign' }}
+        </p>
         <FormControl
           :model-value="form.recipient_type"
           type="select"
@@ -1293,13 +1235,6 @@ watch(
     <Dialog v-model="campaignEditorOpen" :title="campaignEditorMode === 'edit' ? 'Edit campaign' : 'New campaign'" size="lg">
       <div class="space-y-3 py-1 text-sm">
         <FormControl v-model="campaignForm.name" type="text" label="Name" placeholder="Festive allocation" required />
-        <FormControl
-          :model-value="campaignForm.whatsapp_account"
-          type="select"
-          label="WhatsApp account"
-          :options="accountOptions"
-          @update:model-value="setCampaignAccount"
-        />
         <FormControl v-model="campaignForm.description" type="textarea" label="Description" :rows="3" />
         <div class="space-y-2">
           <p class="text-sm font-medium text-ink-gray-8">Templates</p>
@@ -1316,7 +1251,7 @@ watch(
               class="space-y-2 border-t border-outline-gray-2 px-3 py-2"
             >
               <div class="grid grid-cols-[minmax(0,1fr)_6.5rem_7rem_2rem] items-center gap-2">
-                <FormControl v-model="row.whatsapp_template" type="select" :options="campaignTemplateOptions" />
+                <FormControl v-model="row.whatsapp_template" type="select" :options="templateOptions" />
                 <FormControl v-model="row.send_after_days" type="number" />
                 <FormControl v-model="row.variable_type" type="select" :options="variableTypeOptions" />
                 <Button variant="ghost" size="sm" icon="lucide-x" aria-label="Remove row" @click="removeScheduleRow(index)" />
