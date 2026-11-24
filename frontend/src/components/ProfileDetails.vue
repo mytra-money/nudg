@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { Avatar, Button, Combobox, Dialog, toast } from 'frappe-ui'
 import { isManager } from '@/stores/desk'
 import { whatsappScreen } from '@/utils/format'
+import { displayTitle } from '@/utils/titles'
 import { listAssignableUsers } from '@/services/catalogApi'
 import { userLabel } from '@/utils/frappeSession'
 import { router } from '@/router'
@@ -200,8 +201,8 @@ defineExpose({ openAssign })
           :class="canOpen(link.doctype) ? 'hover:bg-emerald-50' : ''"
           @click="canOpen(link.doctype) && openLinked(link.doctype, link.docname)"
         >
-          <span class="font-medium">{{ link.doctype }}:</span>
-          {{ link.title || link.docname }}
+          <span class="font-medium">{{ link.doctype }}</span>
+          <span v-if="displayTitle(link.title, link.docname)"> · {{ displayTitle(link.title, link.docname) }}</span>
         </component>
       </div>
       <p v-else class="text-xs leading-snug text-[#667781]">No Frappe records linked yet.</p>
@@ -212,7 +213,7 @@ defineExpose({ openAssign })
       <p class="mt-1 font-medium" :class="thread.window.status === 'open' ? 'text-emerald-700' : 'text-[#667781]'">
         {{ thread.window.status === 'open' ? '24h window open' : 'Template only' }}
       </p>
-      <p class="mt-0.5 break-all text-[11px] text-[#667781]">{{ thread.profile.whatsapp_account }}</p>
+      <p class="mt-0.5 break-all text-[11px] text-[#667781]">{{ displayTitle(thread.profile.whatsapp_account) }}</p>
     </div>
 
     <!-- Dialog for Assigning User -->

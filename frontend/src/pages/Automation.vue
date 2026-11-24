@@ -7,6 +7,7 @@ import DeskPage from '@/components/desk/DeskPage.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import { formatDay, formatTime, rawErrorText } from '@/utils/format'
+import { displayTitle } from '@/utils/titles'
 import {
   cancelChatbotSession,
   deleteChatbotFlow,
@@ -202,7 +203,7 @@ async function saveBot() {
 }
 
 function keywordResult(row: any) {
-  if (row.response_type === 'Flow') return `Flow · ${row.trigger_flow || ''}`
+  if (row.response_type === 'Flow') return `Flow · ${displayTitle(row.trigger_flow) || 'Flow'}`
   if (row.response_type === 'Unsubscribe') return `Unsubscribe · ${row.response_text || ''}`
   if (row.response_type === 'Subscribe') return `Subscribe · ${row.response_text || ''}`
   return row.response_text || ''
@@ -523,7 +524,7 @@ onMounted(async () => {
           v-for="row in flows"
           :key="row.name"
           as="article"
-          :title="row.flow_name || row.name"
+          :title="displayTitle(row.flow_name) || 'Flow'"
           :description="`Starts on: ${row.trigger_keywords || 'a keyword that points here'}`"
         >
           <template #actions>
@@ -559,7 +560,7 @@ onMounted(async () => {
           <li v-for="row in sessions" :key="row.name" class="flex flex-wrap items-center justify-between gap-3 border-b border-outline-gray-1 py-3 last:border-b-0">
             <div class="min-w-0">
               <p class="truncate text-sm font-medium text-ink-gray-9">{{ row.phone_number }}</p>
-              <p class="text-xs text-ink-gray-5">{{ row.current_flow }} · {{ row.current_step }}</p>
+              <p class="text-xs text-ink-gray-5">{{ displayTitle(row.current_flow) || 'Flow' }} · {{ displayTitle(row.current_step) || 'Step' }}</p>
             </div>
             <Button variant="subtle" size="sm" label="Stop" @click="cancelSession(row.name)" />
           </li>

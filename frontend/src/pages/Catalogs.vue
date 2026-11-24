@@ -8,6 +8,7 @@ import DeskPage from '@/components/desk/DeskPage.vue'
 import DeskSplit from '@/components/desk/DeskSplit.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import { errorText } from '@/utils/format'
+import { displayTitle } from '@/utils/titles'
 import { accountArg } from '@/utils/accountSelection'
 import { useDesk } from '@/stores/desk'
 import {
@@ -703,8 +704,7 @@ watch(
             </div>
             <p class="line-clamp-2 text-xs leading-5 text-ink-gray-6">{{ cat.description || 'No catalog description provided.' }}</p>
             <div class="flex items-center justify-between gap-3 text-[11px] text-ink-gray-5">
-              <span class="min-w-0 truncate">{{ cat.whatsapp_account || 'No account' }}</span>
-              <span class="shrink-0 font-mono">{{ cat.name }}</span>
+              <span class="min-w-0 truncate">{{ displayTitle(cat.whatsapp_account) || 'No account' }}</span>
             </div>
           </DeskCard>
         </div>

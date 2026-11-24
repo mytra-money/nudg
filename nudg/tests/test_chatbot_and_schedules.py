@@ -10,12 +10,14 @@ from nudg.chatbot.ai_responder import phone_variants
 from nudg.chatbot.flow_engine import next_step_name, substitute, validate_input
 from nudg.chatbot.keyword_matcher import rule_matches
 from nudg.services.bulk import clean_mobile
-from nudg.services.campaign_replies import phone_digits
+from nudg.services.campaign_replies import apply_unsubscribe, phone_digits, stop_plan
+from nudg.services.display_titles import bulk_display_title
 from nudg.services.campaign_schedules import (
 	end_date_for,
 	recipient_receives_campaign,
 	schedule_is_due,
 	schedule_sends_on,
+	should_create_bulk,
 	trigger_time_reached,
 )
 
@@ -97,6 +99,10 @@ class TestChatbotMatching(unittest.TestCase):
 		self.assertTrue(trigger_time_reached("09:00", due))
 		self.assertFalse(trigger_time_reached(None, due))
 
+	def test_a_schedule_step_is_not_sent_again_once_a_bulk_message_exists(self):
+		self.assertTrue(should_create_bulk(None))
+		self.assertFalse(should_create_bulk("BULK-WA-2026-00009"))
+
 	def test_unsubscribed_rows_stay_out_of_the_bulk_message(self):
 		self.assertFalse(recipient_receives_campaign(1, True))
 		self.assertFalse(recipient_receives_campaign(0, False))
@@ -105,6 +111,72 @@ class TestChatbotMatching(unittest.TestCase):
 	def test_audience_phone_ignores_formatting(self):
 		self.assertEqual(phone_digits("+1 555-000-7777"), "15550007777")
 		self.assertEqual(phone_digits(""), "")
+
+	def test_reply_before_the_first_step_does_not_unsubscribe(self):
+		plan = stop_plan("+91 98450 22119", _drip(has_dispatch=False))
+		self.assertEqual(plan["campaign_rows"], [])
+		self.assertEqual(plan["list_rows"], [])
+		self.assertFalse(plan["cancel"])
+
+	def test_reply_unsubscribes_that_person_on_the_campaign_and_the_list(self):
+		plan = stop_plan("919845022119", _drip())
+		self.assertEqual(plan["campaign_rows"], ["camp-meera"])
+		self.assertEqual(plan["list_rows"], ["list-meera"])
+		self.assertFalse(plan["cancel"])
+
+	def test_reply_cancels_the_campaign_when_nobody_else_is_still_subscribed(self):
+		campaign = _drip()
+		campaign["recipients"] = [campaign["recipients"][0]]
+		plan = stop_plan("+91 98450 22119", campaign)
+		self.assertEqual(plan["campaign_rows"], ["camp-meera"])
+		self.assertTrue(plan["cancel"])
+
+	def test_a_bulk_message_title_uses_the_campaign_and_template(self):
+		self.assertEqual(bulk_display_title("WA-CAMP-2026-00004 day 1", "Test", "send_quotation1"), "Test · send_quotation1")
+		self.assertEqual(bulk_display_title("Festive allocation", "Test", "send_quotation1"), "Festive allocation")
+
+	def test_a_ticked_unsubscribe_box_is_kept_and_written_back(self):
+		source = [{"mobile_number": "+91 98450 22119", "unsubscribed": 0}]
+		submitted = [{"mobile_number": "+91 98450 22119", "unsubscribed": 1}]
+		previous = [{"mobile_number": "+91 98450 22119", "unsubscribed": 0}]
+		rows, edits = apply_unsubscribe(source, submitted, {}, previous)
+		self.assertEqual(rows[0]["unsubscribed"], 1)
+		self.assertEqual(edits, [("+91 98450 22119", 1)])
+
+	def test_an_untouched_campaign_save_keeps_a_tick_already_on_the_list(self):
+		source = [{"mobile_number": "919845022119", "unsubscribed": 1}]
+		submitted = [{"mobile_number": "+91 98450 22119", "unsubscribed": 0}]
+		previous = [{"mobile_number": "+91 98450 22119", "unsubscribed": 0}]
+		rows, edits = apply_unsubscribe(source, submitted, {}, previous)
+		self.assertEqual(rows[0]["unsubscribed"], 1)
+		self.assertEqual(edits, [])
+
+	def test_reply_is_ignored_when_the_option_is_off_or_the_campaign_has_ended(self):
+		off = _drip()
+		off["stop_on_reply"] = 0
+		self.assertFalse(stop_plan("+91 98450 22119", off)["cancel"])
+		self.assertEqual(stop_plan("+91 98450 22119", off)["campaign_rows"], [])
+		done = _drip()
+		done["status"] = "Completed"
+		self.assertEqual(stop_plan("+91 98450 22119", done)["campaign_rows"], [])
+		self.assertEqual(stop_plan("+91 90000 00000", _drip())["campaign_rows"], [])
+
+
+def _drip(has_dispatch: bool = True) -> dict:
+	return {
+		"stop_on_reply": 1,
+		"status": "In Progress",
+		"has_dispatch": has_dispatch,
+		"recipient_type": "WA Recipient List",
+		"recipients": [
+			{"name": "camp-meera", "mobile_number": "+91 98450 22119", "unsubscribed": 0},
+			{"name": "camp-arjun", "mobile_number": "+91 98250 44218", "unsubscribed": 0},
+		],
+		"list_recipients": [
+			{"name": "list-meera", "mobile_number": "919845022119", "unsubscribed": 0},
+			{"name": "list-arjun", "mobile_number": "919825044218", "unsubscribed": 0},
+		],
+	}
 
 
 if __name__ == "__main__":

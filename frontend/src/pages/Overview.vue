@@ -584,7 +584,7 @@ const recentLogs = computed(() => logs.value.slice(0, 4))
                 class="flex items-center justify-between rounded-lg border border-outline-gray-1 bg-surface-gray-1/70 px-3 py-2 text-xs"
               >
                 <div>
-                  <p class="font-semibold text-ink-gray-9">{{ acc.account_name || acc.name }}</p>
+                  <p class="font-semibold text-ink-gray-9">{{ acc.account_name || 'WhatsApp account' }}</p>
                   <p class="text-[11px] text-ink-gray-5">
                     {{ acc.is_default ? 'Primary default line' : 'Secondary channel' }}
                   </p>

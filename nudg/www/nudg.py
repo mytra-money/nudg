@@ -38,8 +38,19 @@ def get_boot():
 	if not is_system_manager:
 		integration["default_account"] = None
 
+	try:
+		from nudg.services.directory import access as directory_access
+
+		directory = directory_access()
+	except Exception:
+		directory = {
+			"profile": {"read": False, "write": False, "create": False, "delete": False},
+			"recipient_list": {"read": False, "write": False, "create": False, "delete": False},
+		}
+
 	# ``whatsapp_installed`` stays "the WA Message DocType exists", which the
 	# desk shell already reads. ``integration`` is the Phase 1 status contract.
+	# ``directory`` is Role Permission Manager access for contacts and lists.
 	return {
 		"csrf_token": frappe.sessions.get_csrf_token(),
 		"user": frappe.session.user,
@@ -51,6 +62,7 @@ def get_boot():
 		"socketio_port": cint(frappe.conf.socketio_port),
 		"whatsapp_installed": installed,
 		"integration": integration,
+		"directory": directory,
 	}
 
 

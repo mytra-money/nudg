@@ -7,6 +7,7 @@ import ErrorState from '@/components/ErrorState.vue'
 import LoadingState from '@/components/LoadingState.vue'
 import WhatsAppTemplatePreview from '@/components/templates/WhatsAppTemplatePreview.vue'
 import { errorText } from '@/utils/format'
+import { displayTitle } from '@/utils/titles'
 import { userFacingError } from '@/utils/errors'
 import { fallbackSample } from '@/utils/templatePreview'
 import { useDesk } from '@/stores/desk'
@@ -108,7 +109,7 @@ const accountOptions = computed(() =>
     accounts.value,
     accountQuery.value,
     siteForm.value.whatsapp_account,
-    (row: { name: string; account_name?: string }) => row.account_name || row.name,
+    (row: { name: string; account_name?: string }) => displayTitle(row.account_name) || 'WhatsApp account',
   ),
 )
 const doctypeOptions = computed(() => {
@@ -130,15 +131,20 @@ const templateOptions = computed(() =>
     templates.value,
     templateQuery.value,
     alertForm.value.template,
-    (row: { name: string; label?: string }) => row.label || row.name,
+    (row: { name: string; label?: string }) => displayTitle(row.label) || 'Template',
   ),
 )
+function alertTemplate(name?: string) {
+  const row = templates.value.find((item) => item.name === name)
+  return displayTitle(row?.label) || 'Template'
+}
+
 const previewTemplate = computed<Template | null>(() => {
   const row = selectedTemplate.value
   if (!row?.message) return null
   return {
     name: row.name,
-    template_label: row.label || row.name,
+    template_label: displayTitle(row.label) || 'Template',
     template_name: row.template_name,
     template_type: '',
     language: '',
@@ -568,7 +574,7 @@ onMounted(load)
                 <li v-for="alert in visibleAlerts(site)" :key="alert.name" class="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                   <div class="min-w-0">
                     <div class="font-medium text-ink-gray-9">{{ alert.doctype }} · {{ eventLabel(alert.event) }}</div>
-                    <div class="break-words text-ink-gray-6">{{ alert.template }} · {{ alert.phone_field }} · {{ alert.enabled ? 'On' : 'Off' }}</div>
+                    <div class="break-words text-ink-gray-6">{{ alertTemplate(alert.template) }} · {{ alert.phone_field }} · {{ alert.enabled ? 'On' : 'Off' }}</div>
                   </div>
                   <div class="flex flex-wrap gap-2">
                     <Button variant="subtle" :loading="busy" @click="openEdit(site, alert)">Edit</Button>

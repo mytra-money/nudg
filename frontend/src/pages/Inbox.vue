@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { Button, Dialog, Select, TextInput, call, toast } from 'frappe-ui'
+import { Button, Dialog, FormControl, Select, TextInput, call, toast } from 'frappe-ui'
 import { MessageInput, MessageList } from '@whatsapp/ui/components/Messages'
 import type { ReactPayload, WhatsAppMessage } from '@whatsapp/ui/components/Messages'
 import DeskTemplatePreview from '@/components/DeskTemplatePreview.vue'
@@ -18,6 +18,7 @@ import {
 } from '@/utils/conversationStatus'
 import { useDeskComposer } from '@/composables/useComposer'
 import { applyQuickReplyDraft, slashCommand } from '@/utils/cannedReply'
+import { displayTitle } from '@/utils/titles'
 import { previewText, serviceWindow } from '@/utils/format'
 import { userFacingError } from '@/utils/errors'
 import { useDesk } from '@/stores/desk'
@@ -31,6 +32,8 @@ import {
   useQuickReply,
 } from '@/services/catalogApi'
 import { errorText } from '@/utils/format'
+import { fetchDirectoryAccess, saveDirectoryProfile } from '@/services/directoryApi'
+import { bootDirectoryAccess } from '@/utils/directoryAccess'
 import { threadAccountAllowed } from '@/utils/deskCache'
 import { sessionUser as readSessionUser, userLabel } from '@/utils/frappeSession'
 import type { Conversation, ConversationNote, Template } from '@/types'
@@ -110,6 +113,24 @@ const catalogError = ref('')
 const catalogItems = ref<any[]>([])
 
 const assignUser = ref('')
+const directoryAccess = ref(bootDirectoryAccess())
+const canCreateProfile = computed(() => {
+  if (!window.csrf_token) return true
+  return Boolean(directoryAccess.value?.profile.create)
+})
+const newProfileOpen = ref(false)
+const newProfileSaving = ref(false)
+const newProfile = ref({
+  profile_name: '',
+  phone_number: '',
+  whatsapp_account: '',
+})
+const newProfileAccounts = computed(() =>
+  (desk.inbox.value?.accounts || []).map((row) => ({
+    label: row.account_name || row.name,
+    value: row.name,
+  })),
+)
 const picked = ref<Template | null>(null)
 const scroller = ref<HTMLElement | null>(null)
 const sessionUser = readSessionUser()
@@ -119,6 +140,15 @@ onMounted(() => {
   clock = window.setInterval(() => {
     now.value = Date.now()
   }, 30000)
+  if (window.csrf_token) {
+    void fetchDirectoryAccess()
+      .then((row) => {
+        if (row?.profile) directoryAccess.value = row
+      })
+      .catch(() => {
+        /* keep the boot permissions */
+      })
+  }
   void listAssignableUsers()
     .then((rows) => {
       filterUsers.value = Array.isArray(rows) ? rows : []
@@ -287,6 +317,48 @@ watch(
 
 function open(row: Conversation) {
   void desk.openProfile(row.profile.name)
+}
+
+function openNewProfile() {
+  const selected = desk.account.value && desk.account.value !== 'all' ? desk.account.value : ''
+  newProfile.value = {
+    profile_name: '',
+    phone_number: '',
+    whatsapp_account: selected || newProfileAccounts.value[0]?.value || '',
+  }
+  newProfileOpen.value = true
+}
+
+async function createProfileFromChat() {
+  const phone = newProfile.value.phone_number.trim()
+  const account = newProfile.value.whatsapp_account
+  if (!phone || !account) {
+    toast.error('Enter a phone number and choose a WhatsApp account.')
+    return
+  }
+  if (!window.csrf_token) {
+    toast.error('Sign in on a Frappe site to create a contact.')
+    return
+  }
+  newProfileSaving.value = true
+  try {
+    const saved = await saveDirectoryProfile({
+      profile_name: newProfile.value.profile_name.trim(),
+      phone_number: phone,
+      whatsapp_account: account,
+      status: 'Active',
+    })
+    newProfileOpen.value = false
+    query.value = ''
+    selectQuickTab('all')
+    await desk.refresh()
+    await desk.openProfile(saved.name)
+    toast.success(saved.created ? 'Contact created.' : 'Opened the existing contact.')
+  } catch (caught) {
+    toast.error(errorText(caught))
+  } finally {
+    newProfileSaving.value = false
+  }
 }
 
 function clearSearch() {
@@ -627,6 +699,20 @@ async function retryMessage(message: WhatsAppMessage) {
       class="inbox-list min-h-0 flex-col border-r border-[#E9EDEF] bg-white"
       :class="desk.profile.value ? 'hidden md:flex' : 'flex'"
     >
+      <div class="flex items-center justify-between gap-2 border-b border-[#E9EDEF] px-3 py-2.5">
+        <span class="text-base font-semibold text-[#111B21]">Chats</span>
+        <button
+          v-if="canCreateProfile"
+          type="button"
+          class="grid size-9 place-items-center rounded-full bg-[#25D366] text-white shadow-sm hover:bg-[#1ebe5d]"
+          title="New chat"
+          aria-label="New chat"
+          @click="openNewProfile"
+        >
+          <span class="lucide-plus size-5" aria-hidden="true" />
+        </button>
+      </div>
+
       <!-- Search & Filters Container -->
       <div class="border-b border-outline-gray-2 p-3 space-y-2.5 shrink-0 bg-white">
         <!-- Search Input with clear button -->
@@ -1012,7 +1098,7 @@ async function retryMessage(message: WhatsAppMessage) {
             >
               <div class="flex items-center justify-between gap-2">
                 <span class="text-sm font-semibold text-ink-gray-9">
-                  {{ template.template_label || template.name }}
+                  {{ displayTitle(template.template_label, template.template_name) || 'Untitled template' }}
                 </span>
                 <StatusBadge :label="template.status || 'Pending'" />
               </div>
@@ -1042,7 +1128,7 @@ async function retryMessage(message: WhatsAppMessage) {
       <template #actions>
         <div class="flex w-full flex-wrap items-center justify-between gap-2">
           <span v-if="picked" class="text-xs text-ink-gray-6 truncate max-w-xs">
-            Selected: <strong>{{ picked.template_label || picked.name }}</strong>
+            Selected: <strong>{{ displayTitle(picked.template_label, picked.template_name) || 'Untitled template' }}</strong>
           </span>
           <span v-else />
           <div class="flex gap-2">
@@ -1136,6 +1222,32 @@ async function retryMessage(message: WhatsAppMessage) {
       </div>
       <template #actions>
         <Button label="Close" @click="catalogOpen = false" />
+      </template>
+    </Dialog>
+
+    <Dialog v-model="newProfileOpen" title="New chat">
+      <div class="grid gap-3">
+        <p class="text-sm text-ink-gray-7">
+          Create a contact and open the conversation. If this number already exists, that chat opens instead.
+        </p>
+        <FormControl v-model="newProfile.profile_name" type="text" label="Name" placeholder="Contact name" />
+        <FormControl v-model="newProfile.phone_number" type="text" label="Phone number" placeholder="+91…" />
+        <FormControl
+          v-model="newProfile.whatsapp_account"
+          type="select"
+          label="WhatsApp account"
+          :options="newProfileAccounts"
+        />
+      </div>
+      <template #actions>
+        <Button label="Cancel" @click="newProfileOpen = false" />
+        <Button
+          variant="solid"
+          class="bg-[#075E54] text-white hover:bg-[#128C7E]"
+          label="Create"
+          :loading="newProfileSaving"
+          @click="createProfileFromChat"
+        />
       </template>
     </Dialog>
   </div>

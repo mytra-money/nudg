@@ -17,7 +17,7 @@ function filledUrl(url?: string) {
 <template>
   <div
     v-if="buttons?.length"
-    class="mt-1 overflow-hidden rounded-lg bg-white text-[#1e3a32] shadow-sm"
+    class="mt-1.5 overflow-hidden rounded-lg bg-white text-[#00a884] shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]"
     role="group"
     aria-label="Template buttons, preview only"
   >

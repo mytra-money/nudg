@@ -67,17 +67,24 @@ def list_campaigns(account: str | None = None, start: int | None = 0, limit: int
 		limit_page_length=page_limit(limit, default=50, maximum=50),
 	)
 	templates, days = _schedule_templates([c.name for c in raw_list])
+	from nudg.services.display_titles import account_titles, template_titles
+
+	labels = template_titles(list(templates.values()))
+	accounts = account_titles([c.get("whatsapp_account") for c in raw_list])
 	result = []
 	for c in raw_list:
 		template = templates.get(c.name)
+		account = c.get("whatsapp_account")
 		result.append({
 			"name": c.name,
 			"campaign_name": c.name,
 			"slug": c.get("slug"),
 			"description": c.get("campaign_description"),
-			"whatsapp_account": c.get("whatsapp_account"),
-			"whatsapp_channel": c.get("whatsapp_account"),
+			"whatsapp_account": account,
+			"account_label": accounts.get(account) or "",
+			"whatsapp_channel": account,
 			"template": template,
+			"template_label": labels.get(template) or "",
 			"whatsapp_template": template,
 			"send_after_days": int(days.get(c.name) or 0),
 			"status": "Draft",
@@ -93,12 +100,26 @@ def get_campaign(name: str) -> dict:
 	frappe.has_permission("UTM Campaign", "read", doc=doc, throw=True)
 	d = doc.as_dict()
 	template = _campaign_template(doc)
+	from nudg.services.display_titles import account_titles, template_titles
+
+	schedules = doc.get("whatsapp_schedules") or []
+	titles = template_titles(
+		[row.get("whatsapp_template") if isinstance(row, dict) else getattr(row, "whatsapp_template", None) for row in schedules]
+	)
+	account = doc.get("whatsapp_account")
 	d["campaign_name"] = doc.name
-	d["whatsapp_channel"] = doc.get("whatsapp_account")
+	d["whatsapp_channel"] = account
+	d["account_label"] = account_titles([account]).get(account) if account else ""
 	d["template"] = template
+	d["template_label"] = titles.get(template) or ""
 	d["whatsapp_template"] = template
 	d["status"] = "Draft"
-	d["whatsapp_schedules"] = doc.get("whatsapp_schedules") or []
+	view = []
+	for row in schedules:
+		data = row.as_dict() if hasattr(row, "as_dict") else dict(row)
+		data["template_label"] = titles.get(data.get("whatsapp_template")) or ""
+		view.append(data)
+	d["whatsapp_schedules"] = view
 	d["last_error"] = doc.get("whatsapp_last_error")
 	d["recipients"] = _recipient_rows(doc)
 	return d

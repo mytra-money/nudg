@@ -55,34 +55,40 @@ describe('template preview variables', () => {
     ).toEqual(['1', 'name', 'city'])
   })
 
-  it('prefers stored examples and fills the rest with samples', () => {
+  it('uses stored examples and leaves missing variables empty', () => {
     const values = resolveSampleValues({
       message: 'Hello {{1}}, order {{2}}, total {{3}}, on {{4}}, plus {{5}}. City {{city}}.',
       template_variables: [{ variable_name: '1', variable_example: 'Meera' }],
     })
     expect(values).toEqual({
       '1': 'Meera',
-      '2': 'ORD-001',
-      '3': '₹2,499',
-      '4': '10 November 2026',
-      '5': 'Sample 5',
-      city: 'Sample',
+      '2': '',
+      '3': '',
+      '4': '',
+      '5': '',
+      city: '',
     })
+    expect(
+      fillVariables(
+        'Hello {{1}}, order {{2}}',
+        values,
+      ),
+    ).toBe('Hello Meera, order {{2}}')
   })
 
-  it('uses a named sample when the template has no example', () => {
+  it('keeps the placeholder when the template has no example', () => {
     expect(fallbackSample('order_id')).toBe('ORD-001')
-    expect(fallbackSample('customer_name')).toBe('Nag')
-    expect(resolveSampleValues({ message: 'Hello {{customer_name}}' }).customer_name).toBe('Nag')
+    expect(resolveSampleValues({ message: 'Hello {{customer_name}}' }).customer_name).toBe('')
+    expect(fillVariables('Hi {{1}}', resolveSampleValues({ message: 'Hi {{1}}' }))).toBe('Hi {{1}}')
   })
 
-  it('does not treat a blank stored example as a sample override', () => {
+  it('does not treat a blank stored example as a value', () => {
     expect(
       resolveSampleValues({
         message: 'Hello {{1}}',
         template_variables: [{ variable_name: '1', variable_example: '   ' }],
       })['1'],
-    ).toBe('Nag')
+    ).toBe('')
   })
 
   it('fills from a plain object so an edited sample updates immediately', () => {

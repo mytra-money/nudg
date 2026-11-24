@@ -129,11 +129,15 @@ export async function deleteUtmCampaign(name: string) {
 }
 
 export async function createWhatsappSchedule(payload: {
-  campaign: string
+  campaign?: string
   recipient_type?: string
   recipient?: string
   start_date?: string
   trigger_time?: string
+  stop_on_reply?: number
+  schedule_for?: string
+  whatsapp_template?: string
+  whatsapp_account?: string
 }) {
   return call<any>('nudg.desk_api.create_whatsapp_schedule', payload)
 }
@@ -145,6 +149,10 @@ export async function updateWhatsappSchedule(payload: {
   recipient?: string
   start_date?: string
   trigger_time?: string
+  stop_on_reply?: number
+  schedule_for?: string
+  whatsapp_template?: string
+  whatsapp_account?: string
 }) {
   return call<any>('nudg.desk_api.update_whatsapp_schedule', payload)
 }
@@ -181,6 +189,7 @@ export async function createCampaign(payload: {
   recipient?: string
   start_date?: string
   trigger_time?: string
+  stop_on_reply?: number
   schedules?: Array<{ whatsapp_template: string; send_after_days?: number }>
 }) {
   return call<any>('nudg.desk_api.create_campaign', payload)
@@ -195,6 +204,7 @@ export async function updateCampaign(payload: {
   recipient?: string
   start_date?: string
   trigger_time?: string
+  stop_on_reply?: number
   schedules?: Array<{ whatsapp_template: string; send_after_days?: number }>
 }) {
   return call<any>('nudg.desk_api.update_campaign', payload)
@@ -253,6 +263,7 @@ export async function saveWhatsappTemplate(payload: {
   header_type?: string
   header_media?: string
   buttons?: Array<{ button_type: string; button_text: string; url?: string; phone_number?: string }>
+  template_variables?: Array<{ variable_name: string; variable_example?: string; variable_field?: string }>
   name?: string
   /** When false, keep a local draft and skip the Meta create/update call. */
   submit_to_meta?: boolean | 0 | 1

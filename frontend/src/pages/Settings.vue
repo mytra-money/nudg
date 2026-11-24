@@ -771,8 +771,8 @@ onMounted(() => {
         >
           <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 class="text-lg font-bold text-ink-gray-9">{{ account.account_name || account.name }}</h2>
-              <p class="mt-1 text-xs text-ink-gray-5">{{ account.name }} · {{ account.status }}</p>
+              <h2 class="text-lg font-bold text-ink-gray-9">{{ account.account_name || 'WhatsApp account' }}</h2>
+              <p class="mt-1 text-xs text-ink-gray-5">{{ account.status }}</p>
               <p v-if="account.is_default" class="mt-1 text-xs font-medium text-[#075E54]">Default number</p>
             </div>
             <Button
@@ -796,7 +796,7 @@ onMounted(() => {
                 <h2 class="text-lg font-bold text-ink-gray-9">Sundarban Spices & Agri Corp</h2>
                 <Badge theme="green" variant="subtle" label="Meta Verified Business" />
               </div>
-              <p class="mt-1 text-xs text-ink-gray-5">Official WhatsApp Business Account (WABA ID: 9920148123901)</p>
+              <p class="mt-1 text-xs text-ink-gray-5">Official WhatsApp Business Account</p>
             </div>
           </div>
 

@@ -6,6 +6,7 @@ import { NumberCard } from 'frappe-ui/charts'
 import DeskCard from '@/components/desk/DeskCard.vue'
 import { userFacingError } from '@/utils/errors'
 import { formatDay, formatTime, whatsappScreen } from '@/utils/format'
+import { displayTitle } from '@/utils/titles'
 import { isManager, useDesk } from '@/stores/desk'
 import { router } from '@/router'
 import type { LogRow } from '@/types'
@@ -155,6 +156,11 @@ function showToast(message: string, isError = false) {
   } else {
     toast.success(message)
   }
+}
+
+function referenceLabel(row: LogRow) {
+  const title = displayTitle(row.reference_docname)
+  return title && row.reference_doctype ? `${row.reference_doctype}: ${title}` : row.reference_doctype || title
 }
 
 function displayMessage(row: LogRow) {
@@ -418,7 +424,7 @@ watch(
           <TextInput
             v-model="searchQuery"
             type="text"
-            placeholder="Search message, docname, event..."
+            placeholder="Search message or event..."
             class="w-full text-xs lg:w-80"
           >
             <template #prefix>
@@ -479,7 +485,7 @@ watch(
                   variant="subtle"
                   size="sm"
                   class="font-mono text-[11px]"
-                  :label="`${row.reference_doctype}: ${row.reference_docname}`"
+                  :label="referenceLabel(row)"
                   @click="openReference(row.reference_doctype, row.reference_docname)"
                 />
                 <Badge
@@ -487,7 +493,7 @@ watch(
                   theme="gray"
                   variant="outline"
                   size="sm"
-                  :label="`${row.reference_doctype}: ${row.reference_docname}`"
+                  :label="referenceLabel(row)"
                 />
               </div>
 
@@ -523,7 +529,6 @@ watch(
                 />
               </div>
 
-              <span class="font-mono text-[10px] text-ink-gray-4">{{ row.name }}</span>
             </div>
 
             <!-- Inline Expandable Payload Preview -->
@@ -605,9 +610,6 @@ watch(
 
       <template #actions>
         <div class="flex items-center justify-between w-full">
-          <span v-if="inspectingPayloadLog" class="text-xs text-ink-gray-5 font-mono">
-            ID: {{ inspectingPayloadLog.name }}
-          </span>
           <Button
             variant="solid"
             class="bg-[#075E54] text-white hover:bg-[#128C7E]"

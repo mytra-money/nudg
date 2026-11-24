@@ -429,13 +429,17 @@ def delete_utm_campaign(name: str) -> dict:
 
 @frappe.whitelist()
 def create_whatsapp_schedule(
-	campaign: str,
+	campaign: str | None = None,
 	recipient_type: str | None = None,
 	recipient: str | None = None,
 	start_date: str | None = None,
 	trigger_time: str | None = None,
+	stop_on_reply: int | str | bool | None = 0,
+	schedule_for: str | None = None,
+	whatsapp_template: str | None = None,
+	whatsapp_account: str | None = None,
 ) -> dict:
-	"""Schedule an existing campaign for one audience."""
+	"""Schedule a campaign or one WhatsApp template for one audience."""
 	_require_manager()
 	from nudg.services.campaign_schedules import schedule_whatsapp_campaign
 
@@ -445,6 +449,10 @@ def create_whatsapp_schedule(
 		recipient=recipient,
 		start_date=start_date,
 		trigger_time=trigger_time,
+		stop_on_reply=stop_on_reply,
+		schedule_for=schedule_for,
+		whatsapp_template=whatsapp_template,
+		whatsapp_account=whatsapp_account,
 	)
 
 
@@ -456,6 +464,10 @@ def update_whatsapp_schedule(
 	recipient: str | None = None,
 	start_date: str | None = None,
 	trigger_time: str | None = None,
+	stop_on_reply: int | str | bool | None = None,
+	schedule_for: str | None = None,
+	whatsapp_template: str | None = None,
+	whatsapp_account: str | None = None,
 ) -> dict:
 	_require_manager()
 	from nudg.services.campaign_schedules import update_whatsapp_schedule as _update
@@ -467,6 +479,10 @@ def update_whatsapp_schedule(
 		recipient=recipient,
 		start_date=start_date,
 		trigger_time=trigger_time,
+		stop_on_reply=stop_on_reply,
+		schedule_for=schedule_for,
+		whatsapp_template=whatsapp_template,
+		whatsapp_account=whatsapp_account,
 	)
 
 
@@ -524,6 +540,7 @@ def create_campaign(
 	recipient: str | None = None,
 	start_date: str | None = None,
 	trigger_time: str | None = None,
+	stop_on_reply: int | str | bool | None = 0,
 	schedules: str | list | None = None,
 ) -> dict:
 	"""Create a WhatsApp Campaign. It sends the bulk message, not the campaign."""
@@ -538,6 +555,7 @@ def create_campaign(
 		recipient=recipient,
 		start_date=start_date,
 		trigger_time=trigger_time,
+		stop_on_reply=stop_on_reply,
 		schedules=schedules,
 	)
 
@@ -552,6 +570,7 @@ def update_campaign(
 	recipient: str | None = None,
 	start_date: str | None = None,
 	trigger_time: str | None = None,
+	stop_on_reply: int | str | bool | None = None,
 	schedules: str | list | None = None,
 ) -> dict:
 	_require_manager()
@@ -566,6 +585,7 @@ def update_campaign(
 		recipient=recipient,
 		start_date=start_date,
 		trigger_time=trigger_time,
+		stop_on_reply=stop_on_reply,
 		schedules=schedules,
 	)
 
@@ -966,6 +986,7 @@ def save_whatsapp_template(
 	header_type: str | None = None,
 	header_media: str | None = None,
 	buttons: str | list | None = None,
+	template_variables: str | list | None = None,
 	name: str | None = None,
 	submit_to_meta: int | str | bool | None = 1,
 ) -> dict:
@@ -1007,6 +1028,7 @@ def save_whatsapp_template(
 	doc.header_text = (header_text or "").strip()
 	_apply_template_header_media(doc, header_media)
 	_apply_template_buttons(doc, buttons)
+	_apply_template_variables(doc, template_variables)
 	# Meta stores template_name, not the label. WA Template derives the name in
 	# validate(), but only when from_sync is unset. Draft saves set that flag
 	# before insert so Meta is skipped, which also skips the derivation and
@@ -1085,6 +1107,37 @@ def _assign_local_template_name(doc, label: str) -> None:
 	doc.template_name = derived
 
 
+def _apply_template_variables(doc, variables: str | list | None) -> None:
+	"""Store the examples Meta reviews. Omitted payloads leave the child table alone."""
+	if variables is None:
+		return
+	rows = variables
+	if isinstance(variables, str):
+		try:
+			rows = json.loads(variables) if variables.strip() else []
+		except (TypeError, ValueError):
+			frappe.throw(_("Template variables must be a list."))
+	if not isinstance(rows, list):
+		frappe.throw(_("Template variables must be a list."))
+	doc.set("template_variables", [])
+	seen: set[str] = set()
+	for row in rows:
+		if not isinstance(row, dict):
+			continue
+		name = str(row.get("variable_name") or "").strip()
+		if not name or name in seen:
+			continue
+		seen.add(name)
+		doc.append(
+			"template_variables",
+			{
+				"variable_name": name,
+				"variable_example": str(row.get("variable_example") or "").strip(),
+				"variable_field": str(row.get("variable_field") or "").strip(),
+			},
+		)
+
+
 def _apply_template_buttons(doc, buttons: str | list | None) -> None:
 	if buttons is None:
 		return
@@ -1147,6 +1200,14 @@ def get_whatsapp_template(name: str) -> dict:
 				"phone_number": row.phone_number,
 			}
 			for row in (doc.buttons or [])
+		],
+		"template_variables": [
+			{
+				"variable_name": row.variable_name,
+				"variable_example": row.variable_example,
+				"variable_field": row.variable_field,
+			}
+			for row in (doc.template_variables or [])
 		],
 	}
 
@@ -1594,3 +1655,80 @@ def cancel_chatbot_session(account: str, name: str) -> dict:
 	from nudg.services.chatbot_setup import cancel_session
 
 	return cancel_session(account, name)
+
+
+@frappe.whitelist()
+def directory_access() -> dict:
+	"""Read, write, create, and delete from Role Permission Manager."""
+	_require_login()
+	from nudg.services.directory import access
+
+	return access()
+
+
+@frappe.whitelist()
+def list_directory_profiles(account: str | None = None, query: str | None = None) -> list:
+	_require_login()
+	from nudg.services.directory import list_profiles
+
+	return list_profiles(account, query)
+
+
+@frappe.whitelist()
+def save_directory_profile(
+	phone_number: str | None = None,
+	whatsapp_account: str | None = None,
+	profile_name: str | None = None,
+	status: str | None = None,
+	name: str | None = None,
+) -> dict:
+	_require_login()
+	from nudg.services.directory import save_profile
+
+	return save_profile(name, profile_name, phone_number, whatsapp_account, status)
+
+
+@frappe.whitelist()
+def delete_directory_profile(name: str) -> dict:
+	_require_login()
+	from nudg.services.directory import delete_profile
+
+	return delete_profile(name)
+
+
+@frappe.whitelist()
+def list_directory_recipient_lists(account: str | None = None, query: str | None = None) -> list:
+	_require_login()
+	from nudg.services.directory import list_recipient_lists
+
+	return list_recipient_lists(account, query)
+
+
+@frappe.whitelist()
+def get_directory_recipient_list(name: str) -> dict:
+	_require_login()
+	from nudg.services.directory import get_recipient_list
+
+	return get_recipient_list(name)
+
+
+@frappe.whitelist()
+def save_directory_recipient_list(
+	list_name: str | None = None,
+	description: str | None = None,
+	whatsapp_account: str | None = None,
+	recipients: str | list | None = None,
+	name: str | None = None,
+) -> dict:
+	_require_login()
+	from nudg.services.directory import save_recipient_list
+
+	return save_recipient_list(name, list_name, description, whatsapp_account, recipients)
+
+
+@frappe.whitelist()
+def delete_directory_recipient_list(name: str) -> dict:
+	_require_login()
+	from nudg.services.directory import delete_recipient_list
+
+	return delete_recipient_list(name)

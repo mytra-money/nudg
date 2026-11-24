@@ -12,7 +12,7 @@ const props = withDefaults(
     sampleValues?: Record<string, string>
     editable?: boolean
     large?: boolean
-    chrome?: 'plain' | 'phone' | 'desktop'
+    chrome?: 'plain' | 'phone' | 'desktop' | 'stage'
   }>(),
   { editable: true, large: false, chrome: 'plain' },
 )
@@ -67,9 +67,39 @@ function onSample(name: string, value: string) {
 <template>
   <div
     data-template-preview
-    :class="chrome === 'plain' ? 'space-y-3' : 'flex flex-col gap-4 xl:flex-row xl:items-start'"
+    :class="
+      chrome === 'stage'
+        ? 'flex h-full min-h-0 flex-col'
+        : chrome === 'plain'
+          ? 'space-y-3'
+          : 'flex flex-col gap-4 xl:flex-row xl:items-start'
+    "
   >
-    <div v-if="chrome === 'phone'" class="iphone mx-auto w-full max-w-[340px] shrink-0" aria-label="iPhone preview">
+    <div v-if="chrome === 'stage'" class="stage-layout">
+      <section class="stage-chat" aria-label="Customer view">
+        <div
+          class="wa-wallpaper min-h-0 flex-1 overflow-y-auto px-3 py-3"
+          role="region"
+          aria-label="Template conversation preview"
+        >
+          <TemplateMessageBubble
+            :header-type="template.header_type"
+            :header-text="headerText"
+            :media-url="template.header_media"
+            :mime-type="template.mime_type"
+            :body="body"
+            :footer="template.footer"
+            :buttons="template.buttons"
+            :samples="samples"
+            :time="time"
+          />
+        </div>
+      </section>
+      <aside v-if="editable && names.length" class="stage-samples">
+        <TemplateVariableEditor compact :names="names" :values="samples" :hints="hints" @update="onSample" />
+      </aside>
+    </div>
+    <div v-else-if="chrome === 'phone'" class="iphone mx-auto w-full max-w-[340px] shrink-0" aria-label="iPhone preview">
       <div class="rounded-[2.7rem] bg-[#1c1c1e] p-[11px] shadow-xl ring-1 ring-black/30">
         <div class="relative overflow-hidden rounded-[2.15rem] bg-white">
           <div class="relative bg-[#1e3a32] text-white">
@@ -209,7 +239,7 @@ function onSample(name: string, value: string) {
       </div>
     </div>
     <TemplateVariableEditor
-      v-if="editable"
+      v-if="editable && chrome !== 'stage'"
       class="w-full xl:max-w-xs xl:shrink-0"
       :names="names"
       :values="samples"
@@ -227,6 +257,29 @@ function onSample(name: string, value: string) {
   background-color: #efe7dc;
   background-image: radial-gradient(rgba(84, 66, 46, 0.09) 0.7px, transparent 0.7px);
   background-size: 14px 14px;
+}
+.stage-layout {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+}
+.stage-chat {
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+}
+.stage-samples {
+  flex: 0 0 auto;
+  max-height: 5.25rem;
+  overflow: auto;
+  border-top: 1px solid var(--outline-gray-2, #e5e7eb);
+  background: #f7f8f8;
+  padding: 0.45rem 0.75rem;
 }
 .desktop-grid {
   display: grid;

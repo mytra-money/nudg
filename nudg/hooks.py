@@ -165,7 +165,4 @@ scheduler_events = {
 	"hourly": [
 		"nudg.chatbot.session_manager.cleanup_expired_sessions",
 	],
-	"daily": [
-		"nudg.services.campaign_schedules.send_due_campaign_schedules",
-	],
 }

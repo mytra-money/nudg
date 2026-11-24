@@ -215,6 +215,12 @@ describe('template preview rendering', () => {
     expect(image.text()).toContain('Image header')
   })
 
+  it('keeps the placeholder when the template has no example', () => {
+    const wrapper = mountPreview(template({ name: 'hi', message: 'Hi {{1}}' }), { editable: false })
+    expect(wrapper.text()).toContain('Hi {{1}}')
+    expect(wrapper.text()).not.toContain('Nag')
+  })
+
   it('hides the sample editor when editing is off', () => {
     const wrapper = mountPreview(
       template({

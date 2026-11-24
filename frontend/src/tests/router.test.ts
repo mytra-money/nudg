@@ -6,6 +6,7 @@ describe('desk routes', () => {
     expect(shellNav.map((item) => item.label)).toEqual([
       'Overview',
       'Conversations',
+      'Contacts',
       'Marketing',
       'Catalogs',
       'Template Studio',
@@ -17,6 +18,7 @@ describe('desk routes', () => {
     expect(shellNav.map((item) => item.to)).toEqual([
       '/',
       '/conversations',
+      '/contacts',
       '/marketing',
       '/catalogs',
       '/template-studio',

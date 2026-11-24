@@ -17,11 +17,24 @@ class WACampaign(Document):
 		self._set_status()
 
 	def _set_account(self):
+		source = (self.schedule_source or "Campaign").strip() or "Campaign"
+		self.schedule_source = "Template" if source == "Template" else "Campaign"
+		if self.schedule_source == "Template":
+			if not self.whatsapp_template or not frappe.db.exists("WA Template", self.whatsapp_template):
+				frappe.throw(_("Select a WhatsApp template."))
+			template_account = frappe.db.get_value("WA Template", self.whatsapp_template, "whatsapp_account")
+			if template_account:
+				self.whatsapp_account = template_account
+			if not self.whatsapp_account:
+				frappe.throw(_("Select a WhatsApp account."))
+			self.campaign = None
+			return
 		if not self.campaign:
 			frappe.throw(_("Select a campaign."))
 		if not frappe.db.exists("UTM Campaign", self.campaign):
 			frappe.throw(_("Campaign {0} was not found.").format(self.campaign))
 		self.whatsapp_account = frappe.db.get_value("UTM Campaign", self.campaign, "whatsapp_account")
+		self.whatsapp_template = None
 
 	def _set_dates(self):
 		"""End date is calculated the same way as an Email Campaign."""
@@ -35,10 +48,14 @@ class WACampaign(Document):
 			frappe.throw(_("Start Date cannot be before the current date."))
 		end = end_date_for(self.start_date, self._schedule_days())
 		if not end:
+			if self.schedule_source == "Template":
+				frappe.throw(_("Select a WhatsApp template."))
 			frappe.throw(_("Please set up the Campaign Schedule in the Campaign {0}").format(self.campaign))
 		self.end_date = end
 
 	def _schedule_days(self) -> list[int]:
+		if (self.schedule_source or "Campaign") == "Template":
+			return [0]
 		if not self.campaign or not frappe.db.exists("DocType", "WA Campaign Schedule"):
 			return []
 		rows = frappe.get_all(
@@ -52,16 +69,19 @@ class WACampaign(Document):
 		return [int(row.get("send_after_days") or 0) for row in rows]
 
 	def _load_recipients(self):
-		from nudg.services.campaign_replies import phone_digits, remembered_unsubscribed
+		from nudg.services.campaign_replies import apply_unsubscribe, remembered_unsubscribed, set_audience_unsubscribed
 
-		kept = remembered_unsubscribed(self.name)
+		submitted = list(self.recipients or [])
+		previous = self.get_doc_before_save()
+		previous_rows = list(getattr(previous, "recipients", None) or []) if previous else None
 		rows = recipient_rows(self.recipient_type, self.recipient)
 		if not rows:
 			frappe.throw(_("This profile or recipient list has no phone numbers."))
+		merged, edits = apply_unsubscribe(rows, submitted, remembered_unsubscribed(self.name), previous_rows)
+		for phone, flag in edits:
+			set_audience_unsubscribed(phone, flag)
 		self.set("recipients", [])
-		for row in rows:
-			if kept.get(phone_digits(row.get("mobile_number"))):
-				row["unsubscribed"] = 1
+		for row in merged:
 			self.append("recipients", row)
 
 	def _set_status(self):

@@ -24,34 +24,35 @@ const bodyLines = computed(() => (props.body || '').split('\n').map((line) => fo
 </script>
 
 <template>
-  <div class="ml-auto flex w-[88%] max-w-full flex-col items-end">
-    <div class="w-full rounded-lg rounded-tr-sm bg-[#e7f6df] px-2.5 py-2 text-[13px] leading-snug text-[#1c1917]">
-      <TemplateHeaderPreview
-        :header-type="headerType"
-        :header-text="headerText"
-        :media-url="mediaUrl"
-        :mime-type="mimeType"
-      />
-      <div v-if="body" class="wa-body break-words">
-        <template v-for="(line, index) in bodyLines" :key="index">
-          <br v-if="index" />
-          <span v-if="line" v-html="line" />
-        </template>
-      </div>
-      <p v-else-if="!headerText && headerType !== 'Image' && headerType !== 'Video' && headerType !== 'Document' && headerType !== 'GIF'" class="text-[#66756b]">
-        This template has no message text.
-      </p>
-      <p v-if="footer" class="mt-1.5 text-[11px] leading-snug text-[#66756b]">{{ footer }}</p>
-    </div>
-    <TemplateButtonsPreview class="w-full" :buttons="buttons" :samples="samples" />
-    <p class="mt-1 flex items-center gap-1 text-[11px] text-[#66756b]">
-      <span>{{ time }}</span>
-      <svg viewBox="0 0 24 14" class="h-3 w-4" aria-hidden="true">
-        <path d="M1.5 7.2 5.2 11 12 3.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-        <path d="M7.5 7.2 11.2 11 18 3.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-      </svg>
-      <span class="sr-only">Preview only. This message was not sent.</span>
+  <div class="flex w-full max-w-full flex-col items-start">
+    <p class="mb-2 self-center rounded-full bg-white/90 px-2 py-0.5 text-center text-[10px] font-medium text-[#54656f] shadow-sm">
+      Preview only. This message was not sent.
     </p>
+    <div class="w-[min(100%,19.5rem)] overflow-hidden rounded-lg rounded-tl-sm bg-white text-[13.5px] leading-snug text-[#111b21] shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]">
+      <div class="px-2.5 py-2">
+        <TemplateHeaderPreview
+          :header-type="headerType"
+          :header-text="headerText"
+          :media-url="mediaUrl"
+          :mime-type="mimeType"
+        />
+        <div v-if="body" class="wa-body break-words">
+          <template v-for="(line, index) in bodyLines" :key="index">
+            <br v-if="index" />
+            <span v-if="line" v-html="line" />
+          </template>
+        </div>
+        <p v-else-if="!headerText && headerType !== 'Image' && headerType !== 'Video' && headerType !== 'Document' && headerType !== 'GIF'" class="text-[#667781]">
+          This template has no message text.
+        </p>
+        <div class="mt-1 flex items-end justify-between gap-3">
+          <p v-if="footer" class="min-w-0 text-[11px] leading-snug text-[#667781]">{{ footer }}</p>
+          <span v-else />
+          <span class="shrink-0 text-[11px] leading-none text-[#667781]">{{ time }}</span>
+        </div>
+      </div>
+    </div>
+    <TemplateButtonsPreview class="w-[min(100%,19.5rem)]" :buttons="buttons" :samples="samples" />
   </div>
 </template>
 

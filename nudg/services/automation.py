@@ -67,6 +67,14 @@ def on_wa_message(doc, method=None):
 			except Exception:
 				pass
 
+			try:
+				from nudg.chatbot.processor import customer_phone
+				from nudg.services.campaign_replies import stop_drip_on_reply
+
+				stop_drip_on_reply(customer_phone(doc))
+			except Exception:
+				pass
+
 	elif method == "on_update":
 		# Status update broadcast
 		try:

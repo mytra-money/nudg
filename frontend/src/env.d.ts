@@ -13,6 +13,10 @@ interface Window {
   is_manager?: boolean
   is_system_manager?: boolean
   roles?: string[]
+  directory?: {
+    profile?: { read?: boolean; write?: boolean; create?: boolean; delete?: boolean }
+    recipient_list?: { read?: boolean; write?: boolean; create?: boolean; delete?: boolean }
+  }
   frappe?: {
     session?: { user?: string }
     boot?: {

@@ -1,9 +1,11 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { isManager } from '@/stores/desk'
+import { canOpenContacts } from '@/utils/directoryAccess'
 import AnalyticsView from '@/pages/Analytics.vue'
 import AutomationView from '@/pages/Automation.vue'
 import CatalogsView from '@/pages/Catalogs.vue'
 import ErpnextView from '@/pages/Erpnext.vue'
+import ContactsView from '@/pages/Contacts.vue'
 import InboxView from '@/pages/Inbox.vue'
 import IntegrationsView from '@/pages/Integrations.vue'
 import LogsView from '@/pages/Logs.vue'
@@ -17,11 +19,14 @@ export interface NavItem {
   label: string
   icon: string
   managerOnly?: boolean
+  /** Hidden unless Role Permission Manager grants read on contacts or recipient lists. */
+  requiresDirectory?: boolean
 }
 
 export const shellNav: NavItem[] = [
   { to: '/', label: 'Overview', icon: 'lucide-layout-dashboard' },
   { to: '/conversations', label: 'Conversations', icon: 'lucide-inbox' },
+  { to: '/contacts', label: 'Contacts', icon: 'lucide-users', requiresDirectory: true },
   { to: '/marketing', label: 'Marketing', icon: 'lucide-megaphone', managerOnly: true },
   { to: '/catalogs', label: 'Catalogs', icon: 'lucide-shopping-bag', managerOnly: true },
   { to: '/template-studio', label: 'Template Studio', icon: 'lucide-layout-template' },
@@ -45,6 +50,7 @@ export const router = createRouter({
   routes: [
     { path: '/', component: OverviewView, meta: { title: 'Overview' } },
     { path: '/conversations', component: InboxView, meta: { title: 'Conversations', desk: true } },
+    { path: '/contacts', component: ContactsView, meta: { title: 'Contacts', desk: true } },
     { path: '/marketing', component: MarketingView, meta: { title: 'Marketing', desk: true, manager: true } },
     { path: '/catalogs', component: CatalogsView, meta: { title: 'Catalogs', desk: true, manager: true } },
     { path: '/template-studio', component: TemplatesView, meta: { title: 'Template Studio', desk: true } },
@@ -80,6 +86,7 @@ export const router = createRouter({
 })
 
 router.beforeEach((to) => {
+  if (to.path === '/contacts' && !canOpenContacts()) return { path: '/conversations' }
   if (!to.matched.some((record) => record.meta.manager)) return true
   if (isManager.value) return true
   return { path: '/conversations' }

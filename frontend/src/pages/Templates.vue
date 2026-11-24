@@ -2,14 +2,14 @@
 import { computed, onMounted, ref } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
 import { Badge, Button, Dialog, FileUploader, FormControl, Select, TextInput, toast } from 'frappe-ui'
-import { NumberCard } from 'frappe-ui/charts'
 import DeskTemplatePreview from '@/components/DeskTemplatePreview.vue'
 import DeskEmpty from '@/components/desk/DeskEmpty.vue'
 import DeskPage from '@/components/desk/DeskPage.vue'
 import DeskSplit from '@/components/desk/DeskSplit.vue'
 import TemplateButtonFields from '@/components/templates/TemplateButtonFields.vue'
 import { errorText, initials } from '@/utils/format'
-import { mediaFileName } from '@/utils/templatePreview'
+import { displayTitle } from '@/utils/titles'
+import { fillVariables, mediaFileName, resolveSampleValues, variableNames } from '@/utils/templatePreview'
 import {
   deleteWhatsappTemplate,
   getWhatsappTemplate,
@@ -100,12 +100,10 @@ onMounted(() => {
 
 function applyKpiFilter(kind: 'Approved' | 'Pending' | 'Utility' | 'Marketing' | 'Authentication') {
   if (kind === 'Approved' || kind === 'Pending') {
-    selectedStatus.value = kind
-    selectedCategory.value = 'all'
+    selectedStatus.value = selectedStatus.value === kind ? 'All' : kind
     return
   }
-  selectedCategory.value = kind
-  selectedStatus.value = 'All'
+  selectedCategory.value = selectedCategory.value === kind ? 'all' : kind
 }
 
 const categoryOptions = computed(() => [
@@ -212,6 +210,8 @@ const templateForm = ref({
   whatsapp_template_id: '',
   buttons: [] as Array<{ button_type: string; button_text: string; url: string; phone_number: string }>,
 })
+const variableExamples = ref<Record<string, string>>({})
+const variableFields = ref<Record<string, string>>({})
 const syncingTemplates = ref(false)
 const buttonsReady = ref(true)
 
@@ -223,6 +223,21 @@ const languageOptions = computed(() => {
   }
   return rows
 })
+
+const detectedVariableNames = computed(() =>
+  variableNames(
+    templateForm.value.header_type === 'Text' ? templateForm.value.header_text : '',
+    templateForm.value.message,
+  ),
+)
+
+const editorVariableRows = computed(() =>
+  detectedVariableNames.value.map((name) => ({
+    variable_name: name,
+    variable_example: variableExamples.value[name] || '',
+    variable_field: variableFields.value[name] || '',
+  })),
+)
 
 const editorPreview = computed<Template>(() => ({
   name: templateForm.value.name || 'draft',
@@ -237,6 +252,7 @@ const editorPreview = computed<Template>(() => ({
   footer: templateForm.value.footer,
   whatsapp_account: templateForm.value.whatsapp_account,
   buttons: templateForm.value.buttons.filter((row) => row.button_text.trim()),
+  template_variables: editorVariableRows.value,
 }))
 
 const editorOnMeta = computed(() => Boolean(templateForm.value.whatsapp_template_id))
@@ -245,6 +261,29 @@ const editorLocked = computed(() => editorPendingReview.value)
 
 function blankButton() {
   return { button_type: 'Quick Reply', button_text: '', url: '', phone_number: '' }
+}
+
+function resetVariableExamples(
+  rows?: Array<{ variable_name?: string; variable_example?: string; variable_field?: string }>,
+) {
+  const examples: Record<string, string> = {}
+  const fields: Record<string, string> = {}
+  for (const row of rows || []) {
+    const name = (row.variable_name || '').trim()
+    if (!name) continue
+    examples[name] = row.variable_example || ''
+    if (row.variable_field) fields[name] = row.variable_field
+  }
+  variableExamples.value = examples
+  variableFields.value = fields
+}
+
+function setVariableExample(name: string, value: unknown) {
+  variableExamples.value = { ...variableExamples.value, [name]: String(value ?? '') }
+}
+
+function variableLabel(name: string) {
+  return `{{${name}}}`
 }
 
 const headerFileTypes = computed(() => {
@@ -286,6 +325,11 @@ function validateTemplateForm(forMeta: boolean): string | null {
   if (forMeta && templateForm.value.header_type !== 'Text' && !templateForm.value.header_media) {
     return `Upload a sample ${templateForm.value.header_type.toLowerCase()} before submitting to Meta.`
   }
+  for (const name of detectedVariableNames.value) {
+    if (!(variableExamples.value[name] || '').trim()) {
+      return `Add an example for {{${name}}}. Meta needs it to review the template.`
+    }
+  }
   if (!forMeta) return null
   for (const button of buttons) {
     if (button.button_type === 'URL' && !button.url.trim()) {
@@ -320,6 +364,7 @@ async function openTemplateEditor(template?: Template) {
       phone_number: row.phone_number || '',
     })),
   }
+  resetVariableExamples(template?.template_variables)
   buttonsReady.value = !live || !templateForm.value.name
   templateEditorOpen.value = true
   if (!live || !templateForm.value.name) return
@@ -341,6 +386,7 @@ async function openTemplateEditor(template?: Template) {
       url: row.url || '',
       phone_number: row.phone_number || '',
     }))
+    if (Array.isArray(full.template_variables)) resetVariableExamples(full.template_variables)
     buttonsReady.value = true
   } catch {
     buttonsReady.value = false
@@ -376,6 +422,11 @@ async function persistTemplate(submitToMeta: boolean) {
       header_type: templateForm.value.header_type,
       header_media: templateForm.value.header_type === 'Text' ? undefined : templateForm.value.header_media || undefined,
       buttons: buttonsReady.value ? templateForm.value.buttons.filter((row) => row.button_text.trim()) : undefined,
+      template_variables: editorVariableRows.value.map((row) => ({
+        variable_name: row.variable_name,
+        variable_example: row.variable_example.trim(),
+        variable_field: row.variable_field,
+      })),
       submit_to_meta: submitToMeta,
     })
     templateEditorOpen.value = false
@@ -436,98 +487,128 @@ function clearFilters() {
   selectedCategory.value = 'all'
   selectedStatus.value = 'All'
 }
+
+const filtersActive = computed(
+  () => Boolean(query.value.trim()) || selectedCategory.value !== 'all' || selectedStatus.value !== 'All',
+)
+
+function listLine(template: Template) {
+  const filled = fillVariables(template.message, resolveSampleValues(template)).replace(/\s+/g, ' ').trim()
+  return filled || 'No message text'
+}
+
+function languageLabel(code?: string) {
+  if (!code) return ''
+  try {
+    const display = new Intl.DisplayNames(['en'], { type: 'language' }).of(code.replaceAll('_', '-'))
+    if (display && display.toLowerCase() !== code.toLowerCase()) return display
+  } catch {
+    /* use the stored language name */
+  }
+  const known = languageRows.value.find((row) => row.value === code)
+  return known?.label && known.label !== code ? known.label : code
+}
 </script>
 
 <template>
   <DeskPage variant="studio">
-    <template v-if="isManager" #actions>
-      <Button
-        variant="subtle"
-        size="sm"
-        label="Sync from Meta"
-        :loading="syncingTemplates"
-        @click="syncTemplates"
-      />
-      <Button
-        variant="solid"
-        size="sm"
-        class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-        icon-left="lucide-plus"
-        label="New Template"
-        @click="openTemplateEditor()"
-      />
-    </template>
-
-    <template #kpi>
-      <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <button type="button" class="w-full text-left" @click="applyKpiFilter('Approved')">
-          <NumberCard
-            title="Approved templates"
-            :value="countApproved"
-            :target="countTotal"
-            color="#047857"
-            delta-caption="Click to filter"
-          />
-        </button>
-        <button type="button" class="w-full text-left" @click="applyKpiFilter('Pending')">
-          <NumberCard
-            title="Pending review"
-            :value="countPending"
-            color="#B45309"
-            delta-caption="with Meta"
-          />
-        </button>
-        <button type="button" class="w-full text-left" @click="applyKpiFilter('Utility')">
-          <NumberCard
-            title="Utility alerts"
-            :value="countUtility"
-            color="#075E54"
-            delta-caption="operational"
-          />
-        </button>
-        <button type="button" class="w-full text-left" @click="applyKpiFilter('Marketing')">
-          <NumberCard
-            title="Marketing broadcasts"
-            :value="countMarketing"
-            color="#7E22CE"
-            delta-caption="promotional"
-          />
-        </button>
-      </div>
-    </template>
-
     <template #toolbar>
-      <div class="flex flex-wrap items-center gap-2.5">
-        <!-- Search Input -->
+      <div class="flex items-center gap-2 overflow-x-auto">
         <div class="template-search relative">
           <TextInput
             v-model="query"
-            placeholder="Search templates by label, body, or doctype…"
+            placeholder="Search templates…"
             class="w-full text-xs"
           />
           <button
             v-if="query"
             type="button"
             class="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-gray-4 hover:text-ink-gray-7"
+            aria-label="Clear search"
             @click="query = ''"
           >
             <span class="lucide-x size-3" />
           </button>
         </div>
+        <div class="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            class="studio-stat"
+            :class="selectedStatus === 'Approved' ? 'is-on' : ''"
+            :aria-pressed="selectedStatus === 'Approved'"
+            @click="applyKpiFilter('Approved')"
+          >
+            <span class="studio-stat-value">{{ countApproved }}</span>
+            <span>Approved</span>
+          </button>
+          <button
+            type="button"
+            class="studio-stat"
+            :class="selectedStatus === 'Pending' ? 'is-on' : ''"
+            :aria-pressed="selectedStatus === 'Pending'"
+            @click="applyKpiFilter('Pending')"
+          >
+            <span class="studio-stat-value">{{ countPending }}</span>
+            <span>Pending</span>
+          </button>
+          <button
+            type="button"
+            class="studio-stat"
+            :class="selectedCategory === 'Utility' ? 'is-on' : ''"
+            :aria-pressed="selectedCategory === 'Utility'"
+            @click="applyKpiFilter('Utility')"
+          >
+            <span class="studio-stat-value">{{ countUtility }}</span>
+            <span>Utility</span>
+          </button>
+          <button
+            type="button"
+            class="studio-stat"
+            :class="selectedCategory === 'Marketing' ? 'is-on' : ''"
+            :aria-pressed="selectedCategory === 'Marketing'"
+            @click="applyKpiFilter('Marketing')"
+          >
+            <span class="studio-stat-value">{{ countMarketing }}</span>
+            <span>Marketing</span>
+          </button>
+          <button
+            v-if="filtersActive"
+            type="button"
+            class="shrink-0 text-[11px] font-semibold text-[#075E54] hover:underline"
+            @click="clearFilters"
+          >
+            Clear
+          </button>
+        </div>
 
-        <div class="flex flex-wrap items-center gap-2">
-          <Select
-            class="w-40 text-xs"
-            :model-value="selectedCategory"
-            :options="categoryOptions"
-            @update:model-value="(val) => (selectedCategory = (String(val || 'all') as typeof selectedCategory))"
+        <Select
+          class="w-36 shrink-0 text-xs"
+          :model-value="selectedCategory"
+          :options="categoryOptions"
+          @update:model-value="(val) => (selectedCategory = (String(val || 'all') as typeof selectedCategory))"
+        />
+        <Select
+          class="w-28 shrink-0 text-xs"
+          :model-value="selectedStatus"
+          :options="statuses"
+          @update:model-value="(val) => (selectedStatus = String(val || 'All'))"
+        />
+
+        <div v-if="isManager" class="ml-auto flex shrink-0 items-center gap-2">
+          <Button
+            variant="subtle"
+            size="sm"
+            label="Sync from Meta"
+            :loading="syncingTemplates"
+            @click="syncTemplates"
           />
-
-          <Select
-            class="w-32 text-xs"
-            :model-value="selectedStatus"
-            :options="statuses"
-            @update:model-value="(val) => (selectedStatus = String(val || 'All'))"
+          <Button
+            variant="solid"
+            size="sm"
+            class="bg-[#075E54] text-white hover:bg-[#128C7E]"
+            icon-left="lucide-plus"
+            label="New Template"
+            @click="openTemplateEditor()"
           />
         </div>
       </div>
@@ -567,7 +648,7 @@ function clearFilters() {
           v-for="template in visible"
           :key="template.name"
           type="button"
-          class="flex w-full flex-col gap-2 p-4 text-left transition-all hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#128C7E]"
+          class="flex w-full flex-col gap-1 px-3 py-2.5 text-left transition-all hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#128C7E]"
           :class="
             current?.name === template.name
               ? 'border-l-4 border-l-[#075E54] bg-teal-50/70 shadow-2xs'
@@ -577,7 +658,7 @@ function clearFilters() {
         >
           <div class="flex items-start justify-between gap-2">
             <span class="font-bold text-sm text-ink-gray-9 leading-tight">
-              {{ template.template_label || template.name }}
+              {{ displayTitle(template.template_label, template.template_name) || 'Untitled template' }}
             </span>
             <Badge
               :label="template.status"
@@ -586,73 +667,95 @@ function clearFilters() {
             />
           </div>
 
-          <!-- Body preview with styled variable chips -->
-          <p class="line-clamp-2 text-xs text-ink-gray-7 leading-relaxed">
-            {{ template.message }}
+          <p class="line-clamp-1 text-xs leading-relaxed text-ink-gray-6">
+            {{ listLine(template) }}
           </p>
-
-          <div class="flex flex-wrap items-center gap-1.5 text-[11px] pt-1">
-            <span
-              class="rounded px-1.5 py-0.2 font-medium"
-              :class="template.template_type === 'Utility' ? 'bg-teal-50 text-[#075E54]' : 'bg-purple-50 text-purple-700'"
-            >
-              {{ template.template_type }}
-            </span>
-            <span class="rounded bg-surface-gray-2 px-1.5 py-0.2 font-mono text-ink-gray-6">
-              {{ template.language }}
-            </span>
-            <span v-if="template.header_type" class="rounded bg-surface-gray-2 px-1.5 py-0.2 text-ink-gray-6">
-              Header: {{ template.header_type }}
-            </span>
-            <span v-if="template.buttons?.length" class="rounded bg-blue-50 text-blue-700 px-1.5 py-0.2 font-medium">
-              {{ template.buttons.length }} CTA buttons
-            </span>
-            <span v-if="template.reference_doctype" class="text-ink-gray-4 text-[10px] ml-auto">
-              DocType: {{ template.reference_doctype }}
-            </span>
-          </div>
         </button>
       </div>
       </template>
 
       <!-- Right Column: Interactive Studio Inspector Canvas -->
       <template #detail>
-      <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
-        <button
-          v-if="narrow"
-          type="button"
-          class="inline-flex items-center gap-1 text-sm font-medium text-[#075E54]"
-          @click="showDetail = false"
-        >
-          <span class="lucide-arrow-left size-4" aria-hidden="true" />
-          All templates
-        </button>
-        <div v-if="current" class="flex flex-col gap-3">
-          <div class="flex flex-wrap items-center gap-2">
-            <Button
-              v-if="isManager"
-              variant="subtle"
-              size="sm"
-              label="Edit"
-              icon-left="lucide-pencil"
-              @click="openTemplateEditor(current)"
-            />
-            <Button
-              variant="solid"
-              size="sm"
-              class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-              label="Send to Customer"
-              icon-left="lucide-send"
-              :disabled="current.status !== 'Approved'"
-              @click="startSending(current)"
-            />
-          </div>
-
-          <DeskTemplatePreview :template="current" mode="preview" :editable="true" chrome="phone" />
+      <div class="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
+        <div v-if="current" class="flex min-h-0 flex-1 flex-col">
+          <header class="shrink-0 border-b border-outline-gray-2 bg-white px-3 py-2">
+            <button
+              v-if="narrow"
+              type="button"
+              class="mb-2 inline-flex items-center gap-1 text-sm font-medium text-[#075E54]"
+              @click="showDetail = false"
+            >
+              <span class="lucide-arrow-left size-4" aria-hidden="true" />
+              All templates
+            </button>
+            <div class="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <h2 class="min-w-0 truncate text-base font-semibold leading-tight text-ink-gray-9">
+                    {{ displayTitle(current.template_label, current.template_name) || 'Untitled template' }}
+                  </h2>
+                  <Badge
+                    :label="current.status"
+                    :theme="theme[current.status] || 'gray'"
+                    size="sm"
+                  />
+                </div>
+                <p class="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-ink-gray-6">
+                  <span>{{ current.template_type }}</span>
+                  <span class="text-ink-gray-4" aria-hidden="true">·</span>
+                  <span>{{ languageLabel(current.language) }}</span>
+                  <template v-if="current.header_type">
+                    <span class="text-ink-gray-4" aria-hidden="true">·</span>
+                    <span>{{ current.header_type }} header</span>
+                  </template>
+                  <template v-if="current.buttons?.length">
+                    <span class="text-ink-gray-4" aria-hidden="true">·</span>
+                    <span>{{ current.buttons.length }} {{ current.buttons.length === 1 ? 'button' : 'buttons' }}</span>
+                  </template>
+                </p>
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <span v-if="current.status !== 'Approved'" class="text-[11px] font-medium text-amber-800">Waiting on Meta.</span>
+                <Button
+                  v-if="isManager"
+                  variant="subtle"
+                  size="sm"
+                  label="Edit"
+                  icon-left="lucide-pencil"
+                  @click="openTemplateEditor(current)"
+                />
+                <Button
+                  variant="solid"
+                  size="sm"
+                  class="bg-[#075E54] text-white hover:bg-[#128C7E]"
+                  label="Send to Customer"
+                  icon-left="lucide-send"
+                  :disabled="current.status !== 'Approved'"
+                  :title="current.status === 'Approved' ? 'Send this template' : 'Available after Meta approves this template'"
+                  @click="startSending(current)"
+                />
+              </div>
+            </div>
+          </header>
+          <DeskTemplatePreview
+            class="min-h-0 flex-1"
+            :template="current"
+            mode="preview"
+            :editable="true"
+            chrome="stage"
+          />
         </div>
 
-        <div v-else class="grid flex-1 place-items-center p-8 text-center text-xs text-ink-gray-5">
-          Select a template from the library on the left.
+        <div v-else class="grid flex-1 place-items-center px-6 text-center">
+          <div class="max-w-xs">
+            <div class="mx-auto grid size-11 place-items-center rounded-full bg-[#e7f6ef] text-[#075E54]">
+              <span class="lucide-layout-template size-5" aria-hidden="true" />
+            </div>
+            <p class="mt-3 text-sm font-semibold text-ink-gray-8">Choose a template</p>
+            <p class="mt-1 text-xs leading-relaxed text-ink-gray-5">
+              The customer view, sample values, and send action open here.
+            </p>
+          </div>
         </div>
       </div>
       </template>
@@ -671,7 +774,7 @@ function clearFilters() {
             <span class="lucide-send size-4" /> Initiating Template Message
           </p>
           <p class="mt-1 text-ink-gray-7">
-            Sending template <strong>{{ sending.template_label || sending.name }}</strong> ({{ sending.template_type }}). Templates can be delivered even when the customer's 24-hour service window is closed.
+            Sending template <strong>{{ displayTitle(sending.template_label, sending.template_name) || 'Untitled template' }}</strong> ({{ sending.template_type }}). Templates can be delivered even when the customer's 24-hour service window is closed.
           </p>
         </div>
 
@@ -750,8 +853,7 @@ function clearFilters() {
             v-else-if="editorOnMeta"
             class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-900"
           >
-            Linked to Meta template ID <span class="font-mono">{{ templateForm.whatsapp_template_id }}</span>.
-            Save draft keeps Nudg only; Submit updates Meta.
+            This template is already on Meta. Save draft keeps Nudg only; Submit updates Meta.
           </div>
           <p v-else class="text-ink-gray-6">
             Save a local draft first, then submit to Meta when the content is ready for review.
@@ -831,6 +933,28 @@ function clearFilters() {
             :rows="4"
             :disabled="editorLocked"
           />
+          <div
+            v-if="detectedVariableNames.length"
+            class="space-y-2 rounded-lg border border-outline-gray-2 bg-surface-gray-1 px-3 py-2"
+          >
+            <div>
+              <p class="font-medium text-ink-gray-7">Variable examples</p>
+              <p class="mt-0.5 text-ink-gray-5">
+                Meta reviews the template with these values. The preview shows the same examples.
+              </p>
+            </div>
+            <FormControl
+              v-for="name in detectedVariableNames"
+              :key="name"
+              :model-value="variableExamples[name] || ''"
+              type="text"
+              :label="variableLabel(name)"
+              placeholder="Example value"
+              required
+              :disabled="editorLocked"
+              @update:model-value="setVariableExample(name, $event)"
+            />
+          </div>
           <FormControl
             v-model="templateForm.footer"
             type="text"
@@ -902,7 +1026,7 @@ function clearFilters() {
     <Dialog v-model="templateDeleteOpen" title="Delete template">
       <p class="text-sm text-ink-gray-7">
         Remove
-        <strong>{{ templateForm.template_label || templateForm.name }}</strong>
+        <strong>{{ displayTitle(templateForm.template_label) || 'Untitled template' }}</strong>
         from Nudg? Meta is unchanged until the next sync.
       </p>
       <template #actions>
@@ -917,7 +1041,29 @@ function clearFilters() {
 
 <style scoped>
 .template-search {
-  flex: 1 1 16rem !important;
-  min-width: 16rem !important;
+  flex: 1 1 10rem !important;
+  min-width: 8rem !important;
+}
+.studio-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  background: #f4f5f6;
+  padding: 0.25rem 0.6rem;
+  font-size: 11px;
+  font-weight: 600;
+  color: #5b6168;
+}
+.studio-stat:hover {
+  background: #e8eaec;
+}
+.studio-stat.is-on {
+  background: #e7f6ef;
+  color: #075e54;
+}
+.studio-stat-value {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
 }
 </style>

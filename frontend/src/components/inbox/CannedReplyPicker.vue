@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { TextInput } from 'frappe-ui'
 import { filterQuickReplies, type QuickReplyRow } from '@/utils/cannedReply'
+import { displayTitle } from '@/utils/titles'
 
 const props = defineProps<{
   open: boolean
@@ -107,7 +108,7 @@ defineExpose({ onKeydown, filtered })
         @mouseenter="active = index"
       >
         <span class="flex items-center gap-2 text-sm font-semibold text-[#111B21]">
-          <span class="truncate">{{ row.title || row.name }}</span>
+          <span class="truncate">{{ displayTitle(row.title) || 'Reply' }}</span>
           <span
             v-if="row.shortcut"
             class="shrink-0 rounded bg-[#F0F2F5] px-1.5 py-0.5 font-mono text-[11px] font-medium text-[#075E54]"

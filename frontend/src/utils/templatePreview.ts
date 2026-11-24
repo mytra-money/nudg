@@ -3,7 +3,9 @@
  *
  * Placeholders match the official app: `{{name}}` or `{{1}}`, with optional
  * spaces inside the braces. See `get_template_variables` in frappe/whatsapp.
- * Sample edits stay in the preview and never write the template.
+ * The bubble uses the stored variable example. A placeholder with no example
+ * stays visible; nothing is invented in code.
+ * Sample edits in the preview stay local and never write the template.
  */
 
 const VARIABLE = /\{\{\s*([^}]+?)\s*\}\}/g
@@ -89,13 +91,12 @@ export function fallbackSample(name: string): string {
   return NAMED_SAMPLES[name.toLowerCase()] || 'Sample'
 }
 
-/** Prefer a stored `variable_example`. Otherwise use a positional or named sample. */
+/** Use the stored `variable_example`. An empty example leaves the placeholder in the bubble. */
 export function resolveSampleValues(template: PreviewTemplate): Record<string, string> {
   const stored = exampleMap(template.template_variables)
   const values: Record<string, string> = {}
   for (const name of previewVariableNames(template)) {
-    const example = stored.get(name)?.trim()
-    values[name] = example ? stored.get(name)! : fallbackSample(name)
+    values[name] = stored.get(name)?.trim() || ''
   }
   return values
 }

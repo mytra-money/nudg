@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
-import { Badge, Button, Dialog, dialog, FormControl, TabButtons, TextInput, toast } from 'frappe-ui'
+import { Badge, Button, Checkbox, Dialog, dialog, FormControl, TabButtons, TextInput, toast } from 'frappe-ui'
 import { NumberCard } from 'frappe-ui/charts'
 import DeskCard from '@/components/desk/DeskCard.vue'
 import DeskEmpty from '@/components/desk/DeskEmpty.vue'
 import DeskPage from '@/components/desk/DeskPage.vue'
 import DeskSplit from '@/components/desk/DeskSplit.vue'
 import { errorText, formatDay, initials } from '@/utils/format'
+import { displayTitle } from '@/utils/titles'
 import { formatErrorMessage } from '@/utils/errors'
 import { createUtmCampaign, createWhatsappSchedule, deleteCampaign, deleteUtmCampaign, getCampaign, getUtmCampaign, listBulkResults, listCampaigns, listRecipientLists, listRecipientProfiles, listUtmCampaigns, runCampaign, updateUtmCampaign, updateWhatsappSchedule } from '@/services/catalogApi'
 import { isManager, useDesk } from '@/stores/desk'
@@ -46,6 +47,7 @@ const form = ref({
   name: '',
   description: '',
   whatsapp_account: '',
+  schedule_for: 'Campaign',
   campaign: '',
   recipient_type: 'WA Recipient List',
   recipient: '',
@@ -53,10 +55,12 @@ const form = ref({
   start_date: '',
   trigger_time: '',
   send_after_days: '0',
+  stop_on_reply: false,
 })
 const campaignForm = ref({
   name: '',
   description: '',
+  whatsapp_account: '',
   schedules: [{ whatsapp_template: '', send_after_days: '0', variable_type: 'Common', template_variables: '' }],
 })
 const campaignEditorOpen = ref(false)
@@ -65,6 +69,10 @@ const editingCampaign = ref('')
 const recipientTypeOptions = [
   { label: 'Recipient list', value: 'WA Recipient List' },
   { label: 'Profile', value: 'WA Profile' },
+]
+const scheduleForOptions = [
+  { label: 'Campaign', value: 'Campaign' },
+  { label: 'WhatsApp template', value: 'Template' },
 ]
 const statusFilterOptions = computed(() => [
   { label: `All (${rows.value.length})`, value: 'all', active: 'bg-[#075E54] text-white', idle: 'bg-surface-gray-2 text-ink-gray-6 hover:bg-surface-gray-3' },
@@ -270,22 +278,33 @@ async function run(name: string) {
   }
 }
 
-const templateOptions = computed(() => {
-  const account = currentAccount.value || form.value.whatsapp_account
+const accountOptions = computed(() =>
+  (desk.inbox.value?.accounts || []).map((row) => ({
+    label: row.account_name || row.name,
+    value: row.name,
+  })),
+)
+
+function templatesFor(account: string) {
   return (desk.inbox.value?.templates || [])
-    .filter((row) => !account || !row.whatsapp_account || row.whatsapp_account === account)
+    .filter((row) => Boolean(account) && row.whatsapp_account === account)
     .map((row) => ({
-      label: row.template_label || row.template_name || row.name,
+      label: displayTitle(row.template_label, row.template_name) || 'Untitled template',
       value: row.name,
     }))
-})
+}
+
+const templateOptions = computed(() => templatesFor(form.value.whatsapp_account || currentAccount.value))
+const campaignTemplateOptions = computed(() =>
+  templatesFor(campaignForm.value.whatsapp_account || currentAccount.value),
+)
 
 const recipientListOptions = computed(() => {
   const account = form.value.whatsapp_account
   return recipientLists.value
-    .filter((row) => !account || !row.whatsapp_account || row.whatsapp_account === account)
+    .filter((row) => Boolean(account) && (!row.whatsapp_account || row.whatsapp_account === account))
     .map((row) => ({
-      label: row.list_name || row.name,
+      label: displayTitle(row.list_name) || 'Recipient list',
       value: row.name,
     }))
 })
@@ -293,9 +312,11 @@ const recipientListOptions = computed(() => {
 const profileOptions = computed(() => {
   const account = form.value.whatsapp_account
   return profiles.value
-    .filter((row) => !account || !row.whatsapp_account || row.whatsapp_account === account)
+    .filter((row) => Boolean(account) && (!row.whatsapp_account || row.whatsapp_account === account))
     .map((row) => ({
-      label: row.phone_number ? `${row.profile_name || row.name} · ${row.phone_number}` : row.profile_name || row.name,
+      label: row.phone_number
+        ? `${displayTitle(row.profile_name) || 'Contact'} · ${row.phone_number}`
+        : displayTitle(row.profile_name) || 'Contact',
       value: row.name,
     }))
 })
@@ -310,11 +331,43 @@ function setRecipientType(value: unknown) {
   form.value.recipient_type = next
 }
 
+function setScheduleFor(value: unknown) {
+  const next = String(value || 'Campaign') === 'Template' ? 'Template' : 'Campaign'
+  form.value.schedule_for = next
+  if (next === 'Template') form.value.campaign = ''
+  else form.value.whatsapp_template = ''
+}
+
+function alignDeskAccount(account: string) {
+  if (account && account !== desk.account.value) void desk.setAccount(account)
+}
+
+function setFormAccount(value: unknown) {
+  const next = String(value || '')
+  if (next === form.value.whatsapp_account) return
+  form.value.whatsapp_account = next
+  form.value.campaign = ''
+  form.value.whatsapp_template = ''
+  form.value.recipient = ''
+  alignDeskAccount(next)
+}
+
+function setCampaignAccount(value: unknown) {
+  const next = String(value || '')
+  if (next === campaignForm.value.whatsapp_account) return
+  campaignForm.value.whatsapp_account = next
+  campaignForm.value.schedules.forEach((row) => {
+    row.whatsapp_template = ''
+  })
+  alignDeskAccount(next)
+}
+
 function blankForm() {
   return {
     name: '',
     description: '',
-    whatsapp_account: currentAccount.value,
+    whatsapp_account: currentAccount.value || accountOptions.value[0]?.value || '',
+    schedule_for: 'Campaign',
     campaign: utmCampaigns.value[0]?.name || '',
     recipient_type: 'WA Recipient List',
     recipient: '',
@@ -322,6 +375,7 @@ function blankForm() {
     start_date: '',
     trigger_time: '',
     send_after_days: '0',
+    stop_on_reply: false,
   }
 }
 
@@ -348,6 +402,7 @@ function timeOnly(value: string | null | undefined) {
 }
 
 const scheduleDays = computed(() => {
+  if (form.value.schedule_for === 'Template') return 0
   const match = utmCampaigns.value.find((row) => row.name === form.value.campaign)
   return Number(match?.send_after_days || 0)
 })
@@ -363,17 +418,20 @@ const previewEnd = computed(() => {
 
 function fillForm(row: any) {
   const schedule = firstSchedule(row)
+  const templateMode = row.schedule_source === 'Template'
   form.value = {
     name: row.campaign_name || row.name || '',
     description: row.description || row.campaign_description || '',
-    whatsapp_account: currentAccount.value || row.whatsapp_account || '',
-    campaign: row.campaign || row.campaign_name || '',
+    whatsapp_account: row.whatsapp_account || currentAccount.value || accountOptions.value[0]?.value || '',
+    schedule_for: templateMode ? 'Template' : 'Campaign',
+    campaign: templateMode ? '' : row.campaign || row.campaign_name || '',
     recipient_type: row.recipient_type || 'WA Recipient List',
     recipient: row.recipient || '',
-    whatsapp_template: schedule?.whatsapp_template || row.whatsapp_template || row.template || '',
+    whatsapp_template: templateMode ? row.whatsapp_template || row.template || '' : schedule?.whatsapp_template || '',
     start_date: dateOnly(row.start_date),
     trigger_time: timeOnly(row.trigger_time),
     send_after_days: String(schedule?.send_after_days ?? row.send_after_days ?? 0),
+    stop_on_reply: Boolean(row.stop_on_reply),
   }
 }
 
@@ -392,6 +450,7 @@ function startCreate() {
   editingName.value = ''
   recipientsReady.value = true
   form.value = blankForm()
+  alignDeskAccount(form.value.whatsapp_account)
   editorOpen.value = true
 }
 
@@ -400,6 +459,7 @@ async function startEdit(row: any) {
   editingName.value = row.name
   recipientsReady.value = !live
   fillForm(row)
+  alignDeskAccount(form.value.whatsapp_account)
   editorOpen.value = true
   if (!live || !row.name) return
   try {
@@ -417,7 +477,7 @@ function removeCampaign() {
   const campaign = selected.value
   dialog.danger({
     title: 'Delete schedule?',
-    message: `Remove the schedule for “${campaign.campaign_name || campaign.name}”? The campaign stays.`,
+    message: `Remove the schedule for “${campaign.campaign_name || campaign.template_label || campaign.name}”?`,
     onConfirm: async () => {
       busy.value = true
       try {
@@ -434,8 +494,17 @@ function removeCampaign() {
 }
 
 async function saveCampaign() {
-  const campaign = form.value.campaign
-  if (!campaign) {
+  const templateMode = form.value.schedule_for === 'Template'
+  const campaign = templateMode ? '' : form.value.campaign
+  if (!form.value.whatsapp_account) {
+    toast.error('Select a WhatsApp account.')
+    return
+  }
+  if (templateMode && !form.value.whatsapp_template) {
+    toast.error('Select a WhatsApp template.')
+    return
+  }
+  if (!templateMode && !campaign) {
     toast.error('Select a campaign.')
     return
   }
@@ -454,10 +523,18 @@ async function saveCampaign() {
   saving.value = true
   try {
     if (!live) {
+      const templateLabel =
+        templateOptions.value.find((option) => option.value === form.value.whatsapp_template)?.label ||
+        form.value.whatsapp_template
       const row = {
         name: editorMode.value === 'edit' ? editingName.value : `sched-${Date.now()}`,
+        schedule_source: templateMode ? 'Template' : 'Campaign',
         campaign: campaign,
-        campaign_name: campaign,
+        campaign_name: templateMode ? templateLabel : campaign,
+        template_label: templateMode ? templateLabel : '',
+        whatsapp_schedules: templateMode
+          ? [{ whatsapp_template: form.value.whatsapp_template, template_label: templateLabel, send_after_days: 0, variable_type: 'Common' }]
+          : [],
         description: form.value.description.trim(),
         campaign_description: form.value.description.trim(),
         whatsapp_channel: form.value.whatsapp_account,
@@ -472,6 +549,7 @@ async function saveCampaign() {
         start_date: form.value.start_date || null,
         end_date: previewEnd.value || null,
         trigger_time: form.value.trigger_time,
+        stop_on_reply: form.value.stop_on_reply ? 1 : 0,
         sent_count: 0,
         failed_count: 0,
         modified: new Date().toISOString(),
@@ -497,17 +575,25 @@ async function saveCampaign() {
         ? await updateWhatsappSchedule({
             name: editingName.value,
             campaign,
+            schedule_for: form.value.schedule_for,
+            whatsapp_template: templateMode ? form.value.whatsapp_template : '',
+            whatsapp_account: form.value.whatsapp_account,
             recipient_type: form.value.recipient_type,
             recipient: form.value.recipient,
             start_date: form.value.start_date,
             trigger_time: form.value.trigger_time,
+            stop_on_reply: form.value.stop_on_reply ? 1 : 0,
           })
         : await createWhatsappSchedule({
             campaign,
+            schedule_for: form.value.schedule_for,
+            whatsapp_template: templateMode ? form.value.whatsapp_template : '',
+            whatsapp_account: form.value.whatsapp_account,
             recipient_type: form.value.recipient_type,
             recipient: form.value.recipient,
             start_date: form.value.start_date,
             trigger_time: form.value.trigger_time,
+            stop_on_reply: form.value.stop_on_reply ? 1 : 0,
           })
     editorOpen.value = false
     toast.success(editorMode.value === 'edit' ? 'Schedule updated' : 'Schedule created')
@@ -521,12 +607,15 @@ async function saveCampaign() {
 }
 
 // Top KPI metrics
-const campaignOptions = computed(() =>
-  utmCampaigns.value.map((row) => ({
-    label: row.campaign_name || row.name,
-    value: row.name,
-  })),
-)
+const campaignOptions = computed(() => {
+  const account = form.value.whatsapp_account || currentAccount.value
+  return utmCampaigns.value
+    .filter((row) => Boolean(account) && row.whatsapp_account === account)
+    .map((row) => ({
+      label: displayTitle(row.campaign_name) || 'Campaign',
+      value: row.name,
+    }))
+})
 
 const bulkSent = computed(() => bulkRows.value.reduce((sum, row) => sum + Number(row.sent_count || 0), 0))
 const bulkFailed = computed(() => bulkRows.value.reduce((sum, row) => sum + Number(row.failed_count || 0), 0))
@@ -545,6 +634,7 @@ function blankCampaignForm() {
   return {
     name: '',
     description: '',
+    whatsapp_account: currentAccount.value || accountOptions.value[0]?.value || '',
     schedules: [blankScheduleRow()],
   }
 }
@@ -587,6 +677,7 @@ async function editCampaign(row: any) {
   campaignForm.value = {
     name: row.campaign_name || row.name || '',
     description: row.description || row.campaign_description || '',
+    whatsapp_account: row.whatsapp_account || currentAccount.value || accountOptions.value[0]?.value || '',
     schedules: scheduleRowsFrom(row),
   }
   campaignEditorOpen.value = true
@@ -596,6 +687,7 @@ async function editCampaign(row: any) {
     campaignForm.value = {
       name: full.campaign_name || full.name || '',
       description: full.campaign_description || full.description || '',
+      whatsapp_account: full.whatsapp_account || campaignForm.value.whatsapp_account,
       schedules: scheduleRowsFrom(full),
     }
   } catch (caught) {
@@ -607,6 +699,10 @@ async function saveUtmCampaign() {
   const name = campaignForm.value.name.trim()
   if (!name) {
     toast.error('Campaign name is required.')
+    return
+  }
+  if (!campaignForm.value.whatsapp_account) {
+    toast.error('Select a WhatsApp account.')
     return
   }
   const schedules = campaignForm.value.schedules
@@ -628,7 +724,7 @@ async function saveUtmCampaign() {
         name: campaignEditorMode.value === 'edit' ? editingCampaign.value : name,
         campaign_name: name,
         description: campaignForm.value.description.trim(),
-        whatsapp_account: currentAccount.value,
+        whatsapp_account: campaignForm.value.whatsapp_account,
         template: schedules[0].whatsapp_template,
         whatsapp_template: schedules[0].whatsapp_template,
         send_after_days: Math.max(...schedules.map((row) => row.send_after_days)),
@@ -645,13 +741,13 @@ async function saveUtmCampaign() {
             name: editingCampaign.value,
             campaign_name: name,
             campaign_description: campaignForm.value.description.trim(),
-            whatsapp_account: currentAccount.value || undefined,
+            whatsapp_account: campaignForm.value.whatsapp_account,
             schedules,
           })
         : await createUtmCampaign({
             name,
             campaign_description: campaignForm.value.description.trim(),
-            whatsapp_account: currentAccount.value || undefined,
+            whatsapp_account: campaignForm.value.whatsapp_account,
             schedules,
           })
     campaignEditorOpen.value = false
@@ -725,7 +821,21 @@ onMounted(() => {
 
 watch(
   () => desk.account.value,
-  () => void load(),
+  (account) => {
+    if (editorOpen.value && account && account !== form.value.whatsapp_account) {
+      form.value.whatsapp_account = account
+      form.value.campaign = ''
+      form.value.whatsapp_template = ''
+      form.value.recipient = ''
+    }
+    if (campaignEditorOpen.value && account && account !== campaignForm.value.whatsapp_account) {
+      campaignForm.value.whatsapp_account = account
+      campaignForm.value.schedules.forEach((row) => {
+        row.whatsapp_template = ''
+      })
+    }
+    void load()
+  },
 )
 </script>
 
@@ -792,9 +902,9 @@ watch(
           class="rounded-xl border border-outline-gray-2 bg-white p-4 text-left hover:border-[#075E54]"
           @click="isManager && editCampaign(row)"
         >
-          <p class="font-semibold text-ink-gray-9">{{ row.campaign_name || row.name }}</p>
-          <p class="mt-1 text-xs text-ink-gray-5">{{ row.whatsapp_account || 'No account' }}</p>
-          <p class="mt-3 text-sm text-ink-gray-8">{{ row.template || row.whatsapp_template || 'No template' }}</p>
+          <p class="font-semibold text-ink-gray-9">{{ displayTitle(row.campaign_name) || 'Campaign' }}</p>
+          <p class="mt-1 text-xs text-ink-gray-5">{{ displayTitle(row.account_label, row.whatsapp_account) || 'No account' }}</p>
+          <p class="mt-3 text-sm text-ink-gray-8">{{ displayTitle(row.template_label, row.template, row.whatsapp_template) || 'No template' }}</p>
           <p class="mt-1 text-xs text-ink-gray-5">Sends {{ row.send_after_days || 0 }} day(s) after the schedule starts</p>
           <div class="mt-3 flex justify-end">
             <Button variant="ghost" size="sm" theme="red" label="Delete" @click.stop="removeUtmCampaign(row)" />
@@ -817,9 +927,9 @@ watch(
           <div class="min-w-0">
             <div class="flex items-center gap-2">
               <Badge :label="row.status || 'Draft'" :theme="row.status === 'Completed' ? 'green' : row.status === 'Failed' ? 'red' : 'blue'" />
-              <span class="truncate text-sm font-semibold text-ink-gray-9">{{ row.title || row.name }}</span>
+              <span class="truncate text-sm font-semibold text-ink-gray-9">{{ displayTitle(row.title, row.campaign_label) || 'Bulk message' }}</span>
             </div>
-            <p class="mt-1 text-xs text-ink-gray-5">{{ row.campaign || 'No campaign' }} · {{ row.template || 'No template' }}</p>
+            <p class="mt-1 text-xs text-ink-gray-5">{{ displayTitle(row.campaign_label, row.campaign) || 'No campaign' }} · {{ displayTitle(row.template_label, row.template) || 'No template' }}</p>
           </div>
           <div class="flex gap-6 text-xs text-ink-gray-7">
             <span><strong class="text-ink-gray-9">{{ row.recipient_count || 0 }}</strong> recipients</span>
@@ -907,7 +1017,7 @@ watch(
           >
             <div class="flex items-start justify-between gap-2">
               <span class="truncate font-semibold text-sm text-ink-gray-9">
-                {{ row.campaign_name }}
+                {{ displayTitle(row.campaign_name) || 'Schedule' }}
               </span>
               <Badge
                 :label="row.status"
@@ -919,15 +1029,15 @@ watch(
             <div class="flex items-center gap-2 text-xs text-ink-gray-5">
               <span class="inline-flex items-center gap-1 font-medium text-ink-gray-7">
                 <span class="lucide-layout-template size-3 text-[#075E54]" />
-                {{ row.template }}
+                {{ displayTitle(row.template_label, row.template) || 'No template' }}
               </span>
               <span>·</span>
-              <span class="truncate">{{ row.whatsapp_account }}</span>
+              <span class="truncate">{{ displayTitle(row.account_label, row.whatsapp_account) || 'No account' }}</span>
             </div>
 
             <!-- Mini Funnel Row -->
             <div class="mt-1 flex items-center justify-between text-[11px] text-ink-gray-5 bg-surface-gray-1/80 rounded px-2 py-1">
-              <span class="truncate">{{ row.recipient || 'No audience' }}</span>
+              <span class="truncate">{{ displayTitle(row.recipient_label, row.recipient) || 'No audience' }}</span>
               <span>Sent: <strong class="text-ink-gray-8">{{ row.sent_count || 0 }}</strong></span>
               <span v-if="row.failed_count" class="text-red-600 font-semibold">
                 {{ row.failed_count }} fail
@@ -957,21 +1067,22 @@ watch(
                   :label="selected.status"
                   :theme="selected.status === 'Completed' ? 'green' : selected.status === 'Failed' ? 'red' : selected.status === 'In Progress' ? 'blue' : 'gray'"
                 />
-                <span class="text-xs font-mono text-ink-gray-5">{{ selected.whatsapp_account }}</span>
+                <span class="text-xs text-ink-gray-5">{{ displayTitle(selected.account_label, selected.whatsapp_account) || 'No account' }}</span>
               </div>
               <h2 class="mt-1.5 text-xl font-bold text-ink-gray-9">
-                {{ selected.campaign_name }}
+                {{ displayTitle(selected.campaign_name) || 'Schedule' }}
               </h2>
               <p class="text-xs text-ink-gray-5 mt-0.5">
                 <span v-if="selected.start_date">
                   {{ formatDay(selected.start_date) }}<span v-if="selected.end_date"> – {{ formatDay(selected.end_date) }}</span>
                 </span>
                 <span v-if="selected.trigger_time"> · {{ timeOnly(selected.trigger_time) }}</span>
-                <span v-if="selected.recipient"> · {{ selected.recipient }}</span>
+                <span v-if="displayTitle(selected.recipient_label, selected.recipient)"> · {{ displayTitle(selected.recipient_label, selected.recipient) }}</span>
+                <span v-if="selected.stop_on_reply"> · stops when a customer replies</span>
               </p>
               <ul v-if="selected.whatsapp_schedules?.length" class="mt-2 space-y-1 text-xs text-ink-gray-7">
                 <li v-for="(row, index) in selected.whatsapp_schedules" :key="index">
-                  <span class="font-mono text-[#075E54]">{{ row.whatsapp_template }}</span>
+                  <span class="text-[#075E54]">{{ displayTitle(row.template_label, row.whatsapp_template) || 'Template' }}</span>
                   · day {{ row.send_after_days || 0 }}
                   · {{ row.variable_type || 'Common' }}
                 </li>
@@ -1109,6 +1220,28 @@ watch(
     <Dialog v-model="editorOpen" :title="editorMode === 'edit' ? 'Edit schedule' : 'New schedule'">
       <div class="space-y-3 py-1 text-sm">
         <FormControl
+          :model-value="form.whatsapp_account"
+          type="select"
+          label="WhatsApp account"
+          :options="accountOptions"
+          @update:model-value="setFormAccount"
+        />
+        <FormControl
+          :model-value="form.schedule_for"
+          type="select"
+          label="Schedule for"
+          :options="scheduleForOptions"
+          @update:model-value="setScheduleFor"
+        />
+        <FormControl
+          v-if="form.schedule_for === 'Template'"
+          v-model="form.whatsapp_template"
+          type="select"
+          label="WhatsApp template"
+          :options="templateOptions"
+        />
+        <FormControl
+          v-else
           v-model="form.campaign"
           type="select"
           label="Campaign"
@@ -1132,6 +1265,15 @@ watch(
           <FormControl :model-value="previewEnd" type="date" label="End date" disabled />
           <FormControl v-model="form.trigger_time" type="time" label="Trigger time" />
         </div>
+        <label class="flex items-start gap-2 text-sm text-ink-gray-8">
+          <Checkbox v-model="form.stop_on_reply" class="mt-0.5" />
+          <span>
+            <span class="font-medium">Stop on customer reply</span>
+            <span class="mt-0.5 block text-xs text-ink-gray-5">
+              After a step is sent, any reply ticks Unsubscribed for that phone on this campaign and on the recipient list. Later messages are skipped. Nothing is sent back to the customer.
+            </span>
+          </span>
+        </label>
       </div>
       <template #actions>
         <div class="flex justify-end gap-2">
@@ -1151,6 +1293,13 @@ watch(
     <Dialog v-model="campaignEditorOpen" :title="campaignEditorMode === 'edit' ? 'Edit campaign' : 'New campaign'" size="lg">
       <div class="space-y-3 py-1 text-sm">
         <FormControl v-model="campaignForm.name" type="text" label="Name" placeholder="Festive allocation" required />
+        <FormControl
+          :model-value="campaignForm.whatsapp_account"
+          type="select"
+          label="WhatsApp account"
+          :options="accountOptions"
+          @update:model-value="setCampaignAccount"
+        />
         <FormControl v-model="campaignForm.description" type="textarea" label="Description" :rows="3" />
         <div class="space-y-2">
           <p class="text-sm font-medium text-ink-gray-8">Templates</p>
@@ -1167,7 +1316,7 @@ watch(
               class="space-y-2 border-t border-outline-gray-2 px-3 py-2"
             >
               <div class="grid grid-cols-[minmax(0,1fr)_6.5rem_7rem_2rem] items-center gap-2">
-                <FormControl v-model="row.whatsapp_template" type="select" :options="templateOptions" />
+                <FormControl v-model="row.whatsapp_template" type="select" :options="campaignTemplateOptions" />
                 <FormControl v-model="row.send_after_days" type="number" />
                 <FormControl v-model="row.variable_type" type="select" :options="variableTypeOptions" />
                 <Button variant="ghost" size="sm" icon="lucide-x" aria-label="Remove row" @click="removeScheduleRow(index)" />
@@ -1201,18 +1350,18 @@ watch(
             <span class="lucide-alert-triangle size-4 text-amber-600" /> Confirm Outbound Send
           </p>
           <p class="mt-1">
-            This creates one bulk message for <strong>{{ selected.campaign_name }}</strong> on <strong>{{ selected.whatsapp_account }}</strong>. Each subscribed recipient is sent individually. Unsubscribed numbers are left out.
+            This creates one bulk message for <strong>{{ displayTitle(selected.campaign_name) || 'this schedule' }}</strong> on <strong>{{ displayTitle(selected.account_label, selected.whatsapp_account) || 'the WhatsApp account' }}</strong>. Each subscribed recipient is sent individually. Unsubscribed numbers are left out.
           </p>
         </div>
 
         <dl class="divide-y divide-outline-gray-1 border-t border-b border-outline-gray-1 text-xs">
           <div class="flex justify-between py-2">
             <dt class="text-ink-gray-5">WhatsApp Template:</dt>
-            <dd class="font-mono font-medium text-ink-gray-9">{{ selected.template }}</dd>
+            <dd class="font-medium text-ink-gray-9">{{ displayTitle(selected.template_label, selected.template) || 'No template' }}</dd>
           </div>
           <div class="flex justify-between py-2">
             <dt class="text-ink-gray-5">Channel Sender Line:</dt>
-            <dd class="font-medium text-ink-gray-9">{{ selected.whatsapp_account }}</dd>
+            <dd class="font-medium text-ink-gray-9">{{ displayTitle(selected.account_label, selected.whatsapp_account) || 'No account' }}</dd>
           </div>
           <div class="flex justify-between py-2">
             <dt class="text-ink-gray-5">Recipients Count:</dt>

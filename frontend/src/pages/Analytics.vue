@@ -348,7 +348,6 @@ onUnmounted(() => window.clearInterval(timer))
             Generated: <strong class="text-ink-gray-8">{{ formatTime(latest.generated_at) }}</strong>
           </span>
         </div>
-        <span class="font-mono text-[11px] text-ink-gray-4">Snapshot ID: {{ latest.name }}</span>
       </div>
 
       <!-- Hero KPI Grid (6 Cards) -->

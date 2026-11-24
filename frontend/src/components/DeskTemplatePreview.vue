@@ -9,7 +9,7 @@ const props = withDefaults(
     mode?: 'preview' | 'raw'
     editable?: boolean
     large?: boolean
-    chrome?: 'plain' | 'phone' | 'desktop'
+    chrome?: 'plain' | 'phone' | 'desktop' | 'stage'
   }>(),
   { mode: 'preview', editable: true, large: false, chrome: 'plain' },
 )

@@ -20,6 +20,7 @@ import ManualConnectDialog from '@/components/ManualConnectDialog.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import { isManager, useDesk } from '@/stores/desk'
 import { shellNav } from '@/router'
+import { canOpenContacts } from '@/utils/directoryAccess'
 import { sessionUser as readSessionUser } from '@/utils/frappeSession'
 import logoUrl from '@/assets/logo.svg'
 
@@ -28,7 +29,13 @@ const route = useRoute()
 const sessionLive = Boolean(window.csrf_token)
 const sessionUser = readSessionUser()
 const sessionSite = window.sitename || ''
-const visibleNav = computed(() => shellNav.filter((link) => !link.managerOnly || isManager.value))
+const visibleNav = computed(() =>
+  shellNav.filter((link) => {
+    if (link.managerOnly && !isManager.value) return false
+    if (link.requiresDirectory && !canOpenContacts()) return false
+    return true
+  }),
+)
 const accounts = ref<Array<{ name: string; account_name: string }>>([])
 const selectedAccountLabel = computed(() => {
   const selected = desk.account.value
