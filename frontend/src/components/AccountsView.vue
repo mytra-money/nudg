@@ -54,12 +54,7 @@ const filteredAccounts = computed(() => {
         <h1 class="text-2xl font-bold tracking-tight text-ink-gray-9">WhatsApp numbers</h1>
         <p class="text-sm text-ink-gray-6">Connect a number, then use it from the inbox.</p>
       </div>
-      <Button
-        variant="solid"
-        class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-        label="Connect number"
-        @click="showConnectModal = true"
-      />
+      <Button variant="solid" theme="green" label="Connect number" @click="showConnectModal = true"/>
     </div>
 
     <div v-if="accountsList.length === 0" class="mt-8 rounded-xl border border-outline-gray-2 bg-white p-8 text-center">
@@ -67,12 +62,7 @@ const filteredAccounts = computed(() => {
       <p class="mx-auto mt-1 max-w-md text-xs text-ink-gray-6">
         Connect with Facebook, or enter credentials if this number is already on the WhatsApp Cloud API.
       </p>
-      <Button
-        variant="solid"
-        class="mt-4 bg-[#075E54] text-white hover:bg-[#128C7E]"
-        label="Connect number"
-        @click="showConnectModal = true"
-      />
+      <Button variant="solid" theme="green" label="Connect number" @click="showConnectModal = true" class="mt-4"/>
     </div>
 
     <div v-else class="mt-6">
@@ -94,7 +84,7 @@ const filteredAccounts = computed(() => {
             <h2 class="min-w-0 truncate text-base font-semibold text-ink-gray-9">{{ account.account_name }}</h2>
             <StatusBadge :label="account.status || 'Inactive'" />
           </div>
-          <p v-if="account.is_default" class="mt-2 text-xs font-medium text-[#075E54]">Default number</p>
+          <p v-if="account.is_default" class="mt-2 text-xs font-medium text-ink-green-7">Default number</p>
         </DeskCard>
       </div>
       <EmptyState v-if="filteredAccounts.length === 0" compact title="No numbers match" description="Try a different name." />
@@ -109,7 +99,7 @@ const filteredAccounts = computed(() => {
       </div>
       <template #actions>
         <div class="flex w-full justify-end">
-          <Button variant="solid" class="!bg-[#e5e7eb] !text-[#111827] hover:!bg-[#d1d5db]" label="Close" @click="showConnectModal = false" />
+          <Button variant="subtle" label="Close" @click="showConnectModal = false" />
         </div>
       </template>
     </Dialog>

@@ -29,11 +29,11 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <header class="inbox-chat-header sticky top-0 z-10 flex h-14 shrink-0 items-center gap-1 overflow-hidden border-b border-[#E9EDEF] bg-white px-2 sm:gap-2 sm:px-3">
-    <div class="inbox-contact flex min-w-0 items-center gap-2">
+  <header class="inbox-chat-header sticky top-0 z-10 flex h-14 shrink-0 items-center gap-1 overflow-hidden border-b border-wa bg-white px-2 sm:gap-2 sm:px-3">
+    <div class="inbox-contact flex min-w-0 flex-1 items-center gap-2">
       <button
         type="button"
-        class="inline-flex size-9 items-center justify-center rounded-full text-[#54656F] hover:bg-[#F0F2F5] md:hidden"
+        class="inline-flex size-9 items-center justify-center rounded-full text-wa-muted hover:bg-wa-panel md:hidden"
         title="Back to conversation list"
         @click="emit('back')"
       >
@@ -42,7 +42,7 @@ const emit = defineEmits<{
 
       <button
         type="button"
-        class="flex min-w-0 items-center gap-2.5 rounded-lg text-left hover:bg-[#F0F2F5]"
+        class="flex min-w-0 items-center gap-2.5 rounded-lg text-left hover:bg-wa-panel"
         title="Contact info"
         @click="emit('openContact')"
       >
@@ -50,14 +50,14 @@ const emit = defineEmits<{
           <Avatar :label="profile.profile_name || profile.phone_number" size="lg" />
           <span
             v-if="profile.status === 'Active'"
-            class="absolute bottom-0 right-0 size-2.5 rounded-full bg-[#25D366] ring-2 ring-white"
+            class="absolute bottom-0 right-0 size-2.5 rounded-full bg-wa-accent ring-2 ring-white"
           />
         </span>
         <span class="min-w-0">
-          <span class="block truncate text-sm font-semibold leading-tight text-[#111B21]">
+          <span class="block truncate text-sm font-semibold leading-tight text-wa-ink">
             {{ profile.profile_name || profile.phone_number }}
           </span>
-          <span class="block truncate text-xs leading-tight text-[#667781]">
+          <span class="block truncate text-xs leading-tight text-wa-subtle">
             {{ profile.phone_number }}
           </span>
         </span>
@@ -100,7 +100,7 @@ const emit = defineEmits<{
       >
         <button
           type="button"
-          class="hidden h-8 items-center gap-1.5 rounded-full border border-[#E9EDEF] bg-white px-2 text-xs font-medium text-[#111B21] hover:bg-[#F0F2F5] sm:inline-flex"
+          class="hidden h-8 items-center gap-1.5 rounded-full border border-wa bg-white px-2 text-xs font-medium text-wa-ink hover:bg-wa-panel sm:inline-flex"
         >
           <span v-if="headerAssignees.length" class="flex items-center">
             <Avatar
@@ -113,13 +113,13 @@ const emit = defineEmits<{
           </span>
           <Avatar v-else label="Unassigned" size="sm" />
           <span class="whitespace-nowrap">{{ assigneeSummary(headerAssignees) }}</span>
-          <span class="lucide-chevron-down size-3 text-[#667781]" aria-hidden="true" />
+          <span class="lucide-chevron-down size-3 text-wa-subtle" aria-hidden="true" />
         </button>
       </Dropdown>
 
       <button
         type="button"
-        class="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-[#54656F] hover:bg-[#F0F2F5] sm:hidden"
+        class="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-wa-muted hover:bg-wa-panel sm:hidden"
         title="Assign"
         @click="emit('openAssign')"
       >
@@ -128,7 +128,7 @@ const emit = defineEmits<{
 
       <button
         type="button"
-        class="inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2 text-xs font-medium text-[#54656F] hover:bg-[#F0F2F5]"
+        class="inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2 text-xs font-medium text-wa-muted hover:bg-wa-panel"
         :class="notesOpen ? 'bg-emerald-50 text-emerald-700' : ''"
         :title="notesCount ? `Notes ${notesCount}` : 'Notes'"
         @click="emit('toggleNotes')"
@@ -140,8 +140,8 @@ const emit = defineEmits<{
 
       <button
         type="button"
-        class="grid size-8 place-items-center rounded-full text-[#54656F] hover:bg-[#F0F2F5]"
-        :class="chatSearchOpen ? 'bg-[#F0F2F5] text-[#00A884]' : ''"
+        class="grid size-8 place-items-center rounded-full text-ink-gray-6 hover:bg-surface-gray-2"
+        :class="chatSearchOpen ? 'bg-surface-gray-2 text-ink-gray-9' : ''"
         title="Search in conversation"
         @click="emit('toggleSearch')"
       >

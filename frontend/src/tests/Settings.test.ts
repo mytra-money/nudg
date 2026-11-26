@@ -49,7 +49,7 @@ describe('SettingsView', () => {
     expect(routingTabBtn).toBeDefined()
 
     await routingTabBtn!.trigger('click')
-    expect(wrapper.text()).toContain('Frappe Assignment Rules')
+    expect(wrapper.text()).toContain('Assignment rules')
   })
 
   it('switches to WABA Profile tab and displays Meta verified metadata', async () => {

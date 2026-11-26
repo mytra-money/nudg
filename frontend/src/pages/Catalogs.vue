@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { Badge, Button, Dialog, FormControl, Select, TextInput, dialog, toast } from 'frappe-ui'
+import { Alert, Badge, Button, Dialog, FormControl, Select, TextInput, dialog, toast } from 'frappe-ui'
 import { NumberCard } from 'frappe-ui/charts'
 import DeskCard from '@/components/desk/DeskCard.vue'
 import DeskEmpty from '@/components/desk/DeskEmpty.vue'
@@ -9,7 +9,7 @@ import DeskSplit from '@/components/desk/DeskSplit.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import { errorText } from '@/utils/format'
 import { displayTitle } from '@/utils/titles'
-import { accountArg } from '@/utils/accountSelection'
+import { accountArg, labelForAccount } from '@/utils/accountSelection'
 import { useDesk } from '@/stores/desk'
 import {
   createCatalog,
@@ -176,6 +176,9 @@ const itemForm = ref({ item_name: '', sku: '', description: '', price: '', curre
 const savingCatalog = ref(false)
 
 const currentAccount = computed(() => accountArg(desk.account.value) || '')
+const currentAccountLabel = computed(() =>
+  labelForAccount(desk.inbox.value?.accounts || [], currentAccount.value),
+)
 
 /** Demo-mode helper: keep rows that belong to the selected number. */
 function forAccount<T extends { whatsapp_account?: string }>(rows: T[]): T[] {
@@ -189,7 +192,7 @@ function startCatalog(existing?: any) {
   editingCatalogName.value = existing?.name || ''
   catalogForm.value = {
     catalog_name: existing?.catalog_name || '',
-    whatsapp_account: currentAccount.value || existing?.whatsapp_account || '',
+    whatsapp_account: currentAccount.value || '',
     description: existing?.description || '',
     status: existing?.status || 'Draft',
   }
@@ -216,6 +219,11 @@ function startItem(existing?: any) {
 }
 
 async function saveCatalogForm() {
+  catalogForm.value.whatsapp_account = currentAccount.value
+  if (!catalogForm.value.whatsapp_account) {
+    showToast('Select a WhatsApp number in the top bar first.', true)
+    return
+  }
   const catalogName = catalogForm.value.catalog_name.trim()
   if (!catalogName) {
     showToast('Catalog name is required.', true)
@@ -584,10 +592,14 @@ const itemStatusFilterOptions = computed(() => [
 ])
 const recipientOptions = computed(() => [
   { label: 'Select customer...', value: '' },
-  ...(desk.inbox.value?.conversations || []).map((conv: any) => ({
-    label: `${conv.profile.profile_name || conv.profile.name} (${conv.profile.phone_number})`,
-    value: conv.profile.name,
-  })),
+  ...(desk.inbox.value?.conversations || [])
+    .filter((conv: { profile?: { whatsapp_account?: string } }) =>
+      Boolean(currentAccount.value) && conv.profile?.whatsapp_account === currentAccount.value,
+    )
+    .map((conv: any) => ({
+      label: `${conv.profile.profile_name || conv.profile.name} (${conv.profile.phone_number})`,
+      value: conv.profile.name,
+    })),
 ])
 
 function formatCurrency(price?: number, currency = 'INR') {
@@ -612,19 +624,12 @@ watch(
 <template>
   <DeskPage variant="scroll">
     <template #badges>
-      <Badge label="Stored on this site" theme="amber" variant="subtle" size="md" />
     </template>
 
     <template #actions>
       <Button variant="subtle" icon-left="lucide-refresh-cw" label="Refresh" :loading="loading" @click="load" />
       <Button variant="subtle" icon-left="lucide-plus" label="New Catalog" @click="startCatalog()" />
-      <Button
-        variant="solid"
-        class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-        icon-left="lucide-plus"
-        label="Add Catalog Item"
-        @click="startItem()"
-      />
+      <Button variant="solid" theme="green" icon-left="lucide-plus" label="Add Catalog Item" @click="startItem()"/>
     </template>
 
     <template #kpi>
@@ -632,7 +637,7 @@ watch(
         <NumberCard
           title="Catalogs"
           :value="catalogs.length"
-          color="#075E54"
+          color="#047857"
           :delta-caption="selectedCatalog ? 'Selected: ' + selectedCatalog.catalog_name : 'No catalog selected'"
         />
         <NumberCard
@@ -695,7 +700,7 @@ watch(
             interactive
             :padding="false"
             class="flex flex-col gap-1.5 px-4 py-3"
-            :class="selectedCatalogName === cat.name ? '!border-[#128C7E] !bg-[#075E54]/5' : ''"
+            :class="selectedCatalogName === cat.name ? '!border-outline-green-3 !bg-surface-green-2' : ''"
             @click="open(cat.name)"
           >
             <div class="flex items-center justify-between gap-2">
@@ -714,12 +719,20 @@ watch(
         <div v-if="selectedCatalog" class="flex min-w-0 flex-1 flex-col overflow-y-auto p-4 sm:p-5">
           <div class="flex flex-wrap items-center gap-2">
             <h2 class="min-w-0 truncate text-lg font-bold text-ink-gray-9">{{ selectedCatalog.catalog_name }}</h2>
-            <StatusBadge :label="selectedCatalog.status || 'Inactive'" />
+            <StatusBadge
+              v-if="selectedCatalog.status && selectedCatalog.status !== 'Draft'"
+              :label="selectedCatalog.status"
+            />
           </div>
           <p class="mt-1 text-xs leading-5 text-ink-gray-6">{{ selectedCatalog.description || 'No description' }}</p>
-          <p v-if="selectedCatalog.sync_error" class="mt-2 text-sm text-red-700" role="alert">
-            {{ selectedCatalog.sync_error }}
-          </p>
+          <Alert
+            v-if="selectedCatalog.sync_error"
+            class="mt-2"
+            theme="red"
+            title="Couldn't sync catalog"
+            :description="selectedCatalog.sync_error"
+            :primary-action="{ label: 'Sync again', onClick: () => sync(selectedCatalog.name) }"
+          />
           <div class="mt-3 flex flex-wrap items-center gap-2">
             <Badge :label="'Meta ID ' + (selectedCatalog.meta_catalog_id || 'Not set')" theme="gray" variant="subtle" size="md" />
             <Badge :label="selectedCatalog.whatsapp_account || 'No account'" theme="gray" variant="subtle" size="md" />
@@ -728,18 +741,13 @@ watch(
             <Button
               variant="subtle"
               icon-left="lucide-refresh-cw"
-              :label="busy ? 'Syncing...' : 'Sync catalog'"
+              label="Sync catalog"
+              loading-text="Syncing…"
               :loading="busy"
               @click="sync(selectedCatalog.name)"
             />
             <Button variant="subtle" label="Edit catalog" @click="startCatalog(selectedCatalog)" />
-            <Button
-              variant="solid"
-              class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-              icon-left="lucide-plus"
-              label="New Item"
-              @click="startItem()"
-            />
+            <Button variant="solid" theme="green" icon-left="lucide-plus" label="New Item" @click="startItem()"/>
           </div>
 
           <!-- Items Filter & Search -->
@@ -769,7 +777,7 @@ watch(
               class="!p-4"
             >
               <div class="flex items-start gap-3">
-                <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-[#25D366]/20 bg-[#25D366]/10 text-[#075E54]">
+                <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-outline-green-2 bg-surface-green-2 text-ink-green-7">
                   <span class="lucide-package size-5" />
                 </div>
                 <div class="min-w-0 flex-1">
@@ -796,14 +804,7 @@ watch(
               </div>
               <div class="mt-3 flex items-center justify-end gap-2 border-t border-outline-gray-1 pt-3">
                 <Button variant="subtle" size="sm" icon-left="lucide-pencil" label="Edit" @click="startItem(item)" />
-                <Button
-                  variant="solid"
-                  size="sm"
-                  class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-                  icon-left="lucide-send"
-                  label="Send to Customer"
-                  @click="openSendModal(item)"
-                />
+                <Button variant="solid" theme="green" size="sm" icon-left="lucide-send" label="Send to Customer" @click="openSendModal(item)"/>
               </div>
             </DeskCard>
           </div>
@@ -818,13 +819,7 @@ watch(
             </div>
             <h3 class="mt-2 text-sm font-semibold text-ink-gray-9">No Product Items in Collection</h3>
             <p class="mt-1 text-xs text-ink-gray-5">Add WA Catalog Item records to display products in this catalog.</p>
-            <Button
-              class="mt-3 bg-[#075E54] text-white hover:bg-[#128C7E]"
-              variant="solid"
-              icon-left="lucide-plus"
-              label="Add Catalog Item"
-              @click="startItem()"
-            />
+            <Button variant="solid" theme="green" icon-left="lucide-plus" label="Add Catalog Item" @click="startItem()" class="mt-3"/>
           </div>
         </div>
       </template>
@@ -833,6 +828,9 @@ watch(
     <Dialog v-model="catalogEditorOpen" :title="catalogEditorMode === 'edit' ? 'Edit catalog' : 'New catalog'">
       <div class="space-y-3 py-1">
         <FormControl v-model="catalogForm.catalog_name" type="text" label="Catalog name" />
+        <p class="text-xs text-ink-gray-5">
+          WhatsApp account: {{ displayTitle(currentAccountLabel) || 'Select a number in the top bar' }}
+        </p>
         <FormControl v-model="catalogForm.description" type="textarea" label="Description" :rows="3" />
         <FormControl v-model="catalogForm.status" type="select" label="Status" :options="catalogStatusOptions" />
       </div>
@@ -842,7 +840,7 @@ watch(
           <span v-else />
           <div class="flex gap-2">
             <Button label="Cancel" @click="catalogEditorOpen = false" />
-            <Button variant="solid" class="bg-[#075E54] text-white" :label="catalogEditorMode === 'edit' ? 'Save' : 'Create catalog'" :loading="savingCatalog" @click="saveCatalogForm" />
+            <Button variant="solid" theme="green" loading-text="Saving…" :label="catalogEditorMode === 'edit' ? 'Save' : 'Create catalog'" :loading="savingCatalog" @click="saveCatalogForm"/>
           </div>
         </div>
       </template>
@@ -866,7 +864,7 @@ watch(
           <span v-else />
           <div class="flex gap-2">
             <Button label="Cancel" @click="itemEditorOpen = false" />
-            <Button variant="solid" class="bg-[#075E54] text-white" :label="itemEditorMode === 'edit' ? 'Save' : 'Add item'" :loading="savingCatalog" @click="saveItemForm" />
+            <Button variant="solid" theme="green" loading-text="Saving…" :label="itemEditorMode === 'edit' ? 'Save' : 'Add item'" :loading="savingCatalog" @click="saveItemForm"/>
           </div>
         </div>
       </template>
@@ -918,8 +916,8 @@ watch(
 
               <!-- Interactive SPM Product Card -->
               <div class="mt-2.5 overflow-hidden rounded-lg border border-outline-gray-2 bg-surface-gray-2/40">
-                <div class="flex h-24 items-center justify-center bg-gradient-to-br from-emerald-100 to-teal-50 text-[#075E54]">
-                  <span class="lucide-shopping-bag size-9 text-[#075E54]" />
+                <div class="flex h-24 items-center justify-center bg-gradient-to-br from-emerald-100 to-teal-50 text-ink-green-7">
+                  <span class="lucide-shopping-bag size-9 text-ink-green-7" />
                 </div>
                 <div class="p-2.5">
                   <h4 class="text-xs font-bold text-ink-gray-9">{{ selectedItemToSend.item_name }}</h4>
@@ -932,7 +930,7 @@ watch(
 
               <div class="mt-2.5 border-t border-outline-gray-1 pt-2">
                 <div
-                  class="flex w-full items-center justify-center gap-1.5 rounded-md bg-surface-gray-2/80 py-1.5 text-xs font-semibold text-[#075E54]"
+                  class="flex w-full items-center justify-center gap-1.5 rounded-md bg-surface-gray-2/80 py-1.5 text-xs font-semibold text-ink-green-7"
                 >
                   <span class="lucide-eye size-3.5" />
                   <span>View Product</span>
@@ -954,15 +952,7 @@ watch(
             label="Cancel"
             @click="showSendModal = false"
           />
-          <Button
-            variant="solid"
-            class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-            :loading="isSendingProduct"
-            :disabled="!recipientProfile"
-            icon-left="lucide-send"
-            label="Send Message"
-            @click="handleSendProduct"
-          />
+          <Button variant="solid" theme="green" :loading="isSendingProduct" :disabled="!recipientProfile" icon-left="lucide-send" label="Send Message" @click="handleSendProduct"/>
         </div>
       </template>
     </Dialog>

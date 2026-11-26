@@ -72,7 +72,7 @@ describe('LogsView', () => {
     })
     await flushPromises()
 
-    const searchInput = wrapper.find('input[placeholder="Search message, docname, event..."]')
+    const searchInput = wrapper.find('input[placeholder="Search message or event..."]')
     expect(searchInput.exists()).toBe(true)
 
     await searchInput.setValue('Meera')

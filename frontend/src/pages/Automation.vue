@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { Button, Checkbox, Dialog, FormControl, Switch, TabButtons, TimePicker, dialog, toast } from 'frappe-ui'
+import { Badge, Button, Checkbox, Dialog, FormControl, ItemListRow, Switch, TabButtons, TimePicker, dialog, toast } from 'frappe-ui'
 import DeskCard from '@/components/desk/DeskCard.vue'
 import DeskEmpty from '@/components/desk/DeskEmpty.vue'
 import DeskPage from '@/components/desk/DeskPage.vue'
@@ -41,7 +41,7 @@ interface FlowStep {
 
 const tab = ref<Tab>('bot')
 const account = ref('')
-const { desk, accounts, accountGateDescription, syncAccount } = useAccountGate({ account })
+const { desk, accounts, accountGateDescription, selectedAccountLabel, syncAccount } = useAccountGate({ account })
 const loading = ref(true)
 const saving = ref(false)
 const error = ref<string | null>(null)
@@ -463,7 +463,7 @@ onMounted(async () => {
             v-model="bot.ai_api_key"
             type="password"
             label="API key"
-            :placeholder="bot.has_ai_key ? 'Saved. Type a new key to replace it.' : 'Paste the key'"
+            :placeholder="bot.has_ai_key ? 'Leave blank to keep the current key' : 'Paste the key'"
           />
         </div>
         <FormControl
@@ -475,7 +475,7 @@ onMounted(async () => {
           placeholder="One phone number per line"
         />
         <div class="mt-4 flex justify-end">
-          <Button variant="solid" class="bg-[#075E54] text-white hover:bg-[#128C7E]" label="Save bot" :loading="saving" @click="saveBot" />
+          <Button variant="solid" theme="green" loading-text="Saving…" label="Save bot" :loading="saving" @click="saveBot"/>
         </div>
       </DeskCard>
     </div>
@@ -483,40 +483,40 @@ onMounted(async () => {
     <div v-else-if="tab === 'keywords'">
       <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
         <p class="text-xs text-ink-gray-5">A matching word sends a reply or starts a flow.</p>
-        <Button variant="solid" size="sm" class="bg-[#075E54] text-white hover:bg-[#128C7E]" label="Add keyword" @click="openKeyword()" />
+        <Button variant="solid" theme="green" size="sm" label="Add keyword" @click="openKeyword()"/>
       </div>
-      <DeskCard as="div" :padding="false" class="overflow-x-auto">
+      <DeskCard as="div" :padding="false" class="overflow-hidden">
         <EmptyState v-if="!keywords.length" compact title="No keywords yet" description="A matching word sends a reply or starts a flow." />
-        <table v-else class="w-full text-left text-sm">
-          <thead class="border-b border-outline-gray-2 bg-surface-gray-1 text-xs font-semibold text-ink-gray-5">
-            <tr>
-              <th class="px-4 py-2.5 font-semibold">Words</th>
-              <th class="px-4 py-2.5 font-semibold">Match</th>
-              <th class="px-4 py-2.5 font-semibold">Reply</th>
-              <th class="w-40 px-4 py-2.5" />
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in keywords" :key="row.name" class="border-b border-outline-gray-1 last:border-b-0">
-              <td class="px-4 py-3 font-medium text-ink-gray-9">{{ row.keywords }}</td>
-              <td class="px-4 py-3 text-ink-gray-6">{{ row.match_type }}</td>
-              <td class="max-w-xs truncate px-4 py-3 text-ink-gray-7">{{ keywordResult(row) }}</td>
-              <td class="px-4 py-3">
-                <div class="flex justify-end gap-1">
-                  <Button variant="ghost" size="sm" label="Edit" @click="openKeyword(row)" />
-                  <Button variant="ghost" size="sm" theme="red" label="Delete" @click="removeKeyword(row.name)" />
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <div v-else class="divide-y divide-outline-gray-1">
+          <ItemListRow
+            v-for="row in keywords"
+            :key="row.name"
+            as="div"
+            size="lg"
+            class="px-4 py-3 hover:bg-surface-gray-1"
+          >
+            <template #label>
+              <div class="min-w-0">
+                <p class="truncate text-sm font-medium text-ink-gray-9">{{ row.keywords }}</p>
+                <p class="truncate text-xs text-ink-gray-6">{{ keywordResult(row) }}</p>
+              </div>
+            </template>
+            <template #suffix>
+              <div class="flex items-center gap-2">
+                <Badge :label="row.match_type" variant="subtle" theme="gray" size="sm" />
+                <Button variant="ghost" size="sm" label="Edit" @click="openKeyword(row)" />
+                <Button variant="ghost" size="sm" theme="red" label="Delete" @click="removeKeyword(row.name)" />
+              </div>
+            </template>
+          </ItemListRow>
+        </div>
       </DeskCard>
     </div>
 
     <div v-else-if="tab === 'flows'">
       <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
         <p class="text-xs text-ink-gray-5">Ask a few questions, then send the closing message. Use {email} to repeat a saved answer.</p>
-        <Button variant="solid" size="sm" class="bg-[#075E54] text-white hover:bg-[#128C7E]" label="Add flow" @click="openFlow()" />
+        <Button variant="solid" theme="green" size="sm" label="Add flow" @click="openFlow()"/>
       </div>
       <EmptyState v-if="!flows.length" title="No flows yet" description="Ask a few questions, then send a closing message." />
       <div v-else class="grid gap-3 lg:grid-cols-2">
@@ -570,6 +570,9 @@ onMounted(async () => {
 
     <Dialog v-model="keywordOpen" :title="keywordForm.name ? 'Edit keyword' : 'Add keyword'">
       <div class="space-y-3">
+        <p class="text-xs text-ink-gray-5">
+          WhatsApp account: {{ displayTitle(selectedAccountLabel) || 'Select a number in the top bar' }}
+        </p>
         <FormControl
           v-model="keywordForm.keywords"
           type="text"
@@ -613,13 +616,16 @@ onMounted(async () => {
       <template #actions>
         <div class="flex justify-end gap-2">
           <Button variant="subtle" label="Cancel" @click="keywordOpen = false" />
-          <Button variant="solid" class="bg-[#075E54] text-white hover:bg-[#128C7E]" label="Save" :loading="saving" @click="saveKeyword" />
+          <Button variant="solid" theme="green" loading-text="Saving…" label="Save" :loading="saving" @click="saveKeyword"/>
         </div>
       </template>
     </Dialog>
 
     <Dialog v-model="flowOpen" :title="flowForm.name ? 'Edit flow' : 'Add flow'" size="lg">
       <div class="space-y-3">
+        <p class="text-xs text-ink-gray-5">
+          WhatsApp account: {{ displayTitle(selectedAccountLabel) || 'Select a number in the top bar' }}
+        </p>
         <div class="grid gap-3 sm:grid-cols-2">
           <FormControl
             v-model="flowForm.flow_name"
@@ -675,7 +681,7 @@ onMounted(async () => {
       <template #actions>
         <div class="flex justify-end gap-2">
           <Button variant="subtle" label="Cancel" @click="flowOpen = false" />
-          <Button variant="solid" class="bg-[#075E54] text-white hover:bg-[#128C7E]" label="Save" :loading="saving" @click="saveFlow" />
+          <Button variant="solid" theme="green" loading-text="Saving…" label="Save" :loading="saving" @click="saveFlow"/>
         </div>
       </template>
     </Dialog>

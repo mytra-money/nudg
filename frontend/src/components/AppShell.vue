@@ -205,30 +205,6 @@ onUnmounted(() => {
           <SidebarCollapseToggle />
         </div>
       </Sidebar>
-      <!-- Same control as the Frappe desk sidebar: the border is the hit
-           target, and the chevron shows while the pointer is on it. -->
-      <div
-        class="group/edge absolute inset-y-0 -right-1 z-30 w-2"
-        :class="sidebarCollapsed ? 'cursor-e-resize' : 'cursor-w-resize'"
-        @click="sidebarCollapsed = !sidebarCollapsed"
-      >
-        <span
-          class="pointer-events-none absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-transparent transition-colors duration-150 group-hover/edge:bg-outline-gray-3"
-        />
-        <button
-          type="button"
-          class="pointer-events-none absolute bottom-4 left-1/2 flex size-6 -translate-x-1/2 items-center justify-center rounded-full border border-outline-gray-2 bg-white text-ink-gray-6 opacity-0 shadow-sm transition duration-150 hover:bg-surface-gray-2 hover:text-ink-gray-8 focus-visible:pointer-events-auto focus-visible:opacity-100 group-hover/edge:pointer-events-auto group-hover/edge:opacity-100"
-          :aria-label="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
-          :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
-          @click.stop="sidebarCollapsed = !sidebarCollapsed"
-        >
-          <span
-            class="lucide-chevron-left size-3 transition-transform duration-300 ease-in-out"
-            :class="{ 'rotate-180': sidebarCollapsed }"
-            aria-hidden="true"
-          />
-        </button>
-      </div>
     </div>
 
     <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -240,7 +216,7 @@ onUnmounted(() => {
               <li>
                 <RouterLink
                   :to="breadcrumb.to"
-                  class="rounded hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#128C7E]"
+                  class="rounded hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-green-3"
                 >
                   {{ breadcrumb.label }}
                 </RouterLink>
@@ -267,7 +243,7 @@ onUnmounted(() => {
               />
             </div>
           </Popover>
-          <div class="w-36 min-w-0 sm:w-48">
+          <div class="w-28 min-w-0 sm:w-48">
             <AccountSelect inline />
           </div>
         </div>
@@ -290,10 +266,12 @@ onUnmounted(() => {
         </div>
         <Button
           v-if="isManager"
+          variant="solid"
+          theme="green"
           size="sm"
-          class="bg-[#075E54] text-white hover:bg-[#128C7E] shrink-0 font-medium"
           label="Connect WhatsApp Account"
           @click="showAccountModal = true"
+          class="shrink-0 font-medium"
         />
       </div>
 
@@ -339,7 +317,7 @@ onUnmounted(() => {
             :key="link.to"
             :to="link.to"
             class="flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-[10px] font-medium leading-none"
-            :class="isActive(link.to) ? 'text-[#075E54]' : 'text-ink-gray-6'"
+            :class="isActive(link.to) ? 'text-ink-green-7' : 'text-ink-gray-6'"
             :aria-current="isActive(link.to) ? 'page' : undefined"
           >
             <span :class="[link.icon, 'size-5 shrink-0']" aria-hidden="true" />
@@ -348,7 +326,7 @@ onUnmounted(() => {
           <button
             type="button"
             class="flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-[10px] font-medium leading-none"
-            :class="moreOpen || mobileMore.some((link) => isActive(link.to)) ? 'text-[#075E54]' : 'text-ink-gray-6'"
+            :class="moreOpen || mobileMore.some((link) => isActive(link.to)) ? 'text-ink-green-7' : 'text-ink-gray-6'"
             :aria-expanded="moreOpen"
             @click="moreOpen = !moreOpen"
           >
@@ -369,7 +347,7 @@ onUnmounted(() => {
       </div>
       <template #actions>
         <div class="flex w-full justify-end">
-          <Button variant="solid" class="!bg-[#e5e7eb] !text-[#111827] hover:!bg-[#d1d5db]" label="Close" @click="showAccountModal = false" />
+          <Button variant="subtle" label="Close" @click="showAccountModal = false" />
         </div>
       </template>
     </Dialog>

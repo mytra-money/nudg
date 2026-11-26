@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { Alert, Badge, Button, Spinner, toast } from 'frappe-ui'
+import { Alert, Badge, Button, ItemListRow, Spinner, toast } from 'frappe-ui'
 import { NumberCard } from 'frappe-ui/charts'
 import DeskCard from '@/components/desk/DeskCard.vue'
 import DeskEmpty from '@/components/desk/DeskEmpty.vue'
 import DeskPage from '@/components/desk/DeskPage.vue'
-import DeskTable from '@/components/desk/DeskTable.vue'
 import { useAccountGate } from '@/composables/useAccountGate'
 import { errorText, formatDay, formatTime } from '@/utils/format'
 import { getAnalytics, refreshAnalytics } from '@/services/catalogApi'
@@ -291,15 +290,7 @@ onUnmounted(() => window.clearInterval(timer))
         label="Export CSV"
         @click="exportCsv"
       />
-      <Button
-        variant="solid"
-        size="sm"
-        class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-        icon-left="lucide-refresh-cw"
-        label="Compute Snapshot"
-        :loading="busy"
-        @click="refresh"
-      />
+      <Button variant="solid" theme="green" size="sm" icon-left="lucide-refresh-cw" label="Compute Snapshot" loading-text="Computing…" :loading="busy" @click="refresh"/>
     </template>
 
     <!-- Background Refresh Notification Banner -->
@@ -325,13 +316,7 @@ onUnmounted(() => window.clearInterval(timer))
       title="No Analytics Snapshot Found"
       description="Click 'Compute Snapshot' to calculate and save your first Nudg metric record."
     >
-      <Button
-        variant="solid"
-        class="mt-4 bg-[#075E54] text-white hover:bg-[#128C7E]"
-        label="Compute First Snapshot"
-        icon-left="lucide-refresh-cw"
-        @click="refresh"
-      />
+      <Button variant="solid" theme="green" label="Compute First Snapshot" icon-left="lucide-refresh-cw" @click="refresh" class="mt-4"/>
     </DeskEmpty>
 
     <!-- Main Analytics Dashboard Canvas -->
@@ -386,7 +371,7 @@ onUnmounted(() => window.clearInterval(timer))
                 title="Inbound Messages"
               />
               <div
-                class="bg-[#075E54] transition-all duration-500"
+                class="bg-surface-green-7 transition-all duration-500"
                 :style="`width: ${outboundPercentage}%`"
                 title="Outbound Messages"
               />
@@ -398,7 +383,7 @@ onUnmounted(() => window.clearInterval(timer))
                 <span class="text-ink-gray-7">Inbound: <strong>{{ latest.messages_in }}</strong> ({{ inboundPercentage }}%)</span>
               </div>
               <div class="flex items-center gap-1.5">
-                <span class="size-2 rounded-full bg-[#075E54]" />
+                <span class="size-2 rounded-full bg-surface-green-7" />
                 <span class="text-ink-gray-7">Outbound: <strong>{{ latest.messages_out }}</strong> ({{ outboundPercentage }}%)</span>
               </div>
             </div>
@@ -417,7 +402,7 @@ onUnmounted(() => window.clearInterval(timer))
           description="Message delivery reliability and active service sessions"
           class="space-y-4"
         >
-          <template #actions>
+          <template v-if="deliveryRate >= 95" #actions>
             <Badge theme="green" variant="subtle" size="md" label="High Quality" />
           </template>
 
@@ -431,7 +416,7 @@ onUnmounted(() => window.clearInterval(timer))
             <NumberCard
               title="SLA window sessions"
               :value="latest.open_conversations"
-              color="#075E54"
+              color="#047857"
               delta-caption="Active customer care sessions"
             />
           </div>
@@ -455,60 +440,43 @@ onUnmounted(() => window.clearInterval(timer))
           <span class="text-xs text-ink-gray-5">{{ history.length }} records</span>
         </template>
 
-        <DeskTable class="rounded-none border-0 border-t border-outline-gray-1">
-          <template #head>
-            <tr>
-              <th scope="col" class="px-4 py-3">Date</th>
-              <th scope="col" class="px-4 py-3">Status</th>
-              <th scope="col" class="px-4 py-3">Inbound</th>
-              <th scope="col" class="px-4 py-3">Outbound</th>
-              <th scope="col" class="px-4 py-3">Failed</th>
-              <th scope="col" class="px-4 py-3">Open Sessions</th>
-              <th scope="col" class="px-4 py-3">Campaigns</th>
-            </tr>
-          </template>
-          <tr
+        <div v-if="history.length === 0" class="border-t border-outline-gray-1 py-8 text-center text-xs text-ink-gray-5">
+          No historical snapshots recorded yet.
+        </div>
+        <div v-else class="divide-y divide-outline-gray-1 border-t border-outline-gray-1">
+          <ItemListRow
             v-for="row in history"
             :key="row.name"
-            class="hover:bg-surface-gray-1 transition-colors"
+            as="div"
+            size="lg"
+            class="px-4 py-3 hover:bg-surface-gray-1"
           >
-            <td class="px-4 py-3 font-semibold text-ink-gray-9">
-              {{ formatDay(row.snapshot_date) }}
-            </td>
-            <td class="px-4 py-3">
-              <Badge
-                :label="row.status"
-                :theme="row.status === 'Ready' ? 'green' : 'amber'"
-                size="sm"
-              />
-            </td>
-            <td class="px-4 py-3 font-medium text-blue-700">
-              {{ row.messages_in || 0 }}
-            </td>
-            <td class="px-4 py-3 font-medium text-[#075E54]">
-              {{ row.messages_out || 0 }}
-            </td>
-            <td class="px-4 py-3">
-              <span
-                :class="row.failed_messages ? 'font-semibold text-red-700' : 'text-ink-gray-5'"
-              >
-                {{ row.failed_messages || 0 }}
-              </span>
-            </td>
-            <td class="px-4 py-3 font-mono text-ink-gray-7">
-              {{ row.open_conversations || 0 }}
-            </td>
-            <td class="px-4 py-3 font-mono text-ink-gray-7">
-              {{ row.campaigns_sent || 0 }}
-            </td>
-          </tr>
-
-          <tr v-if="history.length === 0">
-            <td colspan="7" class="py-8 text-center text-xs text-ink-gray-5">
-              No historical snapshots recorded yet.
-            </td>
-          </tr>
-        </DeskTable>
+            <template #label>
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="text-sm font-semibold text-ink-gray-9">{{ formatDay(row.snapshot_date) }}</span>
+                <Badge
+                  :label="row.status"
+                  :theme="row.status === 'Ready' ? 'green' : 'amber'"
+                  size="sm"
+                />
+              </div>
+            </template>
+            <template #suffix>
+              <div class="flex flex-wrap items-center justify-end gap-2 text-xs">
+                <Badge :label="`In: ${row.messages_in || 0}`" variant="subtle" theme="blue" size="sm" />
+                <Badge :label="`Out: ${row.messages_out || 0}`" variant="subtle" theme="green" size="sm" />
+                <Badge
+                  :label="`Failed: ${row.failed_messages || 0}`"
+                  variant="subtle"
+                  :theme="row.failed_messages ? 'red' : 'gray'"
+                  size="sm"
+                />
+                <Badge :label="`Open: ${row.open_conversations || 0}`" variant="subtle" theme="gray" size="sm" />
+                <Badge :label="`Campaigns: ${row.campaigns_sent || 0}`" variant="subtle" theme="gray" size="sm" />
+              </div>
+            </template>
+          </ItemListRow>
+        </div>
       </DeskCard>
     </div>
   </DeskPage>

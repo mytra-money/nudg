@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
 import { Alert, Badge, Button, Dialog, FormControl, TabButtons, TextInput, toast } from 'frappe-ui'
 import { NumberCard } from 'frappe-ui/charts'
 import DeskCard from '@/components/desk/DeskCard.vue'
@@ -328,40 +327,25 @@ watch(
     <!-- Sub-navigation Header Bar -->
     <header class="flex flex-wrap items-center justify-between border-b border-outline-gray-2 bg-white px-4 py-2 sm:px-6">
       <div class="flex items-center gap-1 sm:gap-2">
-        <RouterLink
-          to="/integrations"
-          class="flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold sm:text-sm text-ink-gray-6 hover:bg-surface-gray-2 hover:text-ink-gray-9 transition-all"
-        >
-          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-          </svg>
-          <span class="sm:hidden">Numbers</span>
-          <span class="hidden sm:inline">WABA Channels & Accounts</span>
-        </RouterLink>
-
-        <RouterLink
-          to="/integrations/logs"
-          class="flex items-center gap-2 rounded-lg bg-[#075E54]/10 border border-[#075E54]/20 px-3 py-1.5 text-xs font-semibold sm:text-sm text-[#075E54] shadow-2xs transition-all"
-        >
-          <svg class="h-4 w-4 text-[#075E54]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          <span class="sm:hidden">Logs</span>
-          <span class="hidden sm:inline">Message & Webhook Logs</span>
-        </RouterLink>
+        <Button route="/integrations" size="sm" variant="ghost" icon-left="lucide-radio" label="WhatsApp numbers" />
+        <Button
+          route="/integrations/logs"
+          size="sm"
+          variant="subtle"
+          theme="green"
+          data-state="active"
+          icon-left="lucide-scroll-text"
+          label="Logs"
+        />
       </div>
 
-      <div class="hidden items-center gap-3 sm:flex">
-        <Badge theme="green" variant="subtle" size="md" label="Audit Stream Active" />
-      </div>
     </header>
 
     <!-- Access Control Warning Banner (if user cannot read logs) -->
     <div v-if="desk.inbox.value && !desk.inbox.value.can_read_logs" class="m-6">
-      <Alert theme="amber" title="Elevated Permissions Required">
+      <Alert theme="amber" title="Permissions required">
         <template #description>
-          Access to the WhatsApp Message and Webhook Audit Log is restricted by Frappe role-based permissions.
-          Please ensure your user profile has read access to the <code class="rounded bg-surface-gray-2 px-1 py-0.5">WA Log</code> DocType, or contact your System Manager.
+          You don't have permission to view message and webhook logs. Ask an administrator for access.
         </template>
       </Alert>
     </div>
@@ -534,10 +518,10 @@ watch(
             <!-- Inline Expandable Payload Preview -->
             <div
               v-if="expandedLogId === row.name && (row.request_data || row.response_data)"
-              class="mt-3 space-y-2 rounded-lg bg-[#111827] border border-gray-700 p-3 text-white font-mono text-xs shadow-inner"
+              class="mt-3 space-y-2 rounded-lg border border-outline-gray-2 bg-surface-gray-2 p-3 font-mono text-xs text-ink-gray-9"
             >
-              <div class="flex items-center justify-between border-b border-ink-gray-7 pb-2 text-[11px] text-ink-gray-4">
-                <span>{{ row.response_data ? 'API Response Payload' : 'API Request Payload' }}</span>
+              <div class="flex items-center justify-between border-b border-outline-gray-2 pb-2 text-[11px] text-ink-gray-6">
+                <span>{{ row.response_data ? 'API response payload' : 'API request payload' }}</span>
                 <Button
                   variant="subtle"
                   size="sm"
@@ -560,15 +544,9 @@ watch(
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
           </div>
-          <h3 class="mt-3 text-sm font-semibold text-ink-gray-9">No Log Entries Found</h3>
+          <h3 class="mt-3 text-sm font-semibold text-ink-gray-9">No log entries found</h3>
           <p class="mt-1 text-xs text-ink-gray-5">No audit logs match the selected level, event, or search query.</p>
-          <Button
-            variant="solid"
-            size="sm"
-            class="mt-4 bg-[#075E54] text-white hover:bg-[#128C7E]"
-            label="Reset Filters"
-            @click="resetFilters"
-          />
+          <Button variant="solid" theme="green" size="sm" label="Reset filters" @click="resetFilters" class="mt-4"/>
         </div>
       </DeskCard>
     </div>
@@ -576,13 +554,13 @@ watch(
     <!-- MODAL: Raw JSON Payload Inspector & Diagnostics -->
     <Dialog
       :open="Boolean(inspectingPayloadLog)"
-      title="Audit Payload Inspector"
+      title="Audit payload inspector"
       size="3xl"
       @update:open="(v) => !v && (inspectingPayloadLog = null)"
     >
       <div v-if="inspectingPayloadLog" class="space-y-4 py-1 text-xs">
         <p class="text-xs text-ink-gray-6 -mt-2">
-          {{ inspectingPayloadLog.event_type }} event on {{ inspectingPayloadLog.account || 'Default Channel' }} · {{ formatTime(inspectingPayloadLog.timestamp) }}
+          {{ inspectingPayloadLog.event_type }} event on {{ inspectingPayloadLog.account || 'Default channel' }} · {{ formatTime(inspectingPayloadLog.timestamp) }}
         </p>
 
         <!-- Payload Tabs (Response vs Request) -->
@@ -603,19 +581,14 @@ watch(
         </div>
 
         <!-- Raw JSON Container -->
-        <div class="max-h-[50vh] overflow-y-auto rounded-xl bg-[#111827] border border-gray-700 p-4 font-mono text-xs text-emerald-400 shadow-inner">
+        <div class="max-h-[50vh] overflow-y-auto rounded-xl border border-outline-gray-2 bg-surface-gray-2 p-4 font-mono text-xs text-ink-gray-9">
           <pre class="leading-relaxed whitespace-pre-wrap break-all">{{ parsePayload(activePayloadTab === 'response' ? inspectingPayloadLog.response_data : inspectingPayloadLog.request_data) }}</pre>
         </div>
       </div>
 
       <template #actions>
         <div class="flex items-center justify-between w-full">
-          <Button
-            variant="solid"
-            class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-            label="Close"
-            @click="inspectingPayloadLog = null"
-          />
+          <Button variant="solid" theme="green" label="Close" @click="inspectingPayloadLog = null"/>
         </div>
       </template>
     </Dialog>

@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
-import { Button, Combobox, Password, Select, TextInput, call, Dialog, toast } from 'frappe-ui'
+import { Alert, Button, Combobox, Password, Select, TextInput, call, Dialog, toast } from 'frappe-ui'
 import EmptyState from '@/components/EmptyState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 import LoadingState from '@/components/LoadingState.vue'
 import WhatsAppTemplatePreview from '@/components/templates/WhatsAppTemplatePreview.vue'
 import { errorText } from '@/utils/format'
 import { displayTitle } from '@/utils/titles'
+import { accountArg, labelForAccount } from '@/utils/accountSelection'
 import { userFacingError } from '@/utils/errors'
 import { fallbackSample } from '@/utils/templatePreview'
 import { useDesk } from '@/stores/desk'
@@ -51,7 +51,6 @@ const variableQueries = ref<Record<string, string>>({})
 const showPreview = ref(false)
 const alertVisible = ref<Record<string, number>>({})
 const siteLimit = ref(LIST_LIMIT)
-const accountQuery = ref('')
 const templateQuery = ref('')
 const described = ref<any>(null)
 const searchError = ref('')
@@ -103,15 +102,14 @@ const templateVariables = computed(() =>
     typeof row === 'string' ? { name: row, example: '' } : row,
   ),
 )
-const visibleSites = computed(() => sites.value.slice(0, siteLimit.value))
-const accountOptions = computed(() =>
-  limitedOptions(
-    accounts.value,
-    accountQuery.value,
-    siteForm.value.whatsapp_account,
-    (row: { name: string; account_name?: string }) => displayTitle(row.account_name) || 'WhatsApp account',
-  ),
-)
+const accountSites = computed(() => {
+  const account = currentAccount.value
+  if (!account) return []
+  return sites.value.filter((site) => !site.whatsapp_account || site.whatsapp_account === account)
+})
+const visibleSites = computed(() => accountSites.value.slice(0, siteLimit.value))
+const currentAccount = computed(() => accountArg(desk.account.value) || '')
+const currentAccountLabel = computed(() => labelForAccount(accounts.value, currentAccount.value))
 const doctypeOptions = computed(() => {
   const options = doctypeResults.value.slice(0, LIST_LIMIT).map((row) => ({
     label: row.name,
@@ -181,9 +179,6 @@ async function load() {
   error.value = null
   try {
     sites.value = (await call<any[]>('nudg.integrations.erpnext.api.list_sites')) || []
-    if (!siteForm.value.whatsapp_account && accounts.value.length) {
-      siteForm.value.whatsapp_account = accounts.value[0].name
-    }
   } catch (err) {
     error.value = errorText(err)
   } finally {
@@ -206,9 +201,17 @@ async function loadAlerts(site: any) {
 }
 
 async function connect() {
+  const account = currentAccount.value
+  if (!account) {
+    toast.error('Select a WhatsApp number in the top bar first.')
+    return
+  }
   busy.value = true
   try {
-    const result = await call<any>('nudg.integrations.erpnext.api.connect_site', { ...siteForm.value })
+    const result = await call<any>('nudg.integrations.erpnext.api.connect_site', {
+      ...siteForm.value,
+      whatsapp_account: account,
+    })
     siteForm.value.api_key = ''
     siteForm.value.api_secret = ''
     await load()
@@ -511,8 +514,15 @@ onMounted(load)
 <template>
   <div class="flex h-full min-h-0 flex-col bg-white">
     <header class="flex flex-wrap items-center gap-2 border-b border-outline-gray-2 bg-white px-4 py-2 sm:px-6">
-      <RouterLink to="/integrations" class="rounded-lg px-3 py-1.5 text-sm font-semibold text-ink-gray-6 hover:bg-surface-gray-2">WhatsApp numbers</RouterLink>
-      <RouterLink to="/integrations/erpnext" class="rounded-lg border border-[#075E54]/20 bg-[#075E54]/10 px-3 py-1.5 text-sm font-semibold text-[#075E54]">ERPNext</RouterLink>
+      <Button route="/integrations" size="sm" variant="ghost" label="WhatsApp numbers" />
+      <Button
+        route="/integrations/erpnext"
+        size="sm"
+        variant="subtle"
+        theme="green"
+        data-state="active"
+        label="ERPNext"
+      />
     </header>
 
     <div class="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
@@ -541,35 +551,42 @@ onMounted(load)
             <TextInput v-model="siteForm.site_url" label="Site URL" placeholder="https://company.frappe.cloud" required />
             <TextInput v-model="siteForm.api_key" label="API key" placeholder="API key" required />
             <Password v-model="siteForm.api_secret" label="API secret" placeholder="API secret" required />
-            <Combobox
-              v-model="siteForm.whatsapp_account"
-              v-model:query="accountQuery"
-              label="WhatsApp account"
-              placeholder="Search an account"
-              :options="accountOptions"
-              :filterable="false"
-              empty-text="No matching account"
-            />
+            <p class="text-xs text-ink-gray-5 sm:col-span-2">
+              WhatsApp account: {{ currentAccountLabel || 'Select a number in the top bar' }}
+            </p>
             <div class="flex items-end">
-              <Button variant="solid" :loading="busy" type="submit" label="Connect" />
+              <Button variant="solid" theme="green" loading-text="Connecting…" :loading="busy" type="submit" label="Connect" />
             </div>
           </form>
-          <p v-if="live && !sites.length" class="mt-4 text-sm text-ink-gray-6">No ERPNext sites connected yet.</p>
+          <p v-if="live && !accountSites.length" class="mt-4 text-sm text-ink-gray-6">No ERPNext sites connected yet.</p>
           <ul class="mt-4 divide-y divide-outline-gray-2">
             <li v-for="site in visibleSites" :key="site.name" class="py-3 text-sm">
               <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div class="min-w-0">
                   <div class="font-medium text-ink-gray-9">{{ siteTitle(site) }}</div>
                   <div class="break-words text-ink-gray-6">{{ siteDetail(site) }}</div>
-                  <div v-if="site.last_error" class="text-red-600">{{ userFacingError(site.last_error, 'This site could not connect.') }}</div>
+                  <Alert
+                    v-if="site.last_error"
+                    class="mt-2"
+                    theme="red"
+                    title="Couldn't connect to this site"
+                    :description="`${userFacingError(site.last_error, 'This site could not connect.')} Update the API key above and connect again.`"
+                    :primary-action="{ label: 'Refresh status', onClick: () => load() }"
+                  />
                 </div>
                 <div class="flex flex-wrap gap-2">
-                  <Button v-if="site.status === 'Connected'" variant="solid" class="bg-[#075E54] text-white hover:bg-[#128C7E]" @click="openAlert(site)">Add alert</Button>
+                  <Button v-if="site.status === 'Connected'" variant="solid" theme="green" @click="openAlert(site)">Add alert</Button>
                   <Button variant="subtle" :loading="busy" @click="toggleSite(site)">{{ site.status === 'Connected' ? 'Disable' : 'Enable' }}</Button>
                 </div>
               </div>
               <p v-if="alertsLoading[site.name]" class="mt-2 text-ink-gray-5">Loading alerts…</p>
-              <p v-else-if="alertErrors[site.name]" class="mt-2 text-red-600">{{ alertErrors[site.name] }}</p>
+              <Alert
+                v-else-if="alertErrors[site.name]"
+                class="mt-2"
+                theme="red"
+                :title="alertErrors[site.name]"
+                :primary-action="{ label: 'Retry', onClick: () => loadAlerts(site) }"
+              />
               <ul v-else-if="alerts[site.name]?.length" class="mt-2 divide-y divide-outline-gray-1 rounded-lg border border-outline-gray-2">
                 <li v-for="alert in visibleAlerts(site)" :key="alert.name" class="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                   <div class="min-w-0">
@@ -594,10 +611,10 @@ onMounted(load)
             </li>
           </ul>
           <Button
-            v-if="sites.length > visibleSites.length"
+            v-if="accountSites.length > visibleSites.length"
             class="mt-3"
             variant="subtle"
-            :label="`Show ${Math.min(LIST_LIMIT, sites.length - visibleSites.length)} more sites`"
+            :label="`Show ${Math.min(LIST_LIMIT, accountSites.length - visibleSites.length)} more sites`"
             @click="siteLimit += LIST_LIMIT"
           />
         </section>
@@ -609,7 +626,7 @@ onMounted(load)
         <p class="text-ink-gray-7">{{ verifyReason }}</p>
         <ul v-if="verifyChecks.length" class="space-y-2">
           <li v-for="check in verifyChecks" :key="check.name">
-            <div :class="check.ok ? 'font-medium text-[#075E54]' : 'font-medium text-red-600'">{{ check.name }}</div>
+            <div :class="check.ok ? 'font-medium text-ink-green-7' : 'font-medium text-red-600'">{{ check.name }}</div>
             <div class="text-ink-gray-6">{{ check.detail }}</div>
           </li>
         </ul>
@@ -617,7 +634,7 @@ onMounted(load)
         <p v-else class="text-ink-gray-6">Fix the items above on the client site, then connect again. Messages Nudg cannot deliver are kept here and sent when the site is back.</p>
       </div>
       <template #actions>
-        <Button variant="solid" class="bg-[#075E54] text-white hover:bg-[#128C7E]" label="Close" @click="verifyOpen = false" />
+        <Button variant="solid" theme="green" label="Close" @click="verifyOpen = false"/>
       </template>
     </Dialog>
 
@@ -708,7 +725,7 @@ onMounted(load)
       <template #actions>
         <div class="flex w-full items-center justify-end gap-2">
           <Button label="Cancel" @click="closeAlert" />
-          <Button variant="solid" class="bg-[#075E54] text-white hover:bg-[#128C7E]" :label="editing ? 'Save changes' : 'Create alert'" :loading="alertSaving" @click="saveAlert" />
+          <Button variant="solid" theme="green" loading-text="Saving…" :label="editing ? 'Save changes' : 'Create alert'" :loading="alertSaving" @click="saveAlert"/>
         </div>
       </template>
     </Dialog>

@@ -73,10 +73,20 @@ def _profile_fields() -> list[str]:
 	return fields
 
 
-def _tag_parts(raw) -> list[str]:
-	if isinstance(raw, (list, tuple)):
-		return [str(part).strip() for part in raw if str(part).strip()]
-	return [part.strip() for part in str(raw or "").split(",") if part.strip()]
+from nudg.services.inbox_helpers import (
+	WINDOW,
+	_assignment_people,
+	_clip,
+	_fold,
+	_iso,
+	_latest_activity,
+	_looks_like_datetime,
+	_row_dicts,
+	_stamp,
+	_tag_parts,
+	_window,
+	_window_from_messages,
+)
 ACCOUNT_FIELDS = ["name", "account_name", "status", "phone_id", "business_id", "app_id", "auto_read_receipts"]
 TEMPLATE_FIELDS = [
 	"name",
@@ -95,7 +105,6 @@ TEMPLATE_FIELDS = [
 	"whatsapp_account",
 	"variable_format",
 ]
-WINDOW = timedelta(hours=24)
 INBOX_PAGE = 30
 THREAD_PAGE = 40
 LOG_PAGE = 40
@@ -144,25 +153,6 @@ def _empty_inbox() -> dict:
 	}
 
 
-def _assignment_people(assignment: dict | None) -> tuple[str | None, list[str]]:
-	"""Primary assignee plus every open assignee. Unassigned conversations have neither."""
-	assignment = assignment or {}
-	status = assignment.get("assignment_status") or "Unassigned"
-	raw = assignment.get("assignees")
-	people: list[str] = []
-	if isinstance(raw, list):
-		for person in raw:
-			if person and person not in people:
-				people.append(person)
-	single = assignment.get("assignee")
-	if single and single not in people and status == "Assigned":
-		people.append(single)
-	if status != "Assigned":
-		people = []
-	primary = people[0] if people else None
-	return primary, people
-
-
 def _conversation_item(profile, preview, last_incoming, assignment, unread_count: int = 0, bot_info: dict | None = None) -> dict:
 	"""One inbox card. Shared by the list endpoint and the socket payload."""
 	window = _window(last_incoming)
@@ -178,6 +168,7 @@ def _conversation_item(profile, preview, last_incoming, assignment, unread_count
 		"phone_normalized": phone_norm,
 		"bot_status": bot_info,
 		"preview": preview,
+		"has_messages": bool(preview),
 		"window": window,
 		"conversation_status": status,
 		"needs_reply": status == "needs_reply",
@@ -460,6 +451,7 @@ def get_thread(profile: str, before_creation: str | None = None, limit: int | No
 		_enqueue_read_receipts(profile)
 
 	bot_info = chatbot.get_bot_status(prof.get("phone_number"), prof.get("whatsapp_account"))
+	from nudg.services.directory import recipient_lists_for_profile
 
 	return {
 		"profile": prof,
@@ -470,6 +462,9 @@ def get_thread(profile: str, before_creation: str | None = None, limit: int | No
 		"window": _thread_window(profile, folded),
 		"references": _references(folded),
 		"links": _profile_links(profile),
+		"recipient_lists": recipient_lists_for_profile(
+			profile, prof.get("phone_number"), prof.get("whatsapp_account")
+		),
 		"has_older": has_older,
 	}
 
@@ -814,12 +809,6 @@ def _assert_profile_allowed(profile: str) -> None:
 		_assert_account_allowed(account)
 
 
-def _row_dicts(value) -> list | None:
-	if isinstance(value, list):
-		return value
-	return None
-
-
 def _latest_previews(profile_names: list[str]) -> tuple[dict, dict]:
 	"""One latest message and the last incoming time per conversation."""
 	latest: dict[str, dict] = {}
@@ -931,17 +920,6 @@ def _thread_window(profile: str, messages: list) -> dict:
 	if _looks_like_datetime(created):
 		return _window(created)
 	return _window_from_messages(messages)
-
-
-def _looks_like_datetime(value) -> bool:
-	from datetime import date, datetime
-
-	if isinstance(value, (datetime, date)):
-		return True
-	if not isinstance(value, str):
-		return False
-	text = value.strip()
-	return len(text) >= 10 and text[4:5] == "-" and text[7:8] == "-"
 
 
 def _ready() -> bool:
@@ -1128,64 +1106,6 @@ def _rendered_for(raw: list) -> list:
 	return adapter.get_messages(json.dumps(pairs)) or []
 
 
-def _fold(messages: list) -> list:
-	# WA Message rows are stamped to ISO strings. Official get_messages rows
-	# still carry datetime creation, and a missing time falls back to "".
-	ordered = sorted(
-		messages,
-		key=lambda row: (_iso(row.get("creation")) or "", row.get("name") or ""),
-	)
-	# A retried webhook can leave two WA Message rows for one WhatsApp id.
-	# Keep the earliest so the thread shows that message once.
-	seen_ids: set[str] = set()
-	deduped = []
-	for row in ordered:
-		message_id = row.get("message_id")
-		if message_id:
-			if message_id in seen_ids:
-				continue
-			seen_ids.add(message_id)
-		deduped.append(row)
-	ordered = deduped
-	by_id = {row.get("message_id"): row for row in ordered if row.get("message_id")}
-	by_name = {row.get("name"): row for row in ordered}
-	reactions: dict[str, dict[str, str]] = {}
-	visible = []
-	for row in ordered:
-		target = row.get("context_message_id") or ""
-		if not target and row.get("reaction") and row.get("reply_to_message"):
-			quoted = by_name.get(row.get("reply_to_message"))
-			target = (quoted or {}).get("message_id") or ""
-		# NULL reaction is a normal message, including a reply. An empty string
-		# with a target is a retraction of an earlier emoji.
-		if row.get("reaction") is None or not target:
-			visible.append(row)
-			continue
-		bucket = reactions.setdefault(target, {})
-		direction = row.get("direction") or "Outgoing"
-		if row.get("reaction"):
-			bucket[direction] = row.get("reaction")
-		else:
-			bucket.pop(direction, None)
-
-	for row in visible:
-		row["reactions"] = [
-			{"emoji": emoji, "direction": direction}
-			for direction, emoji in reactions.get(row.get("message_id") or "", {}).items()
-		]
-		quoted = None
-		if row.get("reply_to_message"):
-			quoted = by_name.get(row.get("reply_to_message"))
-		elif row.get("context_message_id"):
-			quoted = by_id.get(row.get("context_message_id"))
-		if quoted and not quoted.get("reaction"):
-			row["reply_to"] = quoted.get("name")
-			row["reply_to_direction"] = quoted.get("direction")
-			row["reply_message"] = quoted.get("template") or quoted.get("message") or quoted.get("file_name") or _("Attachment")
-		row["is_template"] = bool(row.get("is_template"))
-	return visible
-
-
 def _attach_templates(messages: list) -> None:
 	pending = [
 		row
@@ -1254,23 +1174,6 @@ def _profile_links(profile: str) -> list:
 	return visible
 
 
-def _window(last_incoming: str | None) -> dict:
-	if not last_incoming:
-		return {"status": "unopened", "expires_at": None, "last_incoming_at": None}
-	opened = get_datetime(last_incoming)
-	expires = opened + WINDOW
-	status = "open" if expires > now_datetime() else "closed"
-	return {"status": status, "expires_at": expires.isoformat(), "last_incoming_at": opened.isoformat()}
-
-
-def _window_from_messages(messages: list) -> dict:
-	last = None
-	for row in messages:
-		if row.get("direction") == "Incoming" and not row.get("reaction"):
-			last = row.get("creation")
-	return _window(last)
-
-
 def get_window_state(profile: str) -> dict:
 	"""Return the 24-hour service window state for a given profile."""
 	from nudg.integrations.site_store import last_incoming_at
@@ -1285,12 +1188,6 @@ def get_window_state(profile: str) -> dict:
 		order_by="creation desc",
 	)
 	return _window(str(last_incoming) if last_incoming else None)
-
-
-def _latest_activity(item: dict) -> str:
-	"""Newest incoming or outgoing message. Chats with no message sort last."""
-	preview = item.get("preview") or {}
-	return str(preview.get("creation") or "")
 
 
 def _unread_counts(profile_names: list[str]) -> dict[str, int]:
@@ -1324,16 +1221,6 @@ def _unread_counts(profile_names: list[str]) -> dict[str, int]:
 	counts = {row.profile: int(row.unread or 0) for row in rows}
 	counts.update(remote_unread)
 	return counts
-
-
-def _stamp(row):
-	if not isinstance(row, frappe._dict):
-		row = frappe._dict(row)
-	row.creation = _iso(row.creation)
-	row.is_template = bool(row.get("is_template"))
-	if row.get("error_message"):
-		row.error_message = format_error_message(row.error_message)
-	return row
 
 
 def publish_inbox_change(
@@ -1462,22 +1349,3 @@ def _decorate_message(row):
 		if item.get("name") == row.get("name"):
 			return item
 	return row
-
-
-def _iso(value) -> str | None:
-	if not value:
-		return None
-	if isinstance(value, str):
-		return get_datetime(value).isoformat()
-	if hasattr(value, "isoformat"):
-		return value.isoformat()
-	return str(value)
-
-
-def _clip(value: str | None, limit: int = 8000) -> str | None:
-	if not value:
-		return value
-	text = str(value)
-	if len(text) <= limit:
-		return text
-	return text[:limit] + "…"

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
-import { Badge, Button, Checkbox, Dialog, dialog, FormControl, TabButtons, TextInput, toast } from 'frappe-ui'
+import { Alert, Badge, Button, Checkbox, Dialog, dialog, FormControl, TabButtons, TextInput, toast } from 'frappe-ui'
 import { NumberCard } from 'frappe-ui/charts'
 import DeskCard from '@/components/desk/DeskCard.vue'
 import DeskEmpty from '@/components/desk/DeskEmpty.vue'
@@ -75,11 +75,11 @@ const scheduleForOptions = [
   { label: 'WhatsApp template', value: 'Template' },
 ]
 const statusFilterOptions = computed(() => [
-  { label: `All (${rows.value.length})`, value: 'all', active: 'bg-[#075E54] text-white', idle: 'bg-surface-gray-2 text-ink-gray-6 hover:bg-surface-gray-3' },
-  { label: 'Scheduled', value: 'Scheduled', active: 'bg-gray-700 text-white', idle: 'bg-gray-100 text-gray-700 hover:bg-gray-200' },
-  { label: 'In Progress', value: 'In Progress', active: 'bg-blue-700 text-white', idle: 'bg-blue-50 text-blue-800 hover:bg-blue-100' },
-  { label: 'Completed', value: 'Completed', active: 'bg-emerald-700 text-white', idle: 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100' },
-  { label: 'Draft', value: 'Draft', active: 'bg-gray-700 text-white', idle: 'bg-gray-100 text-gray-700 hover:bg-gray-200' },
+  { label: `All (${rows.value.length})`, value: 'all', theme: 'gray' as const },
+  { label: 'Scheduled', value: 'Scheduled', theme: 'gray' as const },
+  { label: 'In Progress', value: 'In Progress', theme: 'blue' as const },
+  { label: 'Completed', value: 'Completed', theme: 'green' as const },
+  { label: 'Draft', value: 'Draft', theme: 'gray' as const },
 ])
 const recipientQuery = ref('')
 
@@ -294,7 +294,7 @@ const templateOptions = computed(() => {
 })
 
 const recipientListOptions = computed(() => {
-  const account = form.value.whatsapp_account
+  const account = currentAccount.value
   return recipientLists.value
     .filter((row) => Boolean(account) && (!row.whatsapp_account || row.whatsapp_account === account))
     .map((row) => ({
@@ -304,7 +304,7 @@ const recipientListOptions = computed(() => {
 })
 
 const profileOptions = computed(() => {
-  const account = form.value.whatsapp_account
+  const account = currentAccount.value
   return profiles.value
     .filter((row) => Boolean(account) && (!row.whatsapp_account || row.whatsapp_account === account))
     .map((row) => ({
@@ -462,6 +462,11 @@ function removeCampaign() {
 }
 
 async function saveCampaign() {
+  form.value.whatsapp_account = currentAccount.value
+  if (!form.value.whatsapp_account) {
+    toast.error('Select a WhatsApp number in the top bar first.')
+    return
+  }
   const templateMode = form.value.schedule_for === 'Template'
   const campaign = templateMode ? '' : form.value.campaign
   if (templateMode && !form.value.whatsapp_template) {
@@ -660,6 +665,11 @@ async function editCampaign(row: any) {
 }
 
 async function saveUtmCampaign() {
+  campaignForm.value.whatsapp_account = currentAccount.value
+  if (!campaignForm.value.whatsapp_account) {
+    toast.error('Select a WhatsApp number in the top bar first.')
+    return
+  }
   const name = campaignForm.value.name.trim()
   if (!name) {
     toast.error('Campaign name is required.')
@@ -808,24 +818,8 @@ watch(
             :loading="loading"
             @click="load"
           />
-          <Button
-            v-if="isManager && tab === 'campaigns'"
-            variant="solid"
-            size="sm"
-            class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-            icon-left="lucide-plus"
-            label="New campaign"
-            @click="startCampaign()"
-          />
-          <Button
-            v-else-if="isManager && tab === 'schedules'"
-            variant="solid"
-            size="sm"
-            class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-            icon-left="lucide-plus"
-            label="New schedule"
-            @click="startCreate()"
-          />
+          <Button v-if="isManager && tab === 'campaigns'" variant="solid" theme="green" size="sm" icon-left="lucide-plus" label="New campaign" @click="startCampaign()"/>
+          <Button v-else-if="isManager && tab === 'schedules'" variant="solid" theme="green" size="sm" icon-left="lucide-plus" label="New schedule" @click="startCreate()"/>
         </div>
       </div>
     </template>
@@ -833,19 +827,19 @@ watch(
     <div v-if="tab === 'campaigns'" class="min-h-0 flex-1 overflow-y-auto p-4">
       <div class="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
         <NumberCard title="Campaigns" :value="utmCampaigns.length" color="#374151" delta-caption="template and send-after" />
-        <NumberCard title="Schedules" :value="rows.length" color="#075E54" delta-caption="audiences waiting to send" />
+        <NumberCard title="Schedules" :value="rows.length" color="#047857" delta-caption="audiences waiting to send" />
         <NumberCard title="Sent" :value="bulkSent" color="#047857" delta-caption="from bulk messages" />
       </div>
       <DeskEmpty v-if="loading && !utmCampaigns.length" kind="loading" title="Loading campaigns…" />
       <DeskEmpty v-else-if="!utmCampaigns.length" kind="empty" title="No campaigns yet" description="A campaign stores the WhatsApp template and how many days after the start it sends. The audience and the clock live on a schedule.">
-        <Button v-if="isManager" variant="solid" class="mt-4 bg-[#075E54] text-white hover:bg-[#128C7E]" label="New campaign" icon-left="lucide-plus" @click="startCampaign()" />
+        <Button v-if="isManager" variant="solid" theme="green" label="New campaign" icon-left="lucide-plus" @click="startCampaign()" class="mt-4"/>
       </DeskEmpty>
       <div v-else class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <button
           v-for="row in utmCampaigns"
           :key="row.name"
           type="button"
-          class="rounded-xl border border-outline-gray-2 bg-white p-4 text-left hover:border-[#075E54]"
+          class="rounded-xl border border-outline-gray-2 bg-white p-4 text-left hover:border-outline-green-3"
           @click="isManager && editCampaign(row)"
         >
           <p class="font-semibold text-ink-gray-9">{{ displayTitle(row.campaign_name) || 'Campaign' }}</p>
@@ -862,7 +856,7 @@ watch(
     <div v-else-if="tab === 'results'" class="min-h-0 flex-1 overflow-y-auto p-4">
       <div class="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <NumberCard title="Bulk messages" :value="bulkRows.length" color="#374151" delta-caption="one per send day" />
-        <NumberCard title="Recipients" :value="bulkRecipients" color="#075E54" delta-caption="subscribed rows only" />
+        <NumberCard title="Recipients" :value="bulkRecipients" color="#047857" delta-caption="subscribed rows only" />
         <NumberCard title="Sent" :value="bulkSent" color="#047857" delta-caption="delivered to WhatsApp" />
         <NumberCard title="Failed" :value="bulkFailed" color="#B91C1C" delta-caption="not accepted" />
       </div>
@@ -872,7 +866,11 @@ watch(
         <li v-for="row in bulkRows" :key="row.name" class="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div class="min-w-0">
             <div class="flex items-center gap-2">
-              <Badge :label="row.status || 'Draft'" :theme="row.status === 'Completed' ? 'green' : row.status === 'Failed' ? 'red' : 'blue'" />
+              <Badge
+                v-if="row.status && row.status !== 'Draft'"
+                :label="row.status"
+                :theme="row.status === 'Completed' ? 'green' : row.status === 'Failed' ? 'red' : 'blue'"
+              />
               <span class="truncate text-sm font-semibold text-ink-gray-9">{{ displayTitle(row.title, row.campaign_label) || 'Bulk message' }}</span>
             </div>
             <p class="mt-1 text-xs text-ink-gray-5">{{ displayTitle(row.campaign_label, row.campaign) || 'No campaign' }} · {{ displayTitle(row.template_label, row.template) || 'No template' }}</p>
@@ -889,7 +887,7 @@ watch(
     <template v-else>
     <div class="hidden shrink-0 grid-cols-2 gap-3 border-b border-outline-gray-2 px-4 py-3 sm:grid sm:grid-cols-4">
       <NumberCard title="Schedules" :value="totalCampaignsCount" color="#374151" delta-caption="whatsapp campaigns" />
-      <NumberCard title="Recipients" :value="totalRecipients" color="#075E54" delta-caption="including unsubscribed" />
+      <NumberCard title="Recipients" :value="totalRecipients" color="#047857" delta-caption="including unsubscribed" />
       <NumberCard title="Sent" :value="totalSent" color="#047857" delta-caption="from bulk messages" />
       <NumberCard title="Failed" :value="totalFailed" color="#B91C1C" delta-caption="from bulk messages" />
     </div>
@@ -902,14 +900,7 @@ watch(
       title="No schedules yet"
       description="Pick a campaign, an audience, a start date, and the time this client should send. Unsubscribed rows are left out of the bulk message."
     >
-      <Button
-        variant="solid"
-        class="mt-4 bg-[#075E54] text-white hover:bg-[#128C7E]"
-        v-if="isManager"
-        label="New schedule"
-        icon-left="lucide-plus"
-        @click="startCreate()"
-      />
+      <Button variant="solid" theme="green" v-if="isManager" label="New schedule" icon-left="lucide-plus" @click="startCreate()" class="mt-4"/>
     </DeskEmpty>
 
     <!-- Master-Detail Workspace Grid -->
@@ -940,7 +931,9 @@ watch(
               :key="option.value"
               size="sm"
               :variant="statusFilter === option.value ? 'solid' : 'subtle'"
-              :class="statusFilter === option.value ? option.active : option.idle"
+              :theme="option.theme"
+              :data-state="statusFilter === option.value ? 'active' : undefined"
+              :aria-pressed="statusFilter === option.value"
               :label="option.label"
               @click="statusFilter = option.value as typeof statusFilter"
             />
@@ -953,10 +946,10 @@ watch(
             v-for="row in filteredRows"
             :key="row.name"
             type="button"
-            class="flex w-full flex-col gap-2 p-3.5 text-left transition-all hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#128C7E]"
+            class="flex w-full flex-col gap-2 p-3.5 text-left transition-all hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-green-3"
             :class="
               selected?.name === row.name
-                ? 'border-l-4 border-l-[#075E54] bg-teal-50/70 shadow-2xs'
+                ? 'border-l-4 border-l-green-700 bg-teal-50/70 shadow-2xs'
                 : 'border-l-4 border-l-transparent'
             "
             @click="open(row)"
@@ -966,6 +959,7 @@ watch(
                 {{ displayTitle(row.campaign_name) || 'Schedule' }}
               </span>
               <Badge
+                v-if="row.status && row.status !== 'Draft'"
                 :label="row.status"
                 :theme="row.status === 'Completed' ? 'green' : row.status === 'Failed' ? 'red' : row.status === 'In Progress' ? 'blue' : 'gray'"
                 size="sm"
@@ -974,7 +968,7 @@ watch(
 
             <div class="flex items-center gap-2 text-xs text-ink-gray-5">
               <span class="inline-flex items-center gap-1 font-medium text-ink-gray-7">
-                <span class="lucide-layout-template size-3 text-[#075E54]" />
+                <span class="lucide-layout-template size-3 text-ink-green-7" />
                 {{ displayTitle(row.template_label, row.template) || 'No template' }}
               </span>
               <span>·</span>
@@ -1010,6 +1004,7 @@ watch(
             <div>
               <div class="flex items-center gap-2">
                 <Badge
+                  v-if="selected.status && selected.status !== 'Draft'"
                   :label="selected.status"
                   :theme="selected.status === 'Completed' ? 'green' : selected.status === 'Failed' ? 'red' : selected.status === 'In Progress' ? 'blue' : 'gray'"
                 />
@@ -1028,7 +1023,7 @@ watch(
               </p>
               <ul v-if="selected.whatsapp_schedules?.length" class="mt-2 space-y-1 text-xs text-ink-gray-7">
                 <li v-for="(row, index) in selected.whatsapp_schedules" :key="index">
-                  <span class="text-[#075E54]">{{ displayTitle(row.template_label, row.whatsapp_template) || 'Template' }}</span>
+                  <span class="text-ink-green-7">{{ displayTitle(row.template_label, row.whatsapp_template) || 'Template' }}</span>
                   · day {{ row.send_after_days || 0 }}
                   · {{ row.variable_type || 'Common' }}
                 </li>
@@ -1036,15 +1031,7 @@ watch(
             </div>
 
             <div class="flex items-center gap-2 shrink-0">
-              <Button
-                v-if="isManager && (selected.status === 'Scheduled' || selected.status === 'In Progress')"
-                variant="solid"
-                class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-                label="Send bulk message"
-                icon-left="lucide-send"
-                :loading="busy"
-                @click="confirmRunOpen = true"
-              />
+              <Button v-if="isManager && (selected.status === 'Scheduled' || selected.status === 'In Progress')" variant="solid" theme="green" label="Send bulk message" icon-left="lucide-send" loading-text="Sending…" :loading="busy" @click="confirmRunOpen = true"/>
               <Button
                 v-if="isManager && canEdit(selected)"
                 variant="subtle"
@@ -1062,16 +1049,13 @@ watch(
             </div>
           </div>
 
-          <!-- Error Banner if failed -->
-          <div
+          <Alert
             v-if="selected.last_error"
-            class="rounded-xl border border-red-200 bg-red-50 p-4 text-xs text-red-800"
-          >
-            <p class="font-semibold flex items-center gap-1.5 text-red-900">
-              <span class="lucide-alert-circle size-4" /> Execution Issue Encountered
-            </p>
-            <p class="mt-1">{{ formatErrorMessage(selected.last_error) }}</p>
-          </div>
+            theme="red"
+            title="Couldn't complete this schedule"
+            :description="formatErrorMessage(selected.last_error)"
+            :primary-action="{ label: 'Retry', onClick: () => load() }"
+          />
 
           <!-- Broadcast Funnel Metrics -->
           <section aria-labelledby="funnel-heading">
@@ -1120,7 +1104,7 @@ watch(
                   class="flex items-center justify-between p-3 hover:bg-surface-gray-1 transition-colors"
                 >
                   <div class="flex items-center gap-3 min-w-0">
-                    <span class="grid size-8 shrink-0 place-items-center rounded-full bg-teal-100 text-[11px] font-bold text-[#075E54]">
+                    <span class="grid size-8 shrink-0 place-items-center rounded-full bg-teal-100 text-[11px] font-bold text-ink-green-7">
                       {{ initials(rec.profile || rec.phone_number) }}
                     </span>
                     <div class="min-w-0">
@@ -1149,7 +1133,7 @@ watch(
         <!-- Empty Canvas when no campaign is selected -->
         <div v-else class="grid flex-1 place-items-center p-8 text-center text-xs text-ink-gray-5">
           <div class="max-w-sm space-y-3">
-            <div class="mx-auto grid size-12 place-items-center rounded-xl bg-teal-50 text-[#075E54]">
+            <div class="mx-auto grid size-12 place-items-center rounded-xl bg-teal-50 text-ink-green-7">
               <span class="lucide-megaphone size-6" />
             </div>
             <p class="text-sm font-semibold text-ink-gray-9">Select a schedule</p>
@@ -1187,7 +1171,7 @@ watch(
           :options="campaignOptions"
         />
         <p class="text-xs text-ink-gray-5">
-          WhatsApp account: {{ displayTitle(currentAccountLabel) || 'Chosen on the campaign' }}
+          WhatsApp account: {{ displayTitle(currentAccountLabel) || 'Select a number in the top bar' }}
         </p>
         <FormControl
           :model-value="form.recipient_type"
@@ -1220,14 +1204,7 @@ watch(
       <template #actions>
         <div class="flex justify-end gap-2">
           <Button label="Cancel" @click="editorOpen = false" />
-          <Button
-            variant="solid"
-            class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-            :label="editorMode === 'edit' ? 'Save' : 'Create schedule'"
-            :loading="saving || (editorMode === 'edit' && !recipientsReady)"
-            :disabled="editorMode === 'edit' && !recipientsReady"
-            @click="saveCampaign"
-          />
+          <Button variant="solid" theme="green" loading-text="Saving…" :label="editorMode === 'edit' ? 'Save' : 'Create schedule'" :loading="saving || (editorMode === 'edit' && !recipientsReady)" :disabled="editorMode === 'edit' && !recipientsReady" @click="saveCampaign"/>
         </div>
       </template>
     </Dialog>
@@ -1236,6 +1213,9 @@ watch(
       <div class="space-y-3 py-1 text-sm">
         <FormControl v-model="campaignForm.name" type="text" label="Name" placeholder="Festive allocation" required />
         <FormControl v-model="campaignForm.description" type="textarea" label="Description" :rows="3" />
+        <p class="text-xs text-ink-gray-5">
+          WhatsApp account: {{ displayTitle(currentAccountLabel) || 'Select a number in the top bar' }}
+        </p>
         <div class="space-y-2">
           <p class="text-sm font-medium text-ink-gray-8">Templates</p>
           <div class="overflow-hidden rounded-lg border border-outline-gray-2">
@@ -1272,7 +1252,7 @@ watch(
       <template #actions>
         <div class="flex justify-end gap-2">
           <Button label="Cancel" @click="campaignEditorOpen = false" />
-          <Button variant="solid" class="bg-[#075E54] text-white hover:bg-[#128C7E]" :label="campaignEditorMode === 'edit' ? 'Save' : 'Create campaign'" :loading="saving" @click="saveUtmCampaign" />
+          <Button variant="solid" theme="green" loading-text="Saving…" :label="campaignEditorMode === 'edit' ? 'Save' : 'Create campaign'" :loading="saving" @click="saveUtmCampaign"/>
         </div>
       </template>
     </Dialog>
@@ -1300,7 +1280,7 @@ watch(
           </div>
           <div class="flex justify-between py-2">
             <dt class="text-ink-gray-5">Recipients Count:</dt>
-            <dd class="font-bold text-[#075E54]">{{ selected.recipients?.length || 0 }} contacts</dd>
+            <dd class="font-bold text-ink-green-7">{{ selected.recipients?.length || 0 }} contacts</dd>
           </div>
         </dl>
 
@@ -1312,14 +1292,7 @@ watch(
       <template #actions>
         <div class="flex justify-end gap-2">
           <Button label="Cancel" @click="confirmRunOpen = false" />
-          <Button
-            variant="solid"
-            class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-            label="Create bulk message"
-            icon-left="lucide-send"
-            :loading="busy"
-            @click="run(selected.name)"
-          />
+          <Button variant="solid" theme="green" loading-text="Sending…" label="Create bulk message" icon-left="lucide-send" :loading="busy" @click="run(selected.name)"/>
         </div>
       </template>
     </Dialog>

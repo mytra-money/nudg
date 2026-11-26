@@ -137,6 +137,7 @@ export interface BotStatus {
 export interface Conversation {
   profile: Profile
   preview: ChatMessage | null
+  has_messages?: boolean
   window: WindowState
   /** Single status field used by the inbox filter. */
   conversation_status: ConversationStatus
@@ -169,6 +170,12 @@ export interface ConversationNote {
   creation: string
 }
 
+export interface RecipientListRef {
+  name: string
+  list_name: string
+  whatsapp_account?: string
+}
+
 export interface Thread {
   profile: Profile
   messages: ChatMessage[]
@@ -176,6 +183,7 @@ export interface Thread {
   window: WindowState
   references: DocLink[]
   links: DocLink[]
+  recipient_lists?: RecipientListRef[]
   has_older?: boolean
   bot_status?: BotStatus
   tags?: string[]

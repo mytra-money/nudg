@@ -69,3 +69,31 @@ export function saveDirectoryRecipientList(payload: {
 export function deleteDirectoryRecipientList(name: string) {
   return call<{ name: string; deleted: boolean }>('nudg.desk_api.delete_directory_recipient_list', { name })
 }
+
+export function addProfileToRecipientList(profile: string, recipient_list: string) {
+  return call<DirectoryRecipientList & { added?: boolean }>(
+    'nudg.desk_api.add_profile_to_recipient_list',
+    { profile, recipient_list },
+  )
+}
+
+export function removeProfileFromRecipientList(profile: string, recipient_list: string) {
+  return call<DirectoryRecipientList & { removed?: boolean }>(
+    'nudg.desk_api.remove_profile_from_recipient_list',
+    { profile, recipient_list },
+  )
+}
+
+export interface DirectoryImportResult {
+  created: number
+  updated: number
+  failed: number
+  errors: Array<{ row: number; phone: string; error: string }>
+}
+
+export function importDirectoryProfiles(file_url: string, whatsapp_account: string) {
+  return call<DirectoryImportResult>('nudg.desk_api.import_directory_profiles', {
+    file_url,
+    whatsapp_account,
+  })
+}

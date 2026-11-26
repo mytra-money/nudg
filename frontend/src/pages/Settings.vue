@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { Alert, Badge, Button, call, Checkbox, Dialog, dialog, FormControl, Password, TabButtons, TextInput, toast } from 'frappe-ui'
+import { Alert, Avatar, Badge, Button, call, Checkbox, Dialog, dialog, FormControl, ItemListRow, Password, TabButtons, TextInput, toast } from 'frappe-ui'
 import { NumberCard } from 'frappe-ui/charts'
 import DeskCard from '@/components/desk/DeskCard.vue'
 import DeskEmpty from '@/components/desk/DeskEmpty.vue'
 import DeskPage from '@/components/desk/DeskPage.vue'
-import DeskTable from '@/components/desk/DeskTable.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import { errorText } from '@/utils/format'
+import { accountArg, labelForAccount } from '@/utils/accountSelection'
 import { deleteQuickReply, listQuickReplies, saveQuickReply, updateWhatsappAccount } from '@/services/catalogApi'
 import { isManager, useDesk } from '@/stores/desk'
 import { router } from '@/router'
@@ -82,7 +82,6 @@ const fallbackTeamMembers: TeamMember[] = [
 // New Quick Reply Form State
 const newTitle = ref('')
 const newShortcut = ref('')
-const newChannel = ref('')
 const newBody = ref('')
 const editingReply = ref<string | null>(null)
 const replyStatus = ref('Active')
@@ -196,11 +195,9 @@ const statusOptions = [
   { label: 'Active', value: 'Active' },
   { label: 'Inactive', value: 'Inactive' },
 ]
-const accountOptions = computed(() =>
-  (desk.inbox.value?.accounts || []).map((account) => ({
-    label: account.account_name || account.name,
-    value: account.name,
-  })),
+const currentAccount = computed(() => accountArg(desk.account.value) || '')
+const currentAccountLabel = computed(() =>
+  labelForAccount(desk.inbox.value?.accounts || [], currentAccount.value),
 )
 function openIntegrations() {
   void router.push('/integrations')
@@ -211,7 +208,6 @@ function startReply(row?: any) {
   newTitle.value = row?.title || ''
   newShortcut.value = row?.shortcut || ''
   newBody.value = row?.body || ''
-  newChannel.value = desk.account.value || row?.whatsapp_account || ''
   replyStatus.value = row?.status === 'Inactive' ? 'Inactive' : 'Active'
   showCreateModal.value = true
 }
@@ -334,6 +330,10 @@ async function handleSaveQuickReply() {
   }
 
   const cleanShortcut = newShortcut.value.trim().replace(/^\/+/, '')
+  if (!currentAccount.value) {
+    showToast('Select a WhatsApp number in the top bar first.', true)
+    return
+  }
   if (desk.mode.value === 'live') {
     try {
       await saveQuickReply({
@@ -341,7 +341,7 @@ async function handleSaveQuickReply() {
         title: newTitle.value.trim(),
         shortcut: cleanShortcut || undefined,
         body: newBody.value.trim(),
-        whatsapp_account: newChannel.value || undefined,
+        whatsapp_account: currentAccount.value,
         status: replyStatus.value,
       })
       showToast(editingReply.value ? `Quick reply "${newTitle.value.trim()}" updated.` : `Quick reply "${newTitle.value.trim()}" created.`)
@@ -361,7 +361,7 @@ async function handleSaveQuickReply() {
     name: `QR-${Date.now()}`,
     title: newTitle.value.trim(),
     shortcut: cleanShortcut || undefined,
-    whatsapp_account: newChannel.value || 'Sundarban Sales',
+    whatsapp_account: currentAccount.value,
     status: 'Active',
     usage_count: 0,
     body: newBody.value.trim(),
@@ -409,9 +409,15 @@ async function loadTeamMembers() {
   }
   teamLoading.value = true
   try {
+    const account = currentAccount.value
+    if (!account) {
+      teamMembers.value = []
+      pendingInvites.value = []
+      return
+    }
     const [res, invites] = await Promise.all([
-      call('nudg.desk_api.list_team_members'),
-      call('nudg.desk_api.list_team_invitations'),
+      call('nudg.desk_api.list_team_members', { account }),
+      call('nudg.desk_api.list_team_invitations', { account }),
     ])
     teamMembers.value = Array.isArray(res) ? res : []
     pendingInvites.value = Array.isArray(invites) ? invites : []
@@ -429,12 +435,9 @@ async function loadTeamMembers() {
   }
 }
 
-const selectedTeamAccount = ref('')
-
 function openInviteModal() {
   inviteEmails.value = ''
   newMemberRole.value = 'WhatsApp Manager'
-  selectedTeamAccount.value = desk.account.value || accountOptions.value[0]?.value || ''
   showAddMemberModal.value = true
 }
 
@@ -444,9 +447,9 @@ async function handleInviteMembers() {
     showToast('Enter at least one email address.', true)
     return
   }
-  const account = selectedTeamAccount.value || desk.inbox.value?.accounts?.[0]?.name || ''
+  const account = currentAccount.value
   if (!account) {
-    showToast('Choose a WhatsApp account for this invitation.', true)
+    showToast('Select a WhatsApp number in the top bar first.', true)
     return
   }
   isSubmittingMember.value = true
@@ -510,7 +513,11 @@ function openEditMember(member: TeamMember) {
 async function handleUpdateMember() {
   if (!editingMember.value) return
   try {
-    const acc = editingMember.value.account || desk.inbox.value?.accounts?.[0]?.name || ''
+    const acc = currentAccount.value
+    if (!acc) {
+      showToast('Select a WhatsApp number in the top bar first.', true)
+      return
+    }
     await call('nudg.desk_api.update_team_member', {
       account: acc,
       email: editingMember.value.email,
@@ -548,6 +555,7 @@ watch(
   () => desk.account.value,
   () => {
     void load()
+    void loadTeamMembers()
   },
 )
 
@@ -570,14 +578,7 @@ onMounted(() => {
         @click="handleRefresh"
       />
 
-      <Button
-        v-if="isManager"
-        variant="solid"
-        size="sm"
-        class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-        label="Integrations"
-        @click="openIntegrations"
-      />
+      <Button v-if="isManager" variant="solid" theme="green" size="sm" label="Integrations" @click="openIntegrations"/>
     </template>
 
     <template #tabs>
@@ -605,13 +606,13 @@ onMounted(() => {
         <NumberCard
           title="Configured Shortcuts"
           :value="allReplies.length"
-          color="#075E54"
+          color="#047857"
           delta-caption='Triggerable via "/" in composer'
         />
         <NumberCard
           title="Most Used Shortcut"
           :value="'/' + (mostUsedReply?.shortcut || 'greet')"
-          color="#075E54"
+          color="#047857"
           :delta-caption="`${mostUsedReply?.usage_count || 0} times · ${mostUsedReply?.title || 'Welcome Greeting'}`"
         />
         <NumberCard
@@ -636,14 +637,7 @@ onMounted(() => {
           </TextInput>
 
           <div class="flex items-center gap-2">
-            <Button
-              variant="solid"
-              size="sm"
-              class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-              icon-left="lucide-plus"
-              label="New Quick Reply"
-              @click="startReply()"
-            />
+            <Button variant="solid" theme="green" size="sm" icon-left="lucide-plus" label="New Quick Reply" @click="startReply()"/>
           </div>
         </div>
       </DeskCard>
@@ -702,13 +696,7 @@ onMounted(() => {
         title="No Quick Replies Found"
         description="No replies match the current filter or search criteria."
       >
-        <Button
-          variant="solid"
-          size="sm"
-          class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-          label="Reset Filters"
-          @click="searchQuery = ''"
-        />
+        <Button variant="solid" theme="green" size="sm" label="Reset Filters" @click="searchQuery = ''"/>
       </EmptyState>
       </template>
     </div>
@@ -720,7 +708,7 @@ onMounted(() => {
           <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
             <span class="lucide-users size-5" />
           </div>
-          <h3 class="text-sm font-semibold text-ink-gray-9">Frappe Assignment Rules</h3>
+          <h3 class="text-sm font-semibold text-ink-gray-9">Assignment rules</h3>
           <p class="mt-1 text-xs text-ink-gray-6 leading-relaxed">
             Assign conversations from the inbox, and add agents from the Team tab.
           </p>
@@ -773,7 +761,7 @@ onMounted(() => {
             <div>
               <h2 class="text-lg font-bold text-ink-gray-9">{{ account.account_name || 'WhatsApp account' }}</h2>
               <p class="mt-1 text-xs text-ink-gray-5">{{ account.status }}</p>
-              <p v-if="account.is_default" class="mt-1 text-xs font-medium text-[#075E54]">Default number</p>
+              <p v-if="account.is_default" class="mt-1 text-xs font-medium text-ink-green-7">Default number</p>
             </div>
             <Button
               v-if="isManager"
@@ -788,7 +776,7 @@ onMounted(() => {
       <DeskCard v-else>
         <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between border-b border-outline-gray-2 pb-5">
           <div class="flex items-start gap-4">
-            <div class="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#075E54] text-white shadow-sm font-bold text-xl">
+            <div class="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-surface-green-7 text-ink-base shadow-sm font-bold text-xl">
               SS
             </div>
             <div>
@@ -844,16 +832,10 @@ onMounted(() => {
     <div v-else-if="activeTab === 'team'" class="space-y-6">
       <DeskCard
         title="Team Members & Agents"
-        description="Invite people by email. They set their own password from the invitation, the same way Frappe CRM does."
+        description="Invite people by email. They'll set their own password from the invitation."
       >
         <template #actions>
-          <Button
-            variant="solid"
-            class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-            label="Invite"
-            icon-left="lucide-user-plus"
-            @click="openInviteModal"
-          />
+          <Button variant="solid" theme="green" label="Invite" icon-left="lucide-user-plus" @click="openInviteModal"/>
         </template>
 
         <div v-if="pendingInvites.length" class="mb-4">
@@ -882,50 +864,41 @@ onMounted(() => {
           description="Invite an agent. They join from the email and choose their own password."
         />
 
-        <!-- Members Table -->
-        <DeskTable v-else>
-          <template #head>
-            <tr>
-              <th class="px-4 py-3 font-semibold">Agent</th>
-              <th class="px-4 py-3 font-semibold">Role</th>
-              <th class="px-4 py-3 font-semibold">WhatsApp Account</th>
-              <th class="px-4 py-3 font-semibold">Status</th>
-              <th class="px-4 py-3 text-right font-semibold">Action</th>
-            </tr>
-          </template>
-          <tr v-for="member in teamMembers" :key="member.email" class="hover:bg-surface-gray-1">
-            <td class="px-4 py-3">
-              <div class="flex items-center gap-3">
-                <div class="flex h-8 w-8 items-center justify-center rounded-full bg-[#075E54]/10 text-xs font-bold text-[#075E54]">
-                  {{ member.full_name?.charAt(0) || 'U' }}
-                </div>
-                <div>
-                  <p class="font-semibold text-ink-gray-9">{{ member.full_name }}</p>
-                  <p class="text-[11px] text-ink-gray-5 font-mono">{{ member.email }}</p>
-                </div>
+        <!-- Members List -->
+        <div v-else class="divide-y divide-outline-gray-1 rounded-lg border border-outline-gray-2 bg-white">
+          <ItemListRow
+            v-for="member in teamMembers"
+            :key="member.email"
+            as="div"
+            size="lg"
+            class="px-4 py-3 hover:bg-surface-gray-1"
+          >
+            <template #prefix>
+              <Avatar :label="member.full_name || member.email" size="md" />
+            </template>
+            <template #label>
+              <div class="min-w-0">
+                <p class="truncate text-sm font-semibold text-ink-gray-9">{{ member.full_name }}</p>
+                <p class="truncate font-mono text-[11px] text-ink-gray-5">{{ member.email }}</p>
               </div>
-            </td>
-            <td class="px-4 py-3">
-              <Badge :theme="member.role === 'WhatsApp Manager' ? 'violet' : 'blue'" :label="member.role" />
-            </td>
-            <td class="px-4 py-3 text-ink-gray-7 font-medium">
-              {{ member.account || 'All Permitted' }}
-            </td>
-            <td class="px-4 py-3">
-              <Badge :theme="member.enabled ? 'green' : 'red'" :label="member.enabled ? 'Active' : 'Disabled'" />
-            </td>
-            <td class="px-4 py-3 text-right">
-              <Button
-                v-if="!member.is_owner"
-                variant="ghost"
-                size="sm"
-                label="Edit"
-                @click="openEditMember(member)"
-              />
-              <span v-else class="text-ink-gray-4 text-[11px]">Owner</span>
-            </td>
-          </tr>
-        </DeskTable>
+            </template>
+            <template #suffix>
+              <div class="flex flex-wrap items-center justify-end gap-2">
+                <Badge :theme="member.role === 'WhatsApp Manager' ? 'violet' : 'blue'" :label="member.role" size="sm" />
+                <Badge :label="member.account || 'All permitted'" variant="subtle" theme="gray" size="sm" />
+                <Badge :theme="member.enabled ? 'green' : 'red'" :label="member.enabled ? 'Active' : 'Disabled'" size="sm" />
+                <Button
+                  v-if="!member.is_owner"
+                  variant="ghost"
+                  size="sm"
+                  label="Edit"
+                  @click="openEditMember(member)"
+                />
+                <span v-else class="px-2 text-[11px] text-ink-gray-4">Owner</span>
+              </div>
+            </template>
+          </ItemListRow>
+        </div>
       </DeskCard>
     </div>
 
@@ -953,6 +926,9 @@ onMounted(() => {
           label="Role"
           :options="roleOptions"
         />
+        <p class="text-xs text-ink-gray-5">
+          WhatsApp account: {{ currentAccountLabel || 'Select a number in the top bar' }}
+        </p>
       </div>
 
       <template #actions>
@@ -962,13 +938,7 @@ onMounted(() => {
             label="Cancel"
             @click="showAddMemberModal = false"
           />
-          <Button
-            variant="solid"
-            class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-            :loading="isSubmittingMember"
-            label="Send invitation"
-            @click="handleInviteMembers"
-          />
+          <Button variant="solid" theme="green" loading-text="Sending…" :loading="isSubmittingMember" label="Send invitation" @click="handleInviteMembers"/>
         </div>
       </template>
     </Dialog>
@@ -986,6 +956,9 @@ onMounted(() => {
           label="Role"
           :options="editRoleOptions"
         />
+        <p class="text-xs text-ink-gray-5">
+          WhatsApp account: {{ currentAccountLabel || 'Select a number in the top bar' }}
+        </p>
         <Checkbox v-model="editEnabled" label="Account Enabled" />
       </div>
 
@@ -996,12 +969,7 @@ onMounted(() => {
             label="Cancel"
             @click="showEditMemberModal = false"
           />
-          <Button
-            variant="solid"
-            class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-            label="Save Changes"
-            @click="handleUpdateMember"
-          />
+          <Button variant="solid" theme="green" loading-text="Saving…" label="Save Changes" @click="handleUpdateMember"/>
         </div>
       </template>
     </Dialog>
@@ -1051,7 +1019,7 @@ onMounted(() => {
       <template #actions>
         <div class="flex w-full justify-end gap-2">
           <Button variant="subtle" label="Cancel" @click="accountEditorOpen = false" />
-          <Button variant="solid" class="bg-[#075E54] text-white hover:bg-[#128C7E]" label="Save" @click="saveAccount" />
+          <Button variant="solid" theme="green" loading-text="Saving…" label="Save" @click="saveAccount"/>
         </div>
       </template>
     </Dialog>
@@ -1093,6 +1061,10 @@ onMounted(() => {
           />
         </div>
 
+        <p class="text-xs text-ink-gray-5">
+          WhatsApp account: {{ currentAccountLabel || 'Select a number in the top bar' }}
+        </p>
+
         <FormControl
           v-model="newBody"
           type="textarea"
@@ -1117,12 +1089,7 @@ onMounted(() => {
               @click="removeReply"
             />
           </div>
-          <Button
-            variant="solid"
-            class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-            :label="editingReply ? 'Save Quick Reply' : 'Create Quick Reply'"
-            @click="handleSaveQuickReply"
-          />
+          <Button variant="solid" theme="green" :label="editingReply ? 'Save Quick Reply' : 'Create Quick Reply'" @click="handleSaveQuickReply"/>
         </div>
       </template>
     </Dialog>

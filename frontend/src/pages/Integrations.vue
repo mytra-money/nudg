@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { useRoute } from 'vue-router'
+import { Badge, Button } from 'frappe-ui'
 import AccountsView from '@/components/AccountsView.vue'
 import { useDesk } from '@/stores/desk'
 
@@ -19,55 +20,40 @@ const isAccountsActive = computed(() => route.path === '/integrations' || route.
     <!-- Sub-navigation Header -->
     <header class="flex flex-wrap items-center justify-between border-b border-outline-gray-2 bg-white px-4 py-2 sm:px-6">
       <div class="flex items-center gap-1 sm:gap-2">
-        <RouterLink
-          to="/integrations"
-          class="flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold sm:text-sm transition-all"
-          :class="
-            isAccountsActive
-              ? 'bg-[#075E54]/10 text-[#075E54] border border-[#075E54]/20 shadow-xs'
-              : 'text-ink-gray-6 hover:bg-surface-gray-2 hover:text-ink-gray-9'
-          "
-        >
-          <span class="lucide-radio size-4" />
-          <span>WhatsApp numbers</span>
-        </RouterLink>
+        <Button
+          route="/integrations"
+          size="sm"
+          icon-left="lucide-radio"
+          label="WhatsApp numbers"
+          :variant="isAccountsActive ? 'subtle' : 'ghost'"
+          :theme="isAccountsActive ? 'green' : 'gray'"
+          :data-state="isAccountsActive ? 'active' : undefined"
+        />
 
-        <RouterLink
-          to="/integrations/erpnext"
-          class="flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold sm:text-sm transition-all"
-          :class="
-            route.path.includes('/erpnext')
-              ? 'bg-[#075E54]/10 text-[#075E54] border border-[#075E54]/20 shadow-xs'
-              : 'text-ink-gray-6 hover:bg-surface-gray-2 hover:text-ink-gray-9'
-          "
-        >
-          <span class="lucide-building-2 size-4" />
-          <span>ERPNext</span>
-        </RouterLink>
+        <Button
+          route="/integrations/erpnext"
+          size="sm"
+          icon-left="lucide-building-2"
+          label="ERPNext"
+          :variant="route.path.includes('/erpnext') ? 'subtle' : 'ghost'"
+          :theme="route.path.includes('/erpnext') ? 'green' : 'gray'"
+          :data-state="route.path.includes('/erpnext') ? 'active' : undefined"
+        />
 
-        <RouterLink
+        <Button
           v-if="showLogs"
-          to="/integrations/logs"
-          class="flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold sm:text-sm transition-all"
-          :class="
-            route.path.includes('/logs')
-              ? 'bg-[#075E54]/10 text-[#075E54] border border-[#075E54]/20 shadow-xs'
-              : 'text-ink-gray-6 hover:bg-surface-gray-2 hover:text-ink-gray-9'
-          "
-        >
-          <span class="lucide-scroll-text size-4" />
-          <span>Logs</span>
-        </RouterLink>
+          route="/integrations/logs"
+          size="sm"
+          icon-left="lucide-scroll-text"
+          label="Logs"
+          :variant="route.path.includes('/logs') ? 'subtle' : 'ghost'"
+          :theme="route.path.includes('/logs') ? 'green' : 'gray'"
+          :data-state="route.path.includes('/logs') ? 'active' : undefined"
+        />
       </div>
 
-      <div class="hidden items-center gap-3 sm:flex">
-        <span
-          class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset"
-          :class="connectedAccounts ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20' : 'bg-surface-gray-2 text-ink-gray-6 ring-outline-gray-2'"
-        >
-          <span class="h-1.5 w-1.5 rounded-full" :class="connectedAccounts ? 'bg-emerald-500' : 'bg-ink-gray-4'"></span>
-          {{ connectedAccounts ? 'WhatsApp account connected' : 'No WhatsApp account connected' }}
-        </span>
+      <div v-if="!connectedAccounts" class="hidden items-center gap-3 sm:flex">
+        <Badge theme="gray" variant="subtle" label="No WhatsApp account connected" />
       </div>
     </header>
 

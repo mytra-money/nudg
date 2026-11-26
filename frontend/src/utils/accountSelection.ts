@@ -52,3 +52,14 @@ export function accountArg(account: string | null | undefined): string | undefin
   if (!account || account === 'all') return undefined
   return account
 }
+
+/** Same label the top-bar number dropdown shows. */
+export function labelForAccount(
+  accounts: Array<{ name: string; account_name?: string }>,
+  account: string | null | undefined,
+): string {
+  const name = accountArg(account)
+  if (!name) return ''
+  const match = accounts.find((row) => row.name === name)
+  return match?.account_name || name
+}

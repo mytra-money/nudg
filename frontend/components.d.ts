@@ -23,7 +23,6 @@ declare module 'vue' {
     DeskGate: typeof import('./src/components/DeskGate.vue')['default']
     DeskPage: typeof import('./src/components/desk/DeskPage.vue')['default']
     DeskSplit: typeof import('./src/components/desk/DeskSplit.vue')['default']
-    DeskTable: typeof import('./src/components/desk/DeskTable.vue')['default']
     DeskTemplatePreview: typeof import('./src/components/DeskTemplatePreview.vue')['default']
     EmbeddedSignup: typeof import('./src/components/EmbeddedSignup.vue')['default']
     EmptyState: typeof import('./src/components/EmptyState.vue')['default']

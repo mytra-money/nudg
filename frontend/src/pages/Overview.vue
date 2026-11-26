@@ -131,7 +131,7 @@ const recentLogs = computed(() => logs.value.slice(0, 4))
                 : status?.whatsapp_installed
                   ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
                   : !live
-                    ? 'border-teal-200 bg-teal-50 text-[#075E54]'
+                    ? 'border-teal-200 bg-teal-50 text-ink-green-7'
                     : 'border-amber-200 bg-amber-50 text-amber-800'
             "
           >
@@ -143,7 +143,7 @@ const recentLogs = computed(() => logs.value.slice(0, 4))
                   : status?.whatsapp_installed
                     ? 'animate-pulse bg-emerald-500'
                     : !live
-                      ? 'bg-[#128C7E]'
+                      ? 'bg-wa-mid'
                       : 'bg-amber-500'
               "
             />
@@ -170,14 +170,7 @@ const recentLogs = computed(() => logs.value.slice(0, 4))
             @click="load"
           />
 
-          <Button
-            variant="solid"
-            size="sm"
-            class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-            icon-left="lucide-inbox"
-            label="Open Inbox"
-            @click="navigateTo('/conversations')"
-          />
+          <Button variant="solid" theme="green" size="sm" icon-left="lucide-inbox" label="Open Inbox" @click="navigateTo('/conversations')"/>
         </div>
       </header>
 
@@ -196,10 +189,10 @@ const recentLogs = computed(() => logs.value.slice(0, 4))
         <!-- Interactive Preview Mode Callout Banner -->
         <div
           v-if="!live"
-          class="flex flex-col gap-3 rounded-xl border border-teal-200/80 bg-teal-50/60 p-4 text-xs text-[#075E54] sm:flex-row sm:items-center sm:justify-between"
+          class="flex flex-col gap-3 rounded-xl border border-teal-200/80 bg-teal-50/60 p-4 text-xs text-ink-green-7 sm:flex-row sm:items-center sm:justify-between"
         >
           <div class="flex items-center gap-3">
-            <div class="grid size-8 shrink-0 place-items-center rounded-lg bg-[#075E54] text-white shadow-xs">
+            <div class="grid size-8 shrink-0 place-items-center rounded-lg bg-surface-green-7 text-ink-base shadow-xs">
               <span class="lucide-sparkles size-4" aria-hidden="true" />
             </div>
             <div>
@@ -211,7 +204,7 @@ const recentLogs = computed(() => logs.value.slice(0, 4))
           </div>
           <a
             href="/conversations"
-            class="inline-flex shrink-0 items-center gap-1.5 font-semibold text-[#075E54] hover:underline"
+            class="inline-flex shrink-0 items-center gap-1.5 font-semibold text-ink-green-7 hover:underline"
             @click.prevent="navigateTo('/conversations')"
           >
             Explore Inbox threads <span class="lucide-arrow-right size-3.5" aria-hidden="true" />
@@ -242,7 +235,7 @@ const recentLogs = computed(() => logs.value.slice(0, 4))
               <NumberCard
                 title="Open 24h windows"
                 :value="openWindowsCount"
-                color="#075E54"
+                color="#047857"
                 :delta-caption="openWindowsCount > 0 ? 'free-form eligible' : 'template only'"
               />
             </a>
@@ -281,7 +274,7 @@ const recentLogs = computed(() => logs.value.slice(0, 4))
               @click.prevent="navigateTo('/conversations')"
             >
               <div class="flex items-start gap-3">
-                <div class="grid size-9 shrink-0 place-items-center rounded-lg bg-teal-50 text-[#075E54]">
+                <div class="grid size-9 shrink-0 place-items-center rounded-lg bg-teal-50 text-ink-green-7">
                   <span class="lucide-inbox size-5" aria-hidden="true" />
                 </div>
                 <div class="min-w-0">
@@ -373,7 +366,7 @@ const recentLogs = computed(() => logs.value.slice(0, 4))
           <template #actions>
             <a
               href="/conversations"
-              class="inline-flex items-center gap-1 text-xs font-semibold text-[#075E54] hover:underline"
+              class="inline-flex items-center gap-1 text-xs font-semibold text-ink-green-7 hover:underline"
               @click.prevent="navigateTo('/conversations')"
             >
               View all ({{ conversations.length }}) &rarr;
@@ -426,7 +419,7 @@ const recentLogs = computed(() => logs.value.slice(0, 4))
                 <Button
                   variant="subtle"
                   size="sm"
-                  class="font-medium text-[#075E54]"
+                  class="font-medium text-ink-green-7"
                   label="Reply"
                   @click="handleOpenProfile(item.profile.name)"
                 />
@@ -452,7 +445,7 @@ const recentLogs = computed(() => logs.value.slice(0, 4))
             <template #actions>
               <a
                 href="/integrations/logs"
-                class="inline-flex items-center gap-1 text-xs font-semibold text-[#075E54] hover:underline"
+                class="inline-flex items-center gap-1 text-xs font-semibold text-ink-green-7 hover:underline"
                 @click.prevent="navigateTo('/integrations/logs')"
               >
                 Audit logs &rarr;
@@ -500,22 +493,22 @@ const recentLogs = computed(() => logs.value.slice(0, 4))
 
           <DeskCard tone="accent" class="flex h-full min-h-0 flex-col text-sm text-ink-gray-7">
             <template #header>
-              <h4 class="flex items-center gap-1.5 font-semibold text-[#075E54]">
+              <h4 class="flex items-center gap-1.5 font-semibold text-ink-green-7">
                 <span class="lucide-shield-check size-4" aria-hidden="true" />
                 WhatsApp SLA & Policy Rules
               </h4>
             </template>
             <ul class="flex min-h-0 flex-1 flex-col gap-3 leading-relaxed">
               <li class="flex flex-1 items-center gap-2.5 rounded-lg bg-white/75 px-3.5 py-3">
-                <span class="font-bold text-[#075E54]">•</span>
+                <span class="font-bold text-ink-green-7">•</span>
                 <span><strong>24-Hour Rule:</strong> Free-form messages can only be sent within 24 hours of the customer's last incoming message.</span>
               </li>
               <li class="flex flex-1 items-center gap-2.5 rounded-lg bg-white/75 px-3.5 py-3">
-                <span class="font-bold text-[#075E54]">•</span>
+                <span class="font-bold text-ink-green-7">•</span>
                 <span><strong>Templates Required:</strong> To initiate conversations or reply after 24h, you must use an approved WhatsApp Template.</span>
               </li>
               <li class="flex flex-1 items-center gap-2.5 rounded-lg bg-white/75 px-3.5 py-3">
-                <span class="font-bold text-[#075E54]">•</span>
+                <span class="font-bold text-ink-green-7">•</span>
                 <span><strong>Read Receipts:</strong> Incoming messages automatically update read markers when configured in account settings.</span>
               </li>
             </ul>
@@ -570,7 +563,7 @@ const recentLogs = computed(() => logs.value.slice(0, 4))
             <template #actions>
               <a
                 :href="channelPath()"
-                class="text-xs font-medium text-[#075E54] hover:underline"
+                class="text-xs font-medium text-ink-green-7 hover:underline"
                 @click.prevent="navigateTo(channelPath())"
               >
                 Manage &rarr;

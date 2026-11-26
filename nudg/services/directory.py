@@ -215,6 +215,190 @@ def delete_recipient_list(name: str) -> dict:
 	return {"name": record, "deleted": True}
 
 
+def recipient_lists_for_profile(
+	profile_name: str,
+	phone_number: str | None = None,
+	account: str | None = None,
+) -> list[dict]:
+	"""Return WA Recipient Lists that contain this profile's normalized phone number."""
+	if not _doctype_exists("WA Recipient List") or not frappe.has_permission("WA Recipient List", "read"):
+		return []
+	raw_phone = (phone_number or "").strip()
+	if not raw_phone and profile_name and _doctype_exists("WA Profile"):
+		raw_phone = frappe.db.get_value("WA Profile", profile_name, "phone_number") or ""
+	target_norm = normalize_mobile_no(raw_phone)
+	if not target_norm:
+		return []
+
+	lists = list_recipient_lists(account=account)
+	if not lists:
+		return []
+	list_by_name = {row["name"]: row for row in lists}
+	rows = frappe.get_all(
+		"WA Recipient",
+		filters={
+			"parenttype": "WA Recipient List",
+			"parentfield": "recipients",
+			"parent": ["in", list(list_by_name.keys())],
+		},
+		fields=["parent", "mobile_number"],
+		limit_page_length=0,
+	)
+	matched_names: list[str] = []
+	seen: set[str] = set()
+	for row in rows:
+		parent = row.get("parent")
+		if not parent or parent in seen:
+			continue
+		if normalize_mobile_no(row.get("mobile_number")) == target_norm:
+			seen.add(parent)
+			matched_names.append(parent)
+	return [
+		{
+			"name": name,
+			"list_name": list_by_name[name].get("list_name") or name,
+			"whatsapp_account": list_by_name[name].get("whatsapp_account") or "",
+		}
+		for name in matched_names
+	]
+
+
+def add_profile_to_recipient_list(profile_name: str, recipient_list_name: str) -> dict:
+	"""Add a WA Profile's phone number and name to an existing WA Recipient List."""
+	_require_doctype("WA Profile", _("WhatsApp profiles are not installed on this site."))
+	_require_doctype("WA Recipient List", _("Recipient lists are not installed on this site."))
+	prof_id = (profile_name or "").strip()
+	list_id = (recipient_list_name or "").strip()
+	if not prof_id or not frappe.db.exists("WA Profile", prof_id):
+		frappe.throw(_("Contact not found."))
+	if not list_id or not frappe.db.exists("WA Recipient List", list_id):
+		frappe.throw(_("Recipient list not found."))
+
+	profile = frappe.get_doc("WA Profile", prof_id)
+	frappe.has_permission("WA Profile", "read", doc=profile, throw=True)
+	doc = frappe.get_doc("WA Recipient List", list_id)
+	frappe.has_permission("WA Recipient List", "write", doc=doc, throw=True)
+
+	phone = profile_phone(profile.phone_number)
+	_require_phone(phone)
+	target_norm = normalize_mobile_no(phone)
+	for row in doc.recipients or []:
+		if normalize_mobile_no(row.mobile_number) == target_norm:
+			return {**_list_from_doc(doc), "added": False}
+
+	doc.append(
+		"recipients",
+		{
+			"mobile_number": phone,
+			"recipient_name": (profile.profile_name or "").strip() or phone,
+			"unsubscribed": 0,
+		},
+	)
+	doc.save()
+	return {**_list_from_doc(doc), "added": True}
+
+
+def remove_profile_from_recipient_list(profile_name: str, recipient_list_name: str) -> dict:
+	"""Remove a WA Profile's phone number from an existing WA Recipient List."""
+	_require_doctype("WA Profile", _("WhatsApp profiles are not installed on this site."))
+	_require_doctype("WA Recipient List", _("Recipient lists are not installed on this site."))
+	prof_id = (profile_name or "").strip()
+	list_id = (recipient_list_name or "").strip()
+	if not prof_id or not frappe.db.exists("WA Profile", prof_id):
+		frappe.throw(_("Contact not found."))
+	if not list_id or not frappe.db.exists("WA Recipient List", list_id):
+		frappe.throw(_("Recipient list not found."))
+
+	profile = frappe.get_doc("WA Profile", prof_id)
+	frappe.has_permission("WA Profile", "read", doc=profile, throw=True)
+	doc = frappe.get_doc("WA Recipient List", list_id)
+	frappe.has_permission("WA Recipient List", "write", doc=doc, throw=True)
+
+	target_norm = normalize_mobile_no(profile.phone_number)
+	remaining = [
+		row for row in (doc.recipients or []) if normalize_mobile_no(row.mobile_number) != target_norm
+	]
+	removed = len(remaining) != len(doc.recipients or [])
+	if removed:
+		doc.set("recipients", remaining)
+		doc.save()
+	return {**_list_from_doc(doc), "removed": removed}
+
+
+def import_profiles(file_url: str, whatsapp_account: str | None = None) -> dict:
+	"""Import WA Profiles from a CSV or Excel File attached via FileUploader."""
+	_require_doctype("WA Profile", _("WhatsApp profiles are not installed on this site."))
+	frappe.has_permission("WA Profile", "create", throw=True)
+	account_name = _assert_account(whatsapp_account, required=True)
+	url = (file_url or "").strip()
+	if not url:
+		frappe.throw(_("Upload a CSV or Excel file first."))
+
+	file_doc = frappe.get_doc("File", {"file_url": url})
+	frappe.has_permission("File", "read", doc=file_doc, throw=True)
+	filename = (file_doc.file_name or url).lower()
+	content = file_doc.get_content()
+
+	if filename.endswith(".xlsx") or filename.endswith(".xls"):
+		from frappe.utils.xlsxutils import read_xlsx_file_from_attached_file
+
+		rows = read_xlsx_file_from_attached_file(file_url=url)
+	else:
+		from frappe.utils.csvutils import read_csv_content
+
+		if isinstance(content, bytes):
+			content = content.decode("utf-8-sig", errors="replace")
+		rows = read_csv_content(content)
+
+	if not rows or len(rows) < 2:
+		frappe.throw(_("The uploaded file has no data rows."))
+
+	headers = [str(col or "").strip().lower().replace(" ", "_") for col in rows[0]]
+	phone_idx = next(
+		(i for i, h in enumerate(headers) if h in ("phone_number", "phone", "mobile_number", "mobile")),
+		None,
+	)
+	name_idx = next(
+		(i for i, h in enumerate(headers) if h in ("profile_name", "name", "contact_name", "full_name")),
+		None,
+	)
+	status_idx = next((i for i, h in enumerate(headers) if h == "status"), None)
+
+	if phone_idx is None:
+		frappe.throw(_("Column 'Phone Number' (or 'Phone') is required."))
+
+	created_count = 0
+	updated_count = 0
+	errors: list[dict] = []
+
+	for row_num, row in enumerate(rows[1:], start=2):
+		if not row or all(not str(cell or "").strip() for cell in row):
+			continue
+		raw_phone = str(row[phone_idx] if phone_idx < len(row) else "").strip()
+		raw_name = str(row[name_idx] if name_idx is not None and name_idx < len(row) else "").strip()
+		raw_status = str(row[status_idx] if status_idx is not None and status_idx < len(row) else "").strip()
+		try:
+			res = save_profile(
+				profile_name=raw_name or None,
+				phone_number=raw_phone,
+				whatsapp_account=account_name,
+				status=raw_status or "Active",
+			)
+			if res.get("created"):
+				created_count += 1
+			else:
+				updated_count += 1
+		except Exception as exc:
+			errors.append({"row": row_num, "phone": raw_phone, "error": str(exc)})
+
+	return {
+		"created": created_count,
+		"updated": updated_count,
+		"failed": len(errors),
+		"errors": errors[:20],
+	}
+
+
 def profile_phone(number: str | None) -> str:
 	"""Same phone shape as a WhatsApp profile, with a digits fallback."""
 	raw = (number or "").strip()

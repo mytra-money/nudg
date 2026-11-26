@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
-import { Badge, Button, Dialog, FileUploader, FormControl, Select, TextInput, toast } from 'frappe-ui'
+import { Alert, Badge, Button, Dialog, FileUploader, FormControl, Select, TextInput, toast } from 'frappe-ui'
 import DeskTemplatePreview from '@/components/DeskTemplatePreview.vue'
 import DeskEmpty from '@/components/desk/DeskEmpty.vue'
 import DeskPage from '@/components/desk/DeskPage.vue'
@@ -43,7 +43,7 @@ const theme: Record<string, 'green' | 'amber' | 'red' | 'gray'> = {
   Deleted: 'gray',
 }
 
-const { selectedAccount: currentAccount } = useAccountGate()
+const { selectedAccount: currentAccount, selectedAccountLabel } = useAccountGate()
 
 // Templates for the navbar number only (templates without an account are shared).
 const templates = computed(() =>
@@ -156,7 +156,7 @@ const current = computed(
 
 const recipients = computed(() =>
   (desk.inbox.value?.conversations || [])
-    .filter((row) => !currentAccount.value || row.profile.whatsapp_account === currentAccount.value)
+    .filter((row) => Boolean(currentAccount.value) && row.profile.whatsapp_account === currentAccount.value)
     .map((row) => ({
       label: `${row.profile.profile_name} · ${row.profile.phone_number}`,
       value: row.profile.name,
@@ -354,7 +354,7 @@ async function openTemplateEditor(template?: Template) {
     header_type: template?.header_type || 'Text',
     header_media: template?.header_media || '',
     language: template?.language || defaultLanguageCode(),
-    whatsapp_account: currentAccount.value || template?.whatsapp_account || '',
+    whatsapp_account: currentAccount.value || '',
     status: template?.status || '',
     whatsapp_template_id: '',
     buttons: (template?.buttons || []).map((row) => ({
@@ -394,6 +394,7 @@ async function openTemplateEditor(template?: Template) {
 }
 
 async function persistTemplate(submitToMeta: boolean) {
+  templateForm.value.whatsapp_account = currentAccount.value
   const issue = validateTemplateForm(submitToMeta)
   if (issue) {
     toast.error(issue)
@@ -531,54 +532,58 @@ function languageLabel(code?: string) {
           </button>
         </div>
         <div class="flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            class="studio-stat"
-            :class="selectedStatus === 'Approved' ? 'is-on' : ''"
+          <Button
+            size="sm"
+            :variant="selectedStatus === 'Approved' ? 'solid' : 'subtle'"
+            :theme="selectedStatus === 'Approved' ? 'green' : 'gray'"
+            :data-state="selectedStatus === 'Approved' ? 'active' : undefined"
             :aria-pressed="selectedStatus === 'Approved'"
             @click="applyKpiFilter('Approved')"
           >
-            <span class="studio-stat-value">{{ countApproved }}</span>
-            <span>Approved</span>
-          </button>
-          <button
-            type="button"
-            class="studio-stat"
-            :class="selectedStatus === 'Pending' ? 'is-on' : ''"
+            <span class="tabular-nums">{{ countApproved }}</span>
+            Approved
+          </Button>
+          <Button
+            size="sm"
+            :variant="selectedStatus === 'Pending' ? 'solid' : 'subtle'"
+            theme="gray"
+            :data-state="selectedStatus === 'Pending' ? 'active' : undefined"
             :aria-pressed="selectedStatus === 'Pending'"
             @click="applyKpiFilter('Pending')"
           >
-            <span class="studio-stat-value">{{ countPending }}</span>
-            <span>Pending</span>
-          </button>
-          <button
-            type="button"
-            class="studio-stat"
-            :class="selectedCategory === 'Utility' ? 'is-on' : ''"
+            <span class="tabular-nums">{{ countPending }}</span>
+            Pending
+          </Button>
+          <Button
+            size="sm"
+            :variant="selectedCategory === 'Utility' ? 'solid' : 'subtle'"
+            theme="gray"
+            :data-state="selectedCategory === 'Utility' ? 'active' : undefined"
             :aria-pressed="selectedCategory === 'Utility'"
             @click="applyKpiFilter('Utility')"
           >
-            <span class="studio-stat-value">{{ countUtility }}</span>
-            <span>Utility</span>
-          </button>
-          <button
-            type="button"
-            class="studio-stat"
-            :class="selectedCategory === 'Marketing' ? 'is-on' : ''"
+            <span class="tabular-nums">{{ countUtility }}</span>
+            Utility
+          </Button>
+          <Button
+            size="sm"
+            :variant="selectedCategory === 'Marketing' ? 'solid' : 'subtle'"
+            theme="gray"
+            :data-state="selectedCategory === 'Marketing' ? 'active' : undefined"
             :aria-pressed="selectedCategory === 'Marketing'"
             @click="applyKpiFilter('Marketing')"
           >
-            <span class="studio-stat-value">{{ countMarketing }}</span>
-            <span>Marketing</span>
-          </button>
-          <button
+            <span class="tabular-nums">{{ countMarketing }}</span>
+            Marketing
+          </Button>
+          <Button
             v-if="filtersActive"
-            type="button"
-            class="shrink-0 text-[11px] font-semibold text-[#075E54] hover:underline"
+            variant="ghost"
+            theme="green"
+            size="sm"
+            label="Clear"
             @click="clearFilters"
-          >
-            Clear
-          </button>
+          />
         </div>
 
         <Select
@@ -594,22 +599,16 @@ function languageLabel(code?: string) {
           @update:model-value="(val) => (selectedStatus = String(val || 'All'))"
         />
 
-        <div v-if="isManager" class="ml-auto flex shrink-0 items-center gap-2">
+        <div v-if="isManager" class="ml-auto flex flex-wrap items-center justify-end gap-2">
           <Button
             variant="subtle"
             size="sm"
             label="Sync from Meta"
+            loading-text="Syncing…"
             :loading="syncingTemplates"
             @click="syncTemplates"
           />
-          <Button
-            variant="solid"
-            size="sm"
-            class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-            icon-left="lucide-plus"
-            label="New Template"
-            @click="openTemplateEditor()"
-          />
+          <Button variant="solid" theme="green" size="sm" icon-left="lucide-plus" label="New Template" @click="openTemplateEditor()"/>
         </div>
       </div>
     </template>
@@ -635,23 +634,24 @@ function languageLabel(code?: string) {
           </div>
           <p class="mt-2 text-sm font-semibold text-ink-gray-8">No templates found</p>
           <p class="mt-1 text-ink-gray-5">No templates match your search query or selected filters.</p>
-          <button
-            type="button"
-            class="mt-3 text-xs font-semibold text-[#075E54] hover:underline"
+          <Button
+            variant="ghost"
+            theme="green"
+            size="sm"
+            label="Clear all filters"
+            class="mt-3"
             @click="clearFilters"
-          >
-            Clear all filters
-          </button>
+          />
         </div>
 
         <button
           v-for="template in visible"
           :key="template.name"
           type="button"
-          class="flex w-full flex-col gap-1 px-3 py-2.5 text-left transition-all hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#128C7E]"
+          class="flex w-full flex-col gap-1 px-3 py-2.5 text-left transition-all hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-green-3"
           :class="
             current?.name === template.name
-              ? 'border-l-4 border-l-[#075E54] bg-teal-50/70 shadow-2xs'
+              ? 'border-l-4 border-l-green-700 bg-teal-50/70 shadow-2xs'
               : 'border-l-4 border-l-transparent'
           "
           @click="selectTemplate(template)"
@@ -661,6 +661,7 @@ function languageLabel(code?: string) {
               {{ displayTitle(template.template_label, template.template_name) || 'Untitled template' }}
             </span>
             <Badge
+              v-if="template.status && template.status !== 'Draft'"
               :label="template.status"
               :theme="theme[template.status] || 'gray'"
               size="sm"
@@ -679,15 +680,16 @@ function languageLabel(code?: string) {
       <div class="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
         <div v-if="current" class="flex min-h-0 flex-1 flex-col">
           <header class="shrink-0 border-b border-outline-gray-2 bg-white px-3 py-2">
-            <button
+            <Button
               v-if="narrow"
-              type="button"
-              class="mb-2 inline-flex items-center gap-1 text-sm font-medium text-[#075E54]"
+              variant="ghost"
+              theme="green"
+              size="sm"
+              icon-left="lucide-arrow-left"
+              label="All templates"
+              class="mb-2"
               @click="showDetail = false"
-            >
-              <span class="lucide-arrow-left size-4" aria-hidden="true" />
-              All templates
-            </button>
+            />
             <div class="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
               <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-2">
@@ -695,6 +697,7 @@ function languageLabel(code?: string) {
                     {{ displayTitle(current.template_label, current.template_name) || 'Untitled template' }}
                   </h2>
                   <Badge
+                    v-if="current.status && current.status !== 'Draft'"
                     :label="current.status"
                     :theme="theme[current.status] || 'gray'"
                     size="sm"
@@ -724,16 +727,7 @@ function languageLabel(code?: string) {
                   icon-left="lucide-pencil"
                   @click="openTemplateEditor(current)"
                 />
-                <Button
-                  variant="solid"
-                  size="sm"
-                  class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-                  label="Send to Customer"
-                  icon-left="lucide-send"
-                  :disabled="current.status !== 'Approved'"
-                  :title="current.status === 'Approved' ? 'Send this template' : 'Available after Meta approves this template'"
-                  @click="startSending(current)"
-                />
+                <Button variant="solid" theme="green" size="sm" label="Send to Customer" icon-left="lucide-send" :disabled="current.status !== 'Approved'" :title="current.status === 'Approved' ? 'Send this template' : 'Available after Meta approves this template'" @click="startSending(current)"/>
               </div>
             </div>
           </header>
@@ -748,7 +742,7 @@ function languageLabel(code?: string) {
 
         <div v-else class="grid flex-1 place-items-center px-6 text-center">
           <div class="max-w-xs">
-            <div class="mx-auto grid size-11 place-items-center rounded-full bg-[#e7f6ef] text-[#075E54]">
+            <div class="mx-auto grid size-11 place-items-center rounded-full bg-surface-green-2 text-ink-green-7">
               <span class="lucide-layout-template size-5" aria-hidden="true" />
             </div>
             <p class="mt-3 text-sm font-semibold text-ink-gray-8">Choose a template</p>
@@ -769,7 +763,7 @@ function languageLabel(code?: string) {
       @update:open="(open) => !open && (sending = null)"
     >
       <div v-if="sending" class="space-y-4 py-2 text-xs">
-        <div class="rounded-xl border border-teal-200 bg-teal-50 p-3.5 text-[#075E54] leading-relaxed">
+        <div class="rounded-xl border border-teal-200 bg-teal-50 p-3.5 text-ink-green-7 leading-relaxed">
           <p class="font-bold flex items-center gap-1.5">
             <span class="lucide-send size-4" /> Initiating Template Message
           </p>
@@ -794,11 +788,11 @@ function languageLabel(code?: string) {
               :key="r.value"
               type="button"
               class="flex w-full items-center justify-between p-2.5 text-left transition-colors hover:bg-surface-gray-1"
-              :class="recipient === r.value ? 'bg-teal-50/70 font-semibold text-[#075E54]' : 'text-ink-gray-8'"
+              :class="recipient === r.value ? 'bg-teal-50/70 font-semibold text-ink-green-7' : 'text-ink-gray-8'"
               @click="recipient = r.value"
             >
               <div class="flex min-w-0 items-center gap-2">
-                <span class="grid size-7 shrink-0 place-items-center rounded-full bg-teal-100 text-[10px] font-bold text-[#075E54]">
+                <span class="grid size-7 shrink-0 place-items-center rounded-full bg-teal-100 text-[10px] font-bold text-ink-green-7">
                   {{ initials(r.name) }}
                 </span>
                 <div class="min-w-0">
@@ -806,7 +800,7 @@ function languageLabel(code?: string) {
                   <p class="font-mono text-[11px] text-ink-gray-5">{{ r.phone }}</p>
                 </div>
               </div>
-              <span v-if="recipient === r.value" class="lucide-check size-4 shrink-0 text-[#075E54]" />
+              <span v-if="recipient === r.value" class="lucide-check size-4 shrink-0 text-ink-green-7" />
             </button>
           </div>
         </div>
@@ -821,16 +815,7 @@ function languageLabel(code?: string) {
       <template #actions>
         <div class="flex justify-between w-full">
           <Button label="Cancel" @click="sending = null" />
-          <Button
-            v-if="sending?.status === 'Approved'"
-            variant="solid"
-            class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-            label="Confirm & Send Template"
-            icon-left="lucide-send"
-            :disabled="!recipient"
-            :loading="desk.sending.value"
-            @click="send"
-          />
+          <Button v-if="sending?.status === 'Approved'" variant="solid" theme="green" label="Confirm & Send Template" icon-left="lucide-send" :disabled="!recipient" :loading="desk.sending.value" @click="send"/>
         </div>
       </template>
     </Dialog>
@@ -857,6 +842,9 @@ function languageLabel(code?: string) {
           </div>
           <p v-else class="text-ink-gray-6">
             Save a local draft first, then submit to Meta when the content is ready for review.
+          </p>
+          <p class="text-xs text-ink-gray-5">
+            WhatsApp account: {{ displayTitle(selectedAccountLabel) || 'Select a number in the top bar' }}
           </p>
 
           <FormControl
@@ -921,7 +909,13 @@ function languageLabel(code?: string) {
                 <p v-else class="mt-1 text-ink-gray-5">
                   A draft can be saved without a file. Meta needs this sample before the template is submitted.
                 </p>
-                <p v-if="error" class="mt-1 text-red-700">{{ error }}</p>
+                <Alert
+                  v-if="error"
+                  class="mt-2"
+                  theme="red"
+                  :title="error"
+                  :primary-action="{ label: 'Try again', onClick: () => openFileSelector() }"
+                />
               </div>
             </template>
           </FileUploader>
@@ -984,7 +978,7 @@ function languageLabel(code?: string) {
 
         <div class="min-h-0 overflow-y-auto rounded-xl border border-outline-gray-2 bg-[#efeae2]/40 p-4">
           <p class="mb-3 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-ink-gray-5">
-            <span class="lucide-smartphone size-3.5 text-[#075E54]" />
+            <span class="lucide-smartphone size-3.5 text-ink-green-7" />
             Live WhatsApp Preview
           </p>
           <DeskTemplatePreview :template="editorPreview" mode="preview" :editable="false" large />
@@ -1006,14 +1000,16 @@ function languageLabel(code?: string) {
             <Button
               variant="subtle"
               label="Save draft"
+              loading-text="Saving…"
               :loading="templateSaving || Boolean(templateForm.name && !buttonsReady)"
               :disabled="Boolean(templateForm.name && !buttonsReady)"
               @click="persistTemplate(false)"
             />
             <Button
               variant="solid"
-              class="bg-[#075E54] text-white hover:bg-[#128C7E]"
+              theme="green"
               :label="editorOnMeta ? 'Update on Meta' : 'Submit to Meta'"
+              loading-text="Saving…"
               :loading="templateSaving || Boolean(templateForm.name && !buttonsReady)"
               :disabled="Boolean(templateForm.name && !buttonsReady) || editorLocked"
               @click="persistTemplate(true)"
@@ -1043,27 +1039,5 @@ function languageLabel(code?: string) {
 .template-search {
   flex: 1 1 10rem !important;
   min-width: 8rem !important;
-}
-.studio-stat {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  border-radius: 999px;
-  background: #f4f5f6;
-  padding: 0.25rem 0.6rem;
-  font-size: 11px;
-  font-weight: 600;
-  color: #5b6168;
-}
-.studio-stat:hover {
-  background: #e8eaec;
-}
-.studio-stat.is-on {
-  background: #e7f6ef;
-  color: #075e54;
-}
-.studio-stat-value {
-  font-variant-numeric: tabular-nums;
-  font-size: 12px;
 }
 </style>

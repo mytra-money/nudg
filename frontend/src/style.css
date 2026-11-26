@@ -74,30 +74,39 @@ pre,
   scrollbar-width: none;
 }
 
-/* Subtle buttons use a near-white fill and disappear on white dialogs. */
-button.bg-surface-gray-2:not(:disabled),
-a.bg-surface-gray-2 {
-  background-color: #e5e7eb !important;
-  color: #111827 !important;
-}
-
-button.bg-surface-gray-2:not(:disabled):hover,
-a.bg-surface-gray-2:hover {
-  background-color: #d1d5db !important;
-}
-
-/* WhatsApp & Mytra Brand Accent Tokens + Surface Elevation */
+/* WhatsApp & Mytra Brand Accent Tokens + Surface Elevation
+   Desk chrome uses Espresso ink/surface/outline tokens via frappe-ui.
+   These --wa-* vars are for WhatsApp-mimic surfaces only (inbox chrome, phone preview). */
 :root {
   --wa-teal-deep: #075E54;
   --wa-teal-mid: #128C7E;
   --wa-green-accent: #25D366;
   --wa-chat-bg: #efeae2;
+  --wa-panel-bg: #F0F2F5;
+  --wa-ink: #111B21;
+  --wa-ink-muted: #54656F;
+  --wa-ink-subtle: #667781;
+  --wa-border: #E9EDEF;
   --wa-bubble-out: #d9fdd3;
   --wa-bubble-in: #ffffff;
   --surface-gray-9: #1f2937;
   --surface-gray-10: #111827;
   --ink-base: #ffffff;
 }
+
+.text-wa-teal { color: var(--wa-teal-deep); }
+.text-wa-mid { color: var(--wa-teal-mid); }
+.text-wa-ink { color: var(--wa-ink); }
+.text-wa-muted { color: var(--wa-ink-muted); }
+.text-wa-subtle { color: var(--wa-ink-subtle); }
+.bg-wa-teal { background-color: var(--wa-teal-deep); }
+.bg-wa-mid { background-color: var(--wa-teal-mid); }
+.bg-wa-accent { background-color: var(--wa-green-accent); }
+.bg-wa-chat { background-color: var(--wa-chat-bg); }
+.bg-wa-panel { background-color: var(--wa-panel-bg); }
+.border-wa { border-color: var(--wa-border); }
+.ring-wa-mid { --tw-ring-color: var(--wa-teal-mid); }
+.border-l-wa-teal { border-left-color: var(--wa-teal-deep); }
 
 /* ==========================================================================
    Toaster (Sonner) Solid Surface & Accessible Typography

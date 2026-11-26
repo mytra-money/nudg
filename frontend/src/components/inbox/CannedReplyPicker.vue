@@ -66,11 +66,11 @@ defineExpose({ onKeydown, filtered })
 <template>
   <div
     v-if="open"
-    class="absolute bottom-full left-0 right-0 z-20 mb-2 flex max-h-[min(18rem,calc(100dvh-9rem))] flex-col overflow-hidden rounded-xl border border-[#E9EDEF] bg-white shadow-lg"
+    class="absolute bottom-full left-0 right-0 z-20 mb-2 flex max-h-[min(18rem,calc(100dvh-9rem))] flex-col overflow-hidden rounded-xl border border-wa bg-white shadow-lg"
     role="listbox"
     aria-label="Quick replies"
   >
-    <div class="shrink-0 border-b border-[#E9EDEF] px-3 py-2">
+    <div class="shrink-0 border-b border-wa px-3 py-2">
       <div class="flex items-center gap-1">
         <TextInput
           v-model="localQuery"
@@ -80,7 +80,7 @@ defineExpose({ onKeydown, filtered })
         />
         <button
           type="button"
-          class="grid size-8 shrink-0 place-items-center rounded-full text-[#54656F] hover:bg-[#F0F2F5]"
+          class="grid size-8 shrink-0 place-items-center rounded-full text-wa-muted hover:bg-wa-panel"
           title="Close quick replies"
           aria-label="Close quick replies"
           @click="emit('close')"
@@ -88,13 +88,13 @@ defineExpose({ onKeydown, filtered })
           <span class="lucide-x size-4" aria-hidden="true" />
         </button>
       </div>
-      <p class="mt-1 text-[11px] text-[#667781]">
-        Tip: type <code class="rounded bg-[#F0F2F5] px-1">/</code> in the composer to open this picker.
+      <p class="mt-1 text-[11px] text-wa-subtle">
+        Tip: type <code class="rounded bg-wa-panel px-1">/</code> in the composer to open this picker.
       </p>
     </div>
     <div class="min-h-0 flex-1 overflow-y-auto">
-      <p v-if="loading" class="px-3 py-6 text-center text-xs text-[#667781]">Loading quick replies…</p>
-      <p v-else-if="!filtered.length" class="px-3 py-6 text-center text-xs text-[#667781]">
+      <p v-if="loading" class="px-3 py-6 text-center text-xs text-wa-subtle">Loading quick replies…</p>
+      <p v-else-if="!filtered.length" class="px-3 py-6 text-center text-xs text-wa-subtle">
         No quick replies match.
       </p>
       <button
@@ -102,21 +102,21 @@ defineExpose({ onKeydown, filtered })
         :key="row.name"
         type="button"
         role="option"
-        class="flex w-full flex-col gap-0.5 border-b border-[#F0F2F5] px-3 py-2.5 text-left last:border-b-0"
-        :class="index === active ? 'bg-[#E7F8F2]' : 'hover:bg-[#F0F2F5]'"
+        class="flex w-full flex-col gap-0.5 border-b border-outline-gray-1 px-3 py-2.5 text-left last:border-b-0"
+        :class="index === active ? 'bg-surface-green-2' : 'hover:bg-surface-gray-1'"
         @click="pick(row)"
         @mouseenter="active = index"
       >
-        <span class="flex items-center gap-2 text-sm font-semibold text-[#111B21]">
+        <span class="flex items-center gap-2 text-sm font-semibold text-wa-ink">
           <span class="truncate">{{ displayTitle(row.title) || 'Reply' }}</span>
           <span
             v-if="row.shortcut"
-            class="shrink-0 rounded bg-[#F0F2F5] px-1.5 py-0.5 font-mono text-[11px] font-medium text-[#075E54]"
+            class="shrink-0 rounded bg-wa-panel px-1.5 py-0.5 font-mono text-[11px] font-medium text-wa-teal"
           >
             /{{ String(row.shortcut).replace(/^\//, '') }}
           </span>
         </span>
-        <span class="line-clamp-2 text-xs leading-relaxed text-[#667781]">{{ row.body }}</span>
+        <span class="line-clamp-2 text-xs leading-relaxed text-wa-subtle">{{ row.body }}</span>
       </button>
     </div>
   </div>

@@ -77,6 +77,7 @@ def after_install():
 	check_frappe_version()
 	ensure_role()
 	setup_standard_custom_fields()
+	ensure_wa_profile_import()
 	_ensure_desk_modules()
 
 
@@ -87,6 +88,7 @@ def after_migrate():
 
 	migrate_legacy_profile_fields()
 	setup_standard_custom_fields()
+	ensure_wa_profile_import()
 	_ensure_desk_modules()
 	ensure_performance_indexes()
 	from nudg.security import backfill_default_accounts
@@ -510,6 +512,34 @@ def _lock_embedded_signup_fields() -> None:
 			validate_fields_for_doctype=False,
 		)
 	frappe.clear_cache(doctype="WA Account")
+
+
+def ensure_wa_profile_import() -> None:
+	"""Allow core Frappe Data Import on WA Profile without modifying the whatsapp app."""
+	if not frappe.db.exists("DocType", "WA Profile"):
+		return
+	from frappe.custom.doctype.property_setter.property_setter import make_property_setter
+
+	current = frappe.db.get_value(
+		"Property Setter",
+		{"doc_type": "WA Profile", "property": "allow_import", "doctype_or_field": "DocType"},
+		["name", "value"],
+		as_dict=True,
+	)
+	if current:
+		if str(current.value) != "1":
+			frappe.db.set_value("Property Setter", current.name, "value", "1", update_modified=False)
+	else:
+		make_property_setter(
+			"WA Profile",
+			None,
+			"allow_import",
+			"1",
+			"Check",
+			for_doctype=True,
+			validate_fields_for_doctype=False,
+		)
+	frappe.clear_cache(doctype="WA Profile")
 
 
 def _mark_embedded_signup_accounts() -> None:

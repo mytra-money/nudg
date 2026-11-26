@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { Button, call, toast } from 'frappe-ui'
+import { Alert, Button, call, toast } from 'frappe-ui'
 import { userFacingError } from '@/utils/errors'
 
 const emit = defineEmits<{ connected: []; manual: [] }>()
@@ -211,7 +211,9 @@ function loadFacebookSdk(app: string, version: string) {
     <div class="flex flex-col items-center gap-3">
       <Button
         variant="solid"
-        class="w-full max-w-xs justify-center !bg-[#1877F2] !text-white hover:!bg-[#166FE5]"
+        theme="blue"
+        class="w-full max-w-xs justify-center"
+        loading-text="Connecting…"
         :loading="busy"
         :disabled="!config?.ready"
         label="Login with Facebook"
@@ -221,18 +223,20 @@ function loadFacebookSdk(app: string, version: string) {
         A number already on the WhatsApp Business app can stay on the phone. New Cloud API numbers are registered here.
       </p>
       <Button
-        variant="solid"
-        class="w-full max-w-xs justify-center !bg-[#e5e7eb] !text-[#111827] hover:!bg-[#d1d5db]"
+        variant="subtle"
+        class="w-full max-w-xs justify-center"
         label="I already have credentials"
         @click="emit('manual')"
       />
     </div>
     <p v-if="unavailableReason" class="mt-3 text-center text-xs text-ink-gray-7">{{ unavailableReason }}</p>
-    <p v-if="status" class="mt-3 text-center text-sm text-emerald-800">{{ status }}</p>
     <p v-if="pin" class="mt-1 text-center text-sm font-medium text-ink-gray-8">Two-step PIN: {{ pin }}. Save it. It is not shown again.</p>
-    <div v-if="error" class="mx-auto mt-4 max-w-md rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-center" role="alert">
-      <p class="text-sm font-semibold text-red-900">Error</p>
-      <p class="mt-1 text-sm text-red-800">{{ error }}</p>
-    </div>
+    <Alert
+      v-if="error"
+      theme="red"
+      class="mx-auto mt-4 max-w-md"
+      :title="error"
+      :primary-action="{ label: 'Try again', onClick: () => launchSignup() }"
+    />
   </div>
 </template>

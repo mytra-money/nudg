@@ -35,7 +35,7 @@ describe('CatalogsView', () => {
     expect(wrapper.text()).not.toContain('Festive Hampers & Spice Trunks')
     expect(wrapper.text()).toContain('Royal Green Cardamom')
     expect(wrapper.text()).toContain('Tellicherry Black Pepper')
-    expect(wrapper.text()).toContain('Stored on this site')
+    expect(wrapper.text()).toContain("Couldn't sync catalog")
     expect(wrapper.text()).not.toContain('Meta Commerce Manager Active')
   })
 

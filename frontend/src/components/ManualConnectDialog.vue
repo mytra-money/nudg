@@ -86,13 +86,7 @@ async function save() {
     <template #actions>
       <div class="flex w-full items-center justify-end gap-2">
         <Button variant="subtle" label="Cancel" @click="open = false" />
-        <Button
-          variant="solid"
-          class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-          :loading="saving"
-          label="Connect number"
-          @click="save"
-        />
+        <Button variant="solid" theme="green" loading-text="Connecting…" :loading="saving" label="Connect number" @click="save"/>
       </div>
     </template>
   </Dialog>

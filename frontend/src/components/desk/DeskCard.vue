@@ -51,7 +51,7 @@ withDefaults(
           <h3
             v-if="title"
             class="text-base font-semibold"
-            :class="tone === 'accent' ? 'text-[#075E54]' : 'text-ink-gray-9'"
+            :class="tone === 'accent' ? 'text-ink-green-7' : 'text-ink-gray-9'"
           >
             {{ title }}
           </h3>

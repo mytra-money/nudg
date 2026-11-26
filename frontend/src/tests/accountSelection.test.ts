@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chooseAccount } from '@/utils/accountSelection'
+import { chooseAccount, labelForAccount } from '@/utils/accountSelection'
 import type { Account } from '@/types'
 
 const sales = (extra: Partial<Account> = {}): Account => ({
@@ -48,5 +48,10 @@ describe('number dropdown', () => {
 
   it('drops a saved number this user can no longer open', () => {
     expect(chooseAccount([other({ assigned: true })], 'WhatsApp 0564')).toBe('WhatsApp 1000')
+  })
+
+  it('labels the top-bar number by its account name', () => {
+    expect(labelForAccount([sales({ account_name: 'Mytra Care' })], 'WhatsApp 0564')).toBe('Mytra Care')
+    expect(labelForAccount([sales()], 'all')).toBe('')
   })
 })

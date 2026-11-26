@@ -1,13 +1,11 @@
-import { computed, type ComputedRef, type Ref } from 'vue'
-import { accountArg as toAccountArg, chooseAccount } from '@/utils/accountSelection'
+import { computed, type Ref } from 'vue'
+import { accountArg as toAccountArg, chooseAccount, labelForAccount } from '@/utils/accountSelection'
 import { useDesk } from '@/stores/desk'
 import { isManager } from '@/stores/session'
 
-export type AccountOption = { label: string; value: string }
-
 /**
  * Shared WhatsApp-account gate for manager pages.
- * Desk always has a single selected number (navbar); pages should use that.
+ * The only account switcher is the top-bar AccountSelect; pages read desk.account.
  */
 export function useAccountGate(options?: {
   /** Local account ref to keep in sync with desk.account when possible. */
@@ -18,13 +16,7 @@ export function useAccountGate(options?: {
   const accounts = computed(() => desk.inbox.value?.accounts || [])
   const hasAccount = computed(() => accounts.value.length > 0)
   const selectedAccount = computed(() => toAccountArg(desk.account.value) || '')
-
-  const accountOptions: ComputedRef<AccountOption[]> = computed(() =>
-    accounts.value.map((row: { name: string; account_name?: string }) => ({
-      label: row.account_name || row.name,
-      value: row.name,
-    })),
-  )
+  const selectedAccountLabel = computed(() => labelForAccount(accounts.value, selectedAccount.value))
 
   const accountGateDescription = computed(() =>
     isManager.value
@@ -32,7 +24,7 @@ export function useAccountGate(options?: {
       : 'No WhatsApp account is assigned to you yet. Ask a WhatsApp manager to link one.',
   )
 
-  /** Prefer desk.account when it is a real linked number; else first account. */
+  /** Prefer desk.account when it is a real linked number; else default / first account. */
   function pickAccount(): string {
     return chooseAccount(accounts.value, desk.account.value || null)
   }
@@ -48,7 +40,7 @@ export function useAccountGate(options?: {
     accounts,
     hasAccount,
     selectedAccount,
-    accountOptions,
+    selectedAccountLabel,
     accountGateDescription,
     pickAccount,
     syncAccount,

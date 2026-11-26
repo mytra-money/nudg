@@ -35,6 +35,7 @@ import { errorText } from '@/utils/format'
 import { fetchDirectoryAccess, saveDirectoryProfile } from '@/services/directoryApi'
 import { bootDirectoryAccess } from '@/utils/directoryAccess'
 import { threadAccountAllowed } from '@/utils/deskCache'
+import { labelForAccount } from '@/utils/accountSelection'
 import { sessionUser as readSessionUser, userLabel } from '@/utils/frappeSession'
 import type { Conversation, ConversationNote, Template } from '@/types'
 
@@ -123,13 +124,13 @@ const newProfileSaving = ref(false)
 const newProfile = ref({
   profile_name: '',
   phone_number: '',
-  whatsapp_account: '',
 })
-const newProfileAccounts = computed(() =>
-  (desk.inbox.value?.accounts || []).map((row) => ({
-    label: row.account_name || row.name,
-    value: row.name,
-  })),
+const currentAccount = computed(() => {
+  const selected = desk.account.value
+  return selected && selected !== 'all' ? selected : ''
+})
+const currentAccountLabel = computed(() =>
+  labelForAccount(desk.inbox.value?.accounts || [], currentAccount.value),
 )
 const picked = ref<Template | null>(null)
 const scroller = ref<HTMLElement | null>(null)
@@ -320,20 +321,22 @@ function open(row: Conversation) {
 }
 
 function openNewProfile() {
-  const selected = desk.account.value && desk.account.value !== 'all' ? desk.account.value : ''
   newProfile.value = {
     profile_name: '',
     phone_number: '',
-    whatsapp_account: selected || newProfileAccounts.value[0]?.value || '',
   }
   newProfileOpen.value = true
 }
 
 async function createProfileFromChat() {
   const phone = newProfile.value.phone_number.trim()
-  const account = newProfile.value.whatsapp_account
-  if (!phone || !account) {
-    toast.error('Enter a phone number and choose a WhatsApp account.')
+  const account = currentAccount.value
+  if (!phone) {
+    toast.error('Enter a phone number.')
+    return
+  }
+  if (!account) {
+    toast.error('Select a WhatsApp number in the top bar first.')
     return
   }
   if (!window.csrf_token) {
@@ -377,8 +380,10 @@ async function sendPicked() {
 }
 
 const filteredTemplates = computed(() => {
+  const account = currentAccount.value
   const list = desk.inbox.value?.templates || []
   return list.filter((t) => {
+    if (account && t.whatsapp_account && t.whatsapp_account !== account) return false
     if (templateTypeFilter.value !== 'all' && t.template_type !== templateTypeFilter.value) return false
     if (!templateQuery.value.trim()) return true
     const term = templateQuery.value.toLowerCase()
@@ -527,7 +532,7 @@ function catalogItemBlocked(item: any) {
 }
 
 const filteredCatalogItems = computed(() => {
-  const account = current.value?.profile?.whatsapp_account
+  const account = currentAccount.value || current.value?.profile?.whatsapp_account
   let rows = catalogItems.value
   if (account) {
     rows = rows.filter((item) => !item.whatsapp_account || item.whatsapp_account === account)
@@ -640,8 +645,8 @@ function showMatch(index: number) {
   matchCursor.value = next
   const el = document.getElementById(rows[next]!.name)
   el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  el?.classList.add('ring-2', 'ring-[#00A884]')
-  window.setTimeout(() => el?.classList.remove('ring-2', 'ring-[#00A884]'), 1400)
+  el?.classList.add('ring-2', 'ring-green-600')
+  window.setTimeout(() => el?.classList.remove('ring-2', 'ring-green-600'), 1400)
 }
 
 function toggleChatSearch() {
@@ -693,18 +698,18 @@ async function retryMessage(message: WhatsAppMessage) {
 </script>
 
 <template>
-  <div class="flex h-full min-w-0 overflow-hidden bg-[#F0F2F5]">
+  <div class="flex h-full min-w-0 overflow-hidden bg-wa-panel">
     <!-- Left Conversation Sidebar -->
     <aside
-      class="inbox-list min-h-0 flex-col border-r border-[#E9EDEF] bg-white"
+      class="inbox-list min-h-0 flex-col border-r border-wa bg-white"
       :class="desk.profile.value ? 'hidden md:flex' : 'flex'"
     >
-      <div class="flex items-center justify-between gap-2 border-b border-[#E9EDEF] px-3 py-2.5">
-        <span class="text-base font-semibold text-[#111B21]">Chats</span>
+      <div class="flex items-center justify-between gap-2 border-b border-wa px-3 py-2.5">
+        <span class="text-base font-semibold text-wa-ink">Chats</span>
         <button
           v-if="canCreateProfile"
           type="button"
-          class="grid size-9 place-items-center rounded-full bg-[#25D366] text-white shadow-sm hover:bg-[#1ebe5d]"
+          class="grid size-9 place-items-center rounded-full bg-wa-accent text-white shadow-sm hover:opacity-90"
           title="New chat"
           aria-label="New chat"
           @click="openNewProfile"
@@ -768,14 +773,14 @@ async function retryMessage(message: WhatsAppMessage) {
       class="inbox-chat min-h-0 flex-row overflow-hidden bg-white"
       :class="desk.profile.value ? 'flex' : 'hidden md:flex'"
     >
-      <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#efeae2]">
+      <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-wa-chat">
       <!-- Empty Canvas (No Conversation Selected) -->
       <div
         v-if="!current && !desk.threadLoading.value"
         class="grid flex-1 place-items-center bg-surface-gray-1 p-6 text-center"
       >
         <div class="max-w-md space-y-4">
-          <div class="mx-auto grid size-16 place-items-center rounded-2xl bg-[#075E54]/10 text-[#075E54] shadow-xs">
+          <div class="mx-auto grid size-16 place-items-center rounded-2xl bg-wa-teal/10 text-wa-teal shadow-xs">
             <span class="lucide-message-square size-8" aria-hidden="true" />
           </div>
           <div>
@@ -795,7 +800,7 @@ async function retryMessage(message: WhatsAppMessage) {
             </div>
             <div class="rounded-xl border border-outline-gray-2 bg-white p-3.5 shadow-xs">
               <p class="text-xs font-semibold text-ink-gray-9 flex items-center gap-1.5">
-                <span class="lucide-layout-template size-3.5 text-[#075E54]" /> Meta Templates
+                <span class="lucide-layout-template size-3.5 text-wa-teal" /> Meta Templates
               </p>
               <p class="mt-1 text-[11px] leading-relaxed text-ink-gray-5">
                 Initiate outbound threads or re-open conversations with approved templates.
@@ -808,7 +813,7 @@ async function retryMessage(message: WhatsAppMessage) {
       <!-- Loading State -->
       <div v-else-if="!current && desk.threadLoading.value" class="grid flex-1 place-items-center text-sm text-ink-gray-6">
         <div class="flex items-center gap-2">
-          <span class="lucide-loader-2 size-4 animate-spin text-[#075E54]" />
+          <span class="lucide-loader-2 size-4 animate-spin text-wa-teal" />
           <span>Opening conversation thread…</span>
         </div>
       </div>
@@ -836,15 +841,15 @@ async function retryMessage(message: WhatsAppMessage) {
           @simulate-reply="desk.simulateReply()"
         />
 
-        <div v-if="chatSearchOpen" class="flex shrink-0 items-center gap-2 border-b border-[#E9EDEF] bg-white px-3 py-2">
+        <div v-if="chatSearchOpen" class="flex shrink-0 items-center gap-2 border-b border-wa bg-white px-3 py-2">
           <TextInput v-model="chatQuery" class="min-w-0 flex-1" placeholder="Search in this conversation" />
-          <span class="shrink-0 text-[11px] text-[#667781]">
+          <span class="shrink-0 text-[11px] text-wa-subtle">
             {{ chatQuery.trim() ? `${chatMatches.length ? matchCursor + 1 : 0}/${chatMatches.length}` : '' }}
           </span>
-          <button type="button" class="grid size-7 place-items-center rounded-full text-[#54656F] hover:bg-[#F0F2F5]" title="Previous match" @click="showMatch(matchCursor - 1)">
+          <button type="button" class="grid size-7 place-items-center rounded-full text-wa-muted hover:bg-wa-panel" title="Previous match" @click="showMatch(matchCursor - 1)">
             <span class="lucide-chevron-up size-4" aria-hidden="true" />
           </button>
-          <button type="button" class="grid size-7 place-items-center rounded-full text-[#54656F] hover:bg-[#F0F2F5]" title="Next match" @click="showMatch(matchCursor + 1)">
+          <button type="button" class="grid size-7 place-items-center rounded-full text-wa-muted hover:bg-wa-panel" title="Next match" @click="showMatch(matchCursor + 1)">
             <span class="lucide-chevron-down size-4" aria-hidden="true" />
           </button>
         </div>
@@ -872,7 +877,7 @@ async function retryMessage(message: WhatsAppMessage) {
           </ul>
           <form class="mt-2 flex flex-wrap items-center gap-2" @submit.prevent="saveNote">
             <TextInput v-model="noteText" class="min-w-0 flex-1" placeholder="Add an internal note" />
-            <Button type="submit" size="sm" variant="solid" label="Save" :loading="savingNote" :disabled="!noteText.trim()" />
+            <Button type="submit" size="sm" variant="solid" loading-text="Saving…" label="Save" :loading="savingNote" :disabled="!noteText.trim()" />
           </form>
         </div>
 
@@ -886,7 +891,7 @@ async function retryMessage(message: WhatsAppMessage) {
           <button
             v-if="current?.has_older"
             type="button"
-            class="mb-3 w-full rounded-md bg-white/80 px-3 py-2 text-center text-xs font-semibold text-[#075E54] shadow-sm"
+            class="mb-3 w-full rounded-md bg-white/80 px-3 py-2 text-center text-xs font-semibold text-wa-teal shadow-sm"
             @click="loadEarlier"
           >
             Load earlier messages
@@ -924,21 +929,14 @@ async function retryMessage(message: WhatsAppMessage) {
               <strong>24-Hour Window Closed.</strong> Meta allows only approved WhatsApp Templates outside the 24h window.
             </span>
           </div>
-          <Button
-            size="sm"
-            variant="solid"
-            class="w-full bg-[#075E54] text-white hover:bg-[#128C7E] sm:w-auto shrink-0"
-            label="Select Template to Send"
-            icon-left="lucide-layout-template"
-            @click="templateOpen = true"
-          />
+          <Button size="sm" variant="solid" theme="green" label="Select Template to Send" icon-left="lucide-layout-template" @click="templateOpen = true" class="w-full sm:w-auto shrink-0"/>
         </div>
 
         <!-- Message Composer Input -->
         <div
           v-if="current.profile.status !== 'Blocked'"
           ref="composerRoot"
-          class="inbox-composer relative sticky bottom-0 z-10 shrink-0 border-t border-[#E9EDEF] bg-[#F0F2F5] px-2 py-2 sm:px-3"
+          class="inbox-composer relative sticky bottom-0 z-10 shrink-0 border-t border-wa bg-wa-panel px-2 py-2 sm:px-3"
           @keydown.capture="onComposerKeydown"
         >
           <CannedReplyPicker
@@ -961,8 +959,8 @@ async function retryMessage(message: WhatsAppMessage) {
             <template #leading-actions>
               <button
                 type="button"
-                class="grid size-10 place-items-center rounded-full text-[#54656F] hover:bg-black/5"
-                :class="pickerOpen ? 'bg-black/5 text-[#00A884]' : ''"
+                class="grid size-10 place-items-center rounded-full text-wa-muted hover:bg-black/5"
+                :class="pickerOpen ? 'bg-surface-gray-2 text-ink-gray-9' : ''"
                 :title="pickerOpen ? 'Close quick replies' : 'Quick replies (/)'"
                 :aria-label="pickerOpen ? 'Close quick replies' : 'Quick replies'"
                 :aria-expanded="pickerOpen"
@@ -972,7 +970,7 @@ async function retryMessage(message: WhatsAppMessage) {
               </button>
               <button
                 type="button"
-                class="hidden size-10 place-items-center rounded-full text-[#54656F] hover:bg-black/5 sm:grid"
+                class="hidden size-10 place-items-center rounded-full text-wa-muted hover:bg-black/5 sm:grid"
                 title="Send template"
                 @click="templateOpen = true"
               >
@@ -980,7 +978,7 @@ async function retryMessage(message: WhatsAppMessage) {
               </button>
               <button
                 type="button"
-                class="hidden size-10 place-items-center rounded-full text-[#54656F] hover:bg-black/5 sm:grid"
+                class="hidden size-10 place-items-center rounded-full text-wa-muted hover:bg-black/5 sm:grid"
                 title="Catalog"
                 @click="openCatalog"
               >
@@ -994,19 +992,19 @@ async function retryMessage(message: WhatsAppMessage) {
 
       <aside
         v-if="current && contactOpen"
-        class="inbox-rail inbox-rail-open relative hidden h-auto min-h-0 flex-col self-stretch border-l border-[#E9EDEF] bg-white xl:flex"
+        class="inbox-rail inbox-rail-open relative hidden h-auto min-h-0 flex-col self-stretch border-l border-wa bg-white xl:flex"
       >
-        <div class="flex h-14 shrink-0 items-center gap-2 border-b border-[#E9EDEF] px-2">
+        <div class="flex h-14 shrink-0 items-center gap-2 border-b border-wa px-2">
           <button
             type="button"
-            class="grid size-8 shrink-0 place-items-center rounded-full text-[#54656F] hover:bg-[#F0F2F5]"
+            class="grid size-8 shrink-0 place-items-center rounded-full text-wa-muted hover:bg-wa-panel"
             title="Collapse contact info"
             aria-label="Collapse contact info"
             @click="contactOpen = false"
           >
             <span class="lucide-panel-right-close size-4" aria-hidden="true" />
           </button>
-          <span class="truncate text-sm font-semibold text-[#111B21]">Contact info</span>
+          <span class="truncate text-sm font-semibold text-wa-ink">Contact info</span>
         </div>
         <ProfileDetails
           ref="desktopProfile"
@@ -1022,9 +1020,9 @@ async function retryMessage(message: WhatsAppMessage) {
     <div v-if="details && current" class="fixed inset-0 z-50 xl:hidden">
       <button type="button" class="absolute inset-0 bg-black/40" aria-label="Close contact info" @click="details = false" />
       <aside class="absolute inset-x-0 bottom-0 flex max-h-[min(70dvh,32rem)] w-full flex-col overflow-hidden rounded-t-2xl bg-white pb-[env(safe-area-inset-bottom)] shadow-xl">
-        <div class="flex h-11 shrink-0 items-center justify-between border-b border-[#E9EDEF] px-3">
-          <span class="text-sm font-semibold text-[#111B21]">Contact info</span>
-          <button type="button" class="grid size-8 place-items-center rounded-full text-[#54656F] hover:bg-[#F0F2F5]" aria-label="Close" @click="details = false">
+        <div class="flex h-11 shrink-0 items-center justify-between border-b border-wa px-3">
+          <span class="text-sm font-semibold text-wa-ink">Contact info</span>
+          <button type="button" class="grid size-8 place-items-center rounded-full text-wa-muted hover:bg-wa-panel" aria-label="Close" @click="details = false">
             <span class="lucide-x size-4" aria-hidden="true" />
           </button>
         </div>
@@ -1049,31 +1047,34 @@ async function retryMessage(message: WhatsAppMessage) {
             placeholder="Search templates by name, label, or body…"
             class="flex-1"
           />
-          <div class="flex items-center gap-1 text-xs">
-            <button
-              type="button"
-              class="rounded-lg px-2.5 py-1 font-medium"
-              :class="templateTypeFilter === 'all' ? 'bg-[#075E54] text-white' : 'bg-surface-gray-2 text-ink-gray-7 hover:bg-surface-gray-3'"
+          <div class="flex items-center gap-1">
+            <Button
+              size="sm"
+              label="All"
+              :variant="templateTypeFilter === 'all' ? 'solid' : 'subtle'"
+              :theme="templateTypeFilter === 'all' ? 'green' : 'gray'"
+              :data-state="templateTypeFilter === 'all' ? 'active' : undefined"
+              :aria-pressed="templateTypeFilter === 'all'"
               @click="templateTypeFilter = 'all'"
-            >
-              All
-            </button>
-            <button
-              type="button"
-              class="rounded-lg px-2.5 py-1 font-medium"
-              :class="templateTypeFilter === 'Utility' ? 'bg-[#075E54] text-white' : 'bg-surface-gray-2 text-ink-gray-7 hover:bg-surface-gray-3'"
+            />
+            <Button
+              size="sm"
+              label="Utility"
+              :variant="templateTypeFilter === 'Utility' ? 'solid' : 'subtle'"
+              :theme="templateTypeFilter === 'Utility' ? 'green' : 'gray'"
+              :data-state="templateTypeFilter === 'Utility' ? 'active' : undefined"
+              :aria-pressed="templateTypeFilter === 'Utility'"
               @click="templateTypeFilter = 'Utility'"
-            >
-              Utility
-            </button>
-            <button
-              type="button"
-              class="rounded-lg px-2.5 py-1 font-medium"
-              :class="templateTypeFilter === 'Marketing' ? 'bg-[#075E54] text-white' : 'bg-surface-gray-2 text-ink-gray-7 hover:bg-surface-gray-3'"
+            />
+            <Button
+              size="sm"
+              label="Marketing"
+              :variant="templateTypeFilter === 'Marketing' ? 'solid' : 'subtle'"
+              :theme="templateTypeFilter === 'Marketing' ? 'green' : 'gray'"
+              :data-state="templateTypeFilter === 'Marketing' ? 'active' : undefined"
+              :aria-pressed="templateTypeFilter === 'Marketing'"
               @click="templateTypeFilter = 'Marketing'"
-            >
-              Marketing
-            </button>
+            />
           </div>
         </div>
 
@@ -1091,7 +1092,7 @@ async function retryMessage(message: WhatsAppMessage) {
               class="flex flex-col w-full rounded-xl border p-3 text-left transition-all"
               :class="
                 picked?.name === template.name
-                  ? 'border-[#075E54] bg-teal-50/60 shadow-xs ring-1 ring-[#075E54]'
+                  ? 'border-[var(--wa-teal-deep)] bg-teal-50/60 shadow-xs ring-1 ring-[var(--wa-teal-deep)]'
                   : 'border-outline-gray-2 hover:border-outline-gray-4 hover:bg-surface-gray-1'
               "
               @click="chooseTemplate(template)"
@@ -1104,7 +1105,7 @@ async function retryMessage(message: WhatsAppMessage) {
               </div>
               <p class="mt-1 line-clamp-2 text-xs text-ink-gray-6">{{ template.message }}</p>
               <div class="mt-2 flex items-center gap-2 text-[10px] text-ink-gray-5">
-                <span class="font-medium text-[#075E54]">{{ template.template_type }}</span>
+                <span class="font-medium text-wa-teal">{{ template.template_type }}</span>
                 <span>·</span>
                 <span>{{ template.language }}</span>
                 <span v-if="template.buttons?.length">· {{ template.buttons.length }} buttons</span>
@@ -1113,7 +1114,7 @@ async function retryMessage(message: WhatsAppMessage) {
           </div>
 
           <!-- Live WhatsApp Bubble Preview -->
-          <div class="flex min-h-0 flex-col overflow-y-auto rounded-xl border border-outline-gray-2 bg-[#efeae2]/40 p-4">
+          <div class="flex min-h-0 flex-col overflow-y-auto rounded-xl border border-outline-gray-2 bg-wa-chat/40 p-4">
             <p class="pb-3 text-[11px] font-bold uppercase tracking-wider text-ink-gray-5">Live Template Preview</p>
             <div v-if="picked" class="flex flex-1 flex-col justify-center">
               <DeskTemplatePreview :template="picked" mode="preview" :editable="false" large />
@@ -1133,15 +1134,7 @@ async function retryMessage(message: WhatsAppMessage) {
           <span v-else />
           <div class="flex gap-2">
             <Button label="Cancel" @click="templateOpen = false" />
-            <Button
-              variant="solid"
-              class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-              label="Send Template"
-              icon-left="lucide-send"
-              :disabled="!picked"
-              :loading="desk.sending.value"
-              @click="sendPicked"
-            />
+            <Button variant="solid" theme="green" label="Send Template" icon-left="lucide-send" loading-text="Sending…" :disabled="!picked" :loading="desk.sending.value" @click="sendPicked"/>
           </div>
         </div>
       </template>
@@ -1181,7 +1174,7 @@ async function retryMessage(message: WhatsAppMessage) {
         />
 
         <div v-if="catalogLoading" class="py-8 text-center text-xs text-ink-gray-5">
-          <span class="lucide-loader-2 size-4 animate-spin text-[#075E54]" />
+          <span class="lucide-loader-2 size-4 animate-spin text-wa-teal" />
           <p class="mt-2">Loading catalog items…</p>
         </div>
         <div v-else-if="!filteredCatalogItems.length" class="py-8 text-center text-xs text-ink-gray-5">
@@ -1212,6 +1205,7 @@ async function retryMessage(message: WhatsAppMessage) {
               :theme="catalogItemBlocked(item) ? 'gray' : 'green'"
               label="Send Product"
               icon-left="lucide-send"
+              loading-text="Sending…"
               :loading="catalogSending && catalogSendingItem === item.name"
               class="w-full sm:w-auto"
               :disabled="!catalogWindowOpen || catalogIdInvalid(item) || catalogSending"
@@ -1232,22 +1226,13 @@ async function retryMessage(message: WhatsAppMessage) {
         </p>
         <FormControl v-model="newProfile.profile_name" type="text" label="Name" placeholder="Contact name" />
         <FormControl v-model="newProfile.phone_number" type="text" label="Phone number" placeholder="+91…" />
-        <FormControl
-          v-model="newProfile.whatsapp_account"
-          type="select"
-          label="WhatsApp account"
-          :options="newProfileAccounts"
-        />
+        <p class="text-xs text-ink-gray-5">
+          WhatsApp account: {{ currentAccountLabel || 'Select a number in the top bar' }}
+        </p>
       </div>
       <template #actions>
         <Button label="Cancel" @click="newProfileOpen = false" />
-        <Button
-          variant="solid"
-          class="bg-[#075E54] text-white hover:bg-[#128C7E]"
-          label="Create"
-          :loading="newProfileSaving"
-          @click="createProfileFromChat"
-        />
+        <Button variant="solid" theme="green" loading-text="Creating…" label="Create" :loading="newProfileSaving" @click="createProfileFromChat"/>
       </template>
     </Dialog>
   </div>

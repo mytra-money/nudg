@@ -143,7 +143,7 @@ function onSample(name: string, value: string) {
             <div class="flex items-center gap-2">
               <span class="grid size-7 place-items-center rounded-full text-sm text-ink-gray-5">+</span>
               <div class="h-8 flex-1 rounded-full bg-white px-3 text-[12px] leading-8 text-ink-gray-4">Message</div>
-              <span class="grid size-8 place-items-center rounded-full bg-[#075E54] text-white">
+              <span class="grid size-8 place-items-center rounded-full bg-wa-teal text-white">
                 <span class="lucide-mic size-4" />
               </span>
             </div>
@@ -164,7 +164,7 @@ function onSample(name: string, value: string) {
       </div>
       <div class="desktop-grid">
         <aside class="desktop-chats border-r border-outline-gray-2 bg-white">
-          <div class="bg-[#075E54] px-3 py-3 text-xs font-semibold text-white">Chats</div>
+          <div class="bg-wa-teal px-3 py-3 text-xs font-semibold text-white">Chats</div>
           <div class="border-b border-outline-gray-1 bg-[#f0fdf4] px-3 py-2.5">
             <p class="truncate text-xs font-semibold text-ink-gray-9">{{ businessName }}</p>
             <p class="mt-0.5 line-clamp-2 text-[11px] leading-snug text-ink-gray-5">{{ body || 'Template preview' }}</p>

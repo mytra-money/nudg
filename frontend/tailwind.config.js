@@ -35,13 +35,6 @@ export default {
         full: '9999px',
       },
       colors: {
-        'ink-gray-9': '#111827',
-        'ink-gray-8': '#1f2937',
-        'ink-gray-7': '#374151',
-        'ink-gray-4': '#9ca3af',
-        'surface-gray-9': '#1f2937',
-        'surface-gray-10': '#111827',
-        'surface-dark': '#111827',
         emerald: {
           50: '#ecfdf5',
           100: '#d1fae5',

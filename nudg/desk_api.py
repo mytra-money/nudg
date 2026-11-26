@@ -1732,3 +1732,27 @@ def delete_directory_recipient_list(name: str) -> dict:
 	from nudg.services.directory import delete_recipient_list
 
 	return delete_recipient_list(name)
+
+
+@frappe.whitelist()
+def add_profile_to_recipient_list(profile: str, recipient_list: str) -> dict:
+	_require_login()
+	from nudg.services.directory import add_profile_to_recipient_list as _add
+
+	return _add(profile, recipient_list)
+
+
+@frappe.whitelist()
+def remove_profile_from_recipient_list(profile: str, recipient_list: str) -> dict:
+	_require_login()
+	from nudg.services.directory import remove_profile_from_recipient_list as _remove
+
+	return _remove(profile, recipient_list)
+
+
+@frappe.whitelist()
+def import_directory_profiles(file_url: str, whatsapp_account: str | None = None) -> dict:
+	_require_login()
+	from nudg.services.directory import import_profiles
+
+	return import_profiles(file_url, whatsapp_account)
