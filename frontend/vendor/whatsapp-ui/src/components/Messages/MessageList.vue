@@ -8,6 +8,7 @@ import type { MessageListProps, ReactPayload, WhatsAppMessage } from "./types";
 const props = withDefaults(defineProps<MessageListProps>(), {
 	messages: () => [],
 	rowClass: "",
+	canReply: true,
 	senderName: "Contact",
 	youLabel: "You",
 	reactedByLabel: "Reacted by",
@@ -21,12 +22,17 @@ const props = withDefaults(defineProps<MessageListProps>(), {
 	todayLabel: "Today",
 	yesterdayLabel: "Yesterday",
 	reactionEmojis: () => REACTION_EMOJIS,
+	flowSubmittedLabel: "Form submitted",
+	flowSensitiveLabel: "Hidden: the form marks this answer as sensitive",
+	flowYesLabel: "Yes",
+	flowNoLabel: "No",
+	flowOneFileLabel: "1 file",
+	flowFilesLabel: "{0} files",
 });
 
 const emit = defineEmits<{
 	reply: [message: WhatsAppMessage];
 	react: [payload: ReactPayload];
-	retry: [message: WhatsAppMessage];
 }>();
 
 const FLASH_MS = 1000;
@@ -57,6 +63,10 @@ const rows = computed<Row[]>(() => {
 	}
 	return out;
 });
+
+function ownReaction(message: WhatsAppMessage) {
+	return message.reactions?.find((reaction) => reaction.direction == "Outgoing")?.emoji;
+}
 
 // Scoped to this list: two lists on one page would otherwise fight over `document`, and a
 // docname shares the id namespace with every other element on the page.
@@ -140,22 +150,24 @@ onBeforeUnmount(() => {
 			</div>
 		</div>
 
-		<ul v-else role="list" class="flex flex-col gap-1.5">
+		<ul v-else role="list" class="flex flex-col gap-3">
 			<template v-for="row in rows" :key="row.key">
 				<li
 					v-if="row.kind === 'separator'"
 					role="presentation"
-					class="flex justify-center py-1.5"
+					class="flex items-center gap-3 py-1"
 				>
-					<span class="rounded-lg bg-white/90 px-3 py-1 text-[12px] font-medium text-[#54656F] shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]">
-						{{ row.label }}
-					</span>
+					<!-- a border, not a background: `bg-` registers `surface` only, so
+					     `bg-outline-*` produces no colour at all -->
+					<span class="flex-1 border-t border-outline-gray-2" />
+					<span class="text-xs text-ink-gray-6">{{ row.label }}</span>
+					<span class="flex-1 border-t border-outline-gray-2" />
 				</li>
 
 				<li
 					v-else
 					:ref="(el) => registerRow(row.message.name, el)"
-					class="group flex gap-2 rounded-6 transition-shadow"
+					class="group flex gap-2 rounded-6 transition-shadow [contain-intrinsic-size:auto_5rem] [content-visibility:auto]"
 					:class="[
 						rowClass,
 						row.message.direction == 'Outgoing' ? 'flex-row-reverse' : '',
@@ -173,20 +185,27 @@ onBeforeUnmount(() => {
 
 					<MessageBubble
 						:message="row.message"
+						:can-reply="canReply"
 						:sender-name="senderName"
 						:you-label="youLabel"
 						:reacted-by-label="reactedByLabel"
 						:reply-label="replyLabel"
 						:replying-to-label="replyingToLabel"
 						:failed-message-label="failedMessageLabel"
+						:flow-submitted-label="flowSubmittedLabel"
+						:flow-sensitive-label="flowSensitiveLabel"
+						:flow-yes-label="flowYesLabel"
+						:flow-no-label="flowNoLabel"
+						:flow-one-file-label="flowOneFileLabel"
+						:flow-files-label="flowFilesLabel"
 						@reply="emit('reply', $event)"
-						@retry="emit('retry', $event)"
 						@jump-to="scrollToMessage"
 					>
 						<!-- the bubble owns the reveal and the Failed guard for this whole pair -->
 						<template #actions>
 							<ReactionPicker
 								:emojis="reactionEmojis"
+								:selected="ownReaction(row.message)"
 								@select="
 									emit('react', { messageName: row.message.name, emoji: $event })
 								"
@@ -200,6 +219,7 @@ onBeforeUnmount(() => {
 									</template>
 								</Button>
 							</ReactionPicker>
+							<slot name="actions" :message="row.message" />
 						</template>
 					</MessageBubble>
 				</li>
@@ -211,7 +231,12 @@ onBeforeUnmount(() => {
 			composer, and is shown only while the end of the list is out of view — so the last
 			message is never tinted when nothing is behind the fade.
 		-->
-		<!-- bottom gradient removed to prevent obscuring messages -->
+		<div
+			v-if="messages.length"
+			aria-hidden="true"
+			class="pointer-events-none sticky bottom-0 -mt-8 h-8 bg-gradient-to-t from-[color:var(--surface-base)] to-transparent transition-opacity"
+			:class="endHidden ? 'opacity-100' : 'opacity-0'"
+		/>
 		<div v-if="messages.length" :ref="observeEnd" />
 	</div>
 </template>

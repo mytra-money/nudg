@@ -34,8 +34,6 @@ class WAKeywordReply(Document):
 		elif self.response_type == "Media":
 			if not self.media_type or not self.media_url:
 				frappe.throw(_("Select a media type and a file or URL."))
-		elif self.response_type == "Flow" and not self.trigger_flow:
-			frappe.throw(_("Select the chatbot flow to start."))
 		elif self.response_type == "Script" and not self.script:
 			frappe.throw(_("Enter a Server Script name or a dotted method path."))
 

@@ -37,7 +37,6 @@ AGENT_LOCKED = (
 	"WA Recipient List",
 	"WA Chatbot",
 	"WA Keyword Reply",
-	"WA Chatbot Flow",
 	"WA AI Context",
 )
 
@@ -52,7 +51,6 @@ MANAGER_GRANTS = {
 	"WA Recipient List": ("read", "write", "create", "delete", "report", "print"),
 	"WA Chatbot": ("read", "write", "create", "report", "print"),
 	"WA Keyword Reply": ("read", "write", "create", "delete", "report", "print"),
-	"WA Chatbot Flow": ("read", "write", "create", "delete", "report", "print"),
 	"WA Chatbot Session": ("read", "write", "delete", "report", "print"),
 	"WA Agent Transfer": ("read", "write", "create", "delete", "report", "print"),
 	"WA AI Context": ("read", "write", "create", "delete", "report", "print"),
@@ -120,7 +118,8 @@ def ensure_performance_indexes() -> None:
 				continue
 			if _index_covers(doctype, fields):
 				continue
-			frappe.db.add_index(doctype, fields, index_name)
+			quoted_fields = ", ".join(f"`{f}`" for f in fields)
+			frappe.db.sql(f"ALTER TABLE `tab{doctype}` ADD INDEX IF NOT EXISTS `{index_name}` ({quoted_fields})")
 		except Exception:
 			frappe.log_error(title=f"Nudg index {index_name}")
 
@@ -195,9 +194,25 @@ def account_site_fields() -> list[dict]:
 			"insert_after": "erp_site_url",
 		},
 		{
+			"fieldname": "erp_connected_app",
+			"label": "Connected App",
+			"fieldtype": "Link",
+			"options": "Connected App",
+			"read_only": 1,
+			"insert_after": "erp_remote_user",
+		},
+		{
+			"fieldname": "erp_oauth_user",
+			"label": "OAuth User",
+			"fieldtype": "Link",
+			"options": "User",
+			"read_only": 1,
+			"insert_after": "erp_connected_app",
+		},
+		{
 			"fieldname": "erp_credentials_col",
 			"fieldtype": "Column Break",
-			"insert_after": "erp_remote_user",
+			"insert_after": "erp_oauth_user",
 		},
 		{
 			"fieldname": "erp_api_key",

@@ -312,18 +312,6 @@ export async function deleteChatbotKeyword(account: string, name: string) {
   return call<any>('nudg.desk_api.delete_chatbot_keyword', { account, name })
 }
 
-export async function listChatbotFlows(account: string) {
-  return call<any[]>('nudg.desk_api.list_chatbot_flows', { account })
-}
-
-export async function saveChatbotFlow(account: string, payload: Record<string, unknown>) {
-  return call<any>('nudg.desk_api.save_chatbot_flow', { account, payload })
-}
-
-export async function deleteChatbotFlow(account: string, name: string) {
-  return call<any>('nudg.desk_api.delete_chatbot_flow', { account, name })
-}
-
 export async function listChatbotHandoffs(account: string) {
   return call<any>('nudg.desk_api.list_chatbot_handoffs', { account })
 }

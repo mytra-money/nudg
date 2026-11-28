@@ -865,7 +865,7 @@ onMounted(() => {
         />
 
         <!-- Members List -->
-        <div v-else class="divide-y divide-outline-gray-1 rounded-lg border border-outline-gray-2 bg-white">
+        <div v-else class="divide-y divide-outline-gray-1 rounded-lg border border-outline-gray-2 bg-surface-base">
           <ItemListRow
             v-for="member in teamMembers"
             :key="member.email"

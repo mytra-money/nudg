@@ -66,7 +66,7 @@ defineExpose({ onKeydown, filtered })
 <template>
   <div
     v-if="open"
-    class="absolute bottom-full left-0 right-0 z-20 mb-2 flex max-h-[min(18rem,calc(100dvh-9rem))] flex-col overflow-hidden rounded-xl border border-wa bg-white shadow-lg"
+    class="absolute bottom-full left-0 right-0 z-20 mb-2 flex max-h-[min(18rem,calc(100dvh-9rem))] flex-col overflow-hidden rounded-xl border border-wa bg-surface-base shadow-lg"
     role="listbox"
     aria-label="Quick replies"
   >

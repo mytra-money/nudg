@@ -113,7 +113,7 @@ const recentLogs = computed(() => logs.value.slice(0, 4))
 </script>
 
 <template>
-  <div class="h-full overflow-y-auto bg-white">
+  <div class="h-full overflow-y-auto bg-surface-base">
     <div class="mx-auto flex min-h-full w-full max-w-7xl flex-col px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
       <!-- Status / actions only — AppShell owns the page title -->
       <header class="flex flex-col gap-3 border-b border-outline-gray-2 pb-5 sm:flex-row sm:items-center sm:justify-between">
@@ -499,15 +499,15 @@ const recentLogs = computed(() => logs.value.slice(0, 4))
               </h4>
             </template>
             <ul class="flex min-h-0 flex-1 flex-col gap-3 leading-relaxed">
-              <li class="flex flex-1 items-center gap-2.5 rounded-lg bg-white/75 px-3.5 py-3">
+              <li class="flex flex-1 items-center gap-2.5 rounded-lg bg-surface-base/80 px-3.5 py-3">
                 <span class="font-bold text-ink-green-7">•</span>
                 <span><strong>24-Hour Rule:</strong> Free-form messages can only be sent within 24 hours of the customer's last incoming message.</span>
               </li>
-              <li class="flex flex-1 items-center gap-2.5 rounded-lg bg-white/75 px-3.5 py-3">
+              <li class="flex flex-1 items-center gap-2.5 rounded-lg bg-surface-base/80 px-3.5 py-3">
                 <span class="font-bold text-ink-green-7">•</span>
                 <span><strong>Templates Required:</strong> To initiate conversations or reply after 24h, you must use an approved WhatsApp Template.</span>
               </li>
-              <li class="flex flex-1 items-center gap-2.5 rounded-lg bg-white/75 px-3.5 py-3">
+              <li class="flex flex-1 items-center gap-2.5 rounded-lg bg-surface-base/80 px-3.5 py-3">
                 <span class="font-bold text-ink-green-7">•</span>
                 <span><strong>Read Receipts:</strong> Incoming messages automatically update read markers when configured in account settings.</span>
               </li>

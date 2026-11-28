@@ -142,7 +142,7 @@ def list_keywords(account: str | None, start: int | None = 0, limit: int | None 
 	return frappe.get_all(
 		"WA Keyword Reply",
 		filters={"whatsapp_account": account},
-		fields=["name", "title", "keywords", "match_type", "response_type", "response_text", "trigger_flow", "enabled", "priority"],
+		fields=["name", "title", "keywords", "match_type", "response_type", "response_text", "enabled", "priority"],
 		order_by="priority desc, modified desc",
 		limit_start=page_start(start),
 		limit_page_length=page_limit(limit, default=50, maximum=50),
@@ -159,8 +159,8 @@ def save_keyword(account: str | None, payload: dict) -> dict:
 	if match_type not in _MATCH:
 		frappe.throw(_("Choose how the keyword should match."))
 	response_type = payload.get("response_type") or "Text"
-	if response_type not in ("Text", "Flow", "Unsubscribe", "Subscribe"):
-		frappe.throw(_("A keyword can send a reply, start a flow, or change unsubscribe."))
+	if response_type not in ("Text", "Unsubscribe", "Subscribe"):
+		frappe.throw(_("A keyword can send a reply or change unsubscribe."))
 	name = (payload.get("name") or "").strip()
 	doc = frappe.get_doc("WA Keyword Reply", name) if name and frappe.db.exists("WA Keyword Reply", name) else frappe.new_doc("WA Keyword Reply")
 	if doc.get("whatsapp_account") and doc.whatsapp_account != account:
@@ -170,12 +170,7 @@ def save_keyword(account: str | None, payload: dict) -> dict:
 	doc.keywords = keywords
 	doc.match_type = match_type
 	doc.response_type = response_type
-	if response_type in ("Text", "Unsubscribe", "Subscribe"):
-		doc.response_text = (payload.get("response_text") or "").strip()
-		doc.trigger_flow = None
-	else:
-		doc.response_text = ""
-		doc.trigger_flow = (payload.get("trigger_flow") or "").strip()
+	doc.response_text = (payload.get("response_text") or "").strip()
 	doc.enabled = cint(payload.get("enabled", 1))
 	doc.priority = cint(payload.get("priority"))
 	doc.save(ignore_permissions=True)
@@ -189,98 +184,6 @@ def delete_keyword(account: str | None, name: str) -> dict:
 	if frappe.db.get_value("WA Keyword Reply", name, "whatsapp_account") != account:
 		frappe.throw(_("This keyword belongs to another WhatsApp account."))
 	frappe.delete_doc("WA Keyword Reply", name, ignore_permissions=True, force=True)
-	return {"name": name, "deleted": True}
-
-
-def list_flows(account: str | None, start: int | None = 0, limit: int | None = None) -> list[dict]:
-	from nudg.paging import page_limit, page_start
-
-	account = _account(account)
-	names = frappe.get_all(
-		"WA Chatbot Flow",
-		filters={"whatsapp_account": account},
-		pluck="name",
-		order_by="modified desc",
-		limit_start=page_start(start),
-		limit_page_length=page_limit(limit, default=50, maximum=50),
-	)
-	rows = []
-	for name in names:
-		doc = frappe.get_doc("WA Chatbot Flow", name)
-		rows.append({
-			"name": doc.name,
-			"flow_name": doc.flow_name,
-			"enabled": cint(doc.enabled),
-			"trigger_keywords": doc.trigger_keywords or "",
-			"initial_message": doc.initial_message or "",
-			"completion_message": doc.completion_message or "",
-			"cancel_keywords": doc.cancel_keywords or "",
-			"steps": [
-				{
-					"step_name": step.step_name,
-					"message": step.message,
-					"input_type": step.input_type or "Text",
-					"store_as": step.store_as or "",
-				}
-				for step in doc.steps
-			],
-		})
-	return rows
-
-
-def save_flow(account: str | None, payload: dict) -> dict:
-	account = _account(account)
-	payload = payload or {}
-	flow_name = (payload.get("flow_name") or "").strip()
-	if not flow_name:
-		frappe.throw(_("Name the flow."))
-	steps = payload.get("steps") or []
-	if not steps:
-		frappe.throw(_("Add at least one question."))
-	name = (payload.get("name") or "").strip() or flow_name
-	if frappe.db.exists("WA Chatbot Flow", name):
-		doc = frappe.get_doc("WA Chatbot Flow", name)
-		if doc.whatsapp_account and doc.whatsapp_account != account:
-			frappe.throw(_("This flow belongs to another WhatsApp account."))
-	else:
-		doc = frappe.new_doc("WA Chatbot Flow")
-		doc.flow_name = flow_name
-	doc.whatsapp_account = account
-	doc.enabled = cint(payload.get("enabled", 1))
-	doc.trigger_keywords = (payload.get("trigger_keywords") or "").strip()
-	doc.initial_message = (payload.get("initial_message") or "").strip()
-	doc.completion_message = (payload.get("completion_message") or "").strip()
-	doc.cancel_keywords = (payload.get("cancel_keywords") or "stop").strip()
-	doc.set("steps", [])
-	seen = set()
-	for index, step in enumerate(steps, start=1):
-		step_name = re.sub(r"[^A-Za-z0-9_]", "", (step.get("step_name") or f"step_{index}").strip()) or f"step_{index}"
-		if step_name in seen:
-			frappe.throw(_("Each question needs its own name."))
-		seen.add(step_name)
-		input_type = step.get("input_type") or "Text"
-		if input_type not in _INPUTS:
-			input_type = "Text"
-		doc.append("steps", {
-			"step_name": step_name,
-			"message": (step.get("message") or "").strip() or _("Please reply."),
-			"message_type": "Text",
-			"input_type": input_type,
-			"store_as": (step.get("store_as") or "").strip(),
-			"retry_on_invalid": 1,
-			"max_retries": 3,
-		})
-	doc.save(ignore_permissions=True)
-	return {"name": doc.name}
-
-
-def delete_flow(account: str | None, name: str) -> dict:
-	account = _account(account)
-	if not name or not frappe.db.exists("WA Chatbot Flow", name):
-		frappe.throw(_("Flow not found."))
-	if frappe.db.get_value("WA Chatbot Flow", name, "whatsapp_account") != account:
-		frappe.throw(_("This flow belongs to another WhatsApp account."))
-	frappe.delete_doc("WA Chatbot Flow", name, ignore_permissions=True, force=True)
 	return {"name": name, "deleted": True}
 
 

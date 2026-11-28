@@ -514,10 +514,6 @@ def get_tenant_keyword_query(user: str | None = None) -> str:
 	return _account_query_for("WA Keyword Reply", "whatsapp_account", user)
 
 
-def get_tenant_flow_query(user: str | None = None) -> str:
-	return _account_query_for("WA Chatbot Flow", "whatsapp_account", user)
-
-
 def get_tenant_ai_context_query(user: str | None = None) -> str:
 	return _account_query_for("WA AI Context", "whatsapp_account", user)
 

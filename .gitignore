@@ -32,3 +32,6 @@ nudg/public/frontend/
 htmlcov/
 coverage/
 *.log
+
+.gemini/
+nudg/public/node_modules

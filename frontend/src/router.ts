@@ -4,7 +4,7 @@ import { canOpenContacts } from '@/utils/directoryAccess'
 import AnalyticsView from '@/pages/Analytics.vue'
 import AutomationView from '@/pages/Automation.vue'
 import CatalogsView from '@/pages/Catalogs.vue'
-import ErpnextView from '@/pages/Erpnext.vue'
+import ExternalSitesView from '@/pages/ExternalSites.vue'
 import ContactsView from '@/pages/Contacts.vue'
 import InboxView from '@/pages/Inbox.vue'
 import IntegrationsView from '@/pages/Integrations.vue'
@@ -58,15 +58,15 @@ export const router = createRouter({
     { path: '/analytics', component: AnalyticsView, meta: { title: 'Analytics', desk: true } },
     { path: '/integrations', component: IntegrationsView, meta: { title: 'Integrations', desk: true, manager: true } },
     {
-      path: '/integrations/erpnext',
-      component: ErpnextView,
+      path: '/external-sites',
+      component: ExternalSitesView,
       meta: {
-        title: 'ERPNext',
+        title: 'External Sites',
         desk: true,
         manager: true,
-        parent: { label: 'Integrations', to: '/integrations' },
       },
     },
+    { path: '/integrations/erpnext', redirect: '/external-sites' },
     { path: '/integrations/catalogs', redirect: '/catalogs' },
     {
       path: '/integrations/logs',

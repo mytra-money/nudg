@@ -108,14 +108,6 @@ def _timeout_session(name: str) -> None:
 	session.status = "Timeout"
 	session.completed_at = datetime.now()
 	session.save(ignore_permissions=True)
-	if not session.current_flow:
-		return
-	message = frappe.db.get_value("WA Chatbot Flow", session.current_flow, "timeout_message")
-	if not message:
-		return
-	from nudg.chatbot.processor import send_text
-
-	send_text(session.phone_number, session.whatsapp_account, message)
 
 
 def cleanup_expired_sessions():

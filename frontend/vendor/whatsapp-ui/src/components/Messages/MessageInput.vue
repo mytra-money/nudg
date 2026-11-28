@@ -1,7 +1,7 @@
 <!-- eslint-disable vue/no-v-html -->
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
-import { Button, Dropdown, FileUploader, Tooltip } from "frappe-ui";
+import { Button, Dropdown, FileUploader, Textarea, Tooltip } from "frappe-ui";
 import MediaPreviewDialog from "../common/MediaPreviewDialog.vue";
 import { formatWhatsAppMessage } from "../../utils/formatMessage";
 import { contentTypeFromMime } from "../../utils/media";
@@ -35,7 +35,7 @@ const emit = defineEmits<{
 }>();
 
 // View state only; nothing here is part of the message being composed.
-const textareaRef = ref<HTMLTextAreaElement | null>(null);
+const textareaRef = ref<{ focus: () => void } | null>(null);
 const uploaderRef = ref<{ inputRef?: HTMLInputElement } | null>(null);
 const acceptedFileTypes = ref<string>();
 const showMediaPreview = ref(false);
@@ -72,13 +72,6 @@ function focus() {
 	nextTick(() => textareaRef.value?.focus());
 }
 
-function growField() {
-	const el = textareaRef.value;
-	if (!el) return;
-	el.style.height = "auto";
-	el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
-}
-
 /**
  * The payload is built only to be reported: reading it before the send lets the emit
  * describe what went out, after the controller has cleared it.
@@ -90,8 +83,9 @@ async function submit(overrides?: Pick<SendMessagePayload, "message">) {
 	if (name && payload) emit("send", payload);
 }
 
-// Shift+enter is left to the textarea, so it breaks the line. An enter that commits an IME
-// composition is neither a send nor a line break.
+// Cmd/ctrl+enter also sends, as in the email and comment composers. Shift+enter is left to the
+// textarea, so it breaks the line. An enter that commits an IME composition is neither a send
+// nor a line break.
 function sendOnEnter(event: KeyboardEvent) {
 	if (event.isComposing) return;
 	event.preventDefault();
@@ -180,8 +174,6 @@ watch(
 	(value) => value && focus()
 );
 
-watch(draft, () => nextTick(growField));
-
 // Dismissing the preview abandons the upload; leaving it staged would attach it to whatever
 // is typed next. A send has already cleared it by the time this runs.
 watch(showMediaPreview, (open) => {
@@ -197,103 +189,113 @@ defineExpose({ focus });
 		<div
 			v-if="windowNotice"
 			role="status"
-			class="flex items-center gap-2 rounded-lg bg-white/80 px-3 py-2 text-xs text-[#667781]"
+			class="flex items-center gap-2 rounded-6 bg-surface-gray-2 px-3 py-2 text-sm text-ink-gray-7"
 		>
-			<span class="lucide-info size-4 shrink-0 text-amber-600" aria-hidden="true" />
+			<span class="lucide-info size-4 shrink-0 text-ink-amber-5" aria-hidden="true" />
 			{{ windowNotice }}
 		</div>
 
+		<!--
+			One control rather than a field beside a button row: the reply preview, the field and
+			the actions all sit inside the box, so they share its focus ring, its disabled state
+			and its drop target. `overflow-hidden` keeps the preview's fill inside the curved
+			corners — the attach menu and the send tooltip both portal out, so neither is clipped.
+		-->
 		<div
-			v-if="replyTo"
-			class="flex items-center gap-2 rounded-lg bg-white px-2.5 py-2 shadow-sm"
-		>
-			<div class="min-w-0 flex-1 border-l-2 border-[#00A884] pl-2">
-				<div class="text-xs font-medium text-[#00A884]">
-					{{ replyingToLabel }} {{ replyToName }}
-				</div>
-				<div
-					class="line-clamp-2 text-sm text-[#111B21]"
-					v-html="formatWhatsAppMessage(replyTo.message)"
-				/>
-			</div>
-			<Button variant="ghost" :aria-label="dismissReplyLabel" @click="clearReply()">
-				<template #icon>
-					<span class="lucide-x size-4 text-[#667781]" aria-hidden="true" />
-				</template>
-			</Button>
-		</div>
-
-		<div
-			class="flex items-end gap-1.5"
-			:class="draggingOver ? 'rounded-lg bg-emerald-50/80' : ''"
+			class="overflow-hidden rounded-6 border bg-surface-base transition-colors focus-within:border-outline-gray-3"
+			:class="
+				draggingOver ? 'border-outline-blue-3 bg-surface-blue-1' : 'border-outline-gray-2'
+			"
 			@dragover.prevent="draggingOver = true"
 			@dragleave="draggingOver = false"
 			@drop.prevent="onDrop"
 			@paste="onPaste"
 		>
-			<FileUploader
-				ref="uploaderRef"
-				:file-types="acceptedFileTypes"
-				@success="onUpload"
+			<!-- a rule and two lines rather than a nested card: the preview belongs to the box -->
+			<div
+				v-if="replyTo"
+				class="flex items-center gap-2 border-b border-outline-gray-2 bg-surface-gray-1 py-2 pl-2.5 pr-1.5"
 			>
-				<template #default="{ openFileSelector }">
-					<Dropdown :options="uploadOptions(openFileSelector)">
-						<button
-							type="button"
-							class="grid size-10 shrink-0 place-items-center rounded-full text-[#54656F] hover:bg-black/5 disabled:opacity-40"
-							:disabled="locked"
-							aria-label="Attach a file"
-						>
-							<span class="lucide-paperclip size-5" aria-hidden="true" />
-						</button>
-					</Dropdown>
-				</template>
-			</FileUploader>
+				<div class="min-w-0 flex-1 border-l-2 border-outline-gray-3 pl-2">
+					<div class="text-sm text-ink-gray-6">
+						{{ replyingToLabel }} {{ replyToName }}
+					</div>
+					<!-- clamped, not cropped: a fixed max-height slices the last line in half -->
+					<div
+						class="line-clamp-2 text-p-base text-ink-gray-7"
+						v-html="formatWhatsAppMessage(replyTo.message)"
+					/>
+				</div>
 
-			<div class="flex shrink-0 items-center">
-				<slot name="leading-actions" />
+				<Button variant="ghost" :aria-label="dismissReplyLabel" @click="clearReply()">
+					<template #icon>
+						<span class="lucide-circle-x size-4 text-ink-gray-6" aria-hidden="true" />
+					</template>
+				</Button>
 			</div>
 
-			<textarea
+			<!-- placeholder overridden: ghost's own is ink-gray-3, 1.5:1 on white -->
+			<Textarea
 				ref="textareaRef"
 				v-model="draft"
-				rows="1"
-				class="max-h-40 min-h-10 min-w-0 flex-1 resize-none rounded-lg border-0 bg-white px-4 py-2.5 text-sm leading-5 text-[#111B21] shadow-sm outline-none placeholder:text-[#667781] focus:ring-1 focus:ring-emerald-500 disabled:opacity-60"
+				variant="ghost"
+				class="max-h-40 min-h-9 w-full resize-none border-0 bg-transparent placeholder-ink-gray-5 [field-sizing:content]"
+				:rows="1"
 				:placeholder="placeholder"
 				:disabled="locked"
-				@input="growField"
 				@keydown.enter.exact="sendOnEnter"
+				@keydown.meta.enter.exact="sendOnEnter"
+				@keydown.ctrl.enter.exact="sendOnEnter"
 			/>
 
-			<Tooltip>
-				<template #content>
-					<span class="flex items-center gap-1">
-						{{ sendLabel }}
-						<kbd class="rounded bg-white/15 px-1 text-xs">↵</kbd>
-					</span>
-				</template>
-				<button
-					type="button"
-					class="grid size-10 shrink-0 place-items-center rounded-full bg-[#00A884] text-white hover:bg-[#008f6f] disabled:opacity-40"
-					:disabled="!sendable"
-					:aria-label="sendLabel"
-					@click="submit()"
+			<div class="flex items-center gap-1 px-1.5 pb-1.5">
+				<slot name="leading-actions" />
+
+				<FileUploader
+					ref="uploaderRef"
+					:file-types="acceptedFileTypes"
+					@success="onUpload"
 				>
-					<span
-						v-if="sending"
-						class="lucide-loader-2 size-4 animate-spin"
-						aria-hidden="true"
-					/>
-					<span v-else class="lucide-send size-4" aria-hidden="true" />
-				</button>
-			</Tooltip>
+					<template #default="{ openFileSelector }">
+						<Dropdown :options="uploadOptions(openFileSelector)">
+							<Button variant="ghost" :disabled="locked" aria-label="Attach a file">
+								<template #icon>
+									<span class="lucide-plus size-4.5" aria-hidden="true" />
+								</template>
+							</Button>
+						</Dropdown>
+					</template>
+				</FileUploader>
+
+				<div class="flex-1" />
+
+				<Tooltip>
+					<template #content>
+						<span class="flex items-center gap-1">
+							{{ sendLabel }}
+							<kbd class="rounded-1 bg-surface-gray-7 px-1 text-xs text-ink-gray-2"
+								>↵</kbd
+							>
+						</span>
+					</template>
+					<Button
+						variant="solid"
+						:disabled="!sendable"
+						:aria-label="sendLabel"
+						@click="submit()"
+					>
+						<template #icon>
+							<span class="lucide-arrow-up size-4" aria-hidden="true" />
+						</template>
+					</Button>
+				</Tooltip>
+			</div>
 		</div>
 
 		<MediaPreviewDialog
 			v-model:open="showMediaPreview"
 			:file="pendingMedia"
 			:type="pendingType"
-			:loading="sending"
 			:caption-placeholder="captionPlaceholder"
 			@send="onMediaSend"
 		/>

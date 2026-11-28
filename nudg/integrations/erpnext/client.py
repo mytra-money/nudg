@@ -42,29 +42,47 @@ def redact(text: str | None, secrets: list[str] | None = None) -> str:
 
 
 class ERPNextClient:
-	"""Talk to one ERPNext site with its API key. Redirects are not followed."""
+	"""Talk to one external Frappe/ERPNext site via OAuth Bearer token or legacy API key. Redirects are not followed."""
 
 	def __init__(
 		self,
 		site_url: str,
-		api_key: str,
-		api_secret: str,
+		api_key: str = "",
+		api_secret: str = "",
 		*,
+		access_token: str = "",
+		oauth_session: Any | None = None,
 		allow_http: bool = False,
 		allow_loopback: bool = False,
-		timeout: tuple[float, float] = (3.0, 10.0),
+		timeout: tuple[float, float] = (5.0, 25.0),
 		transport: Transport | None = None,
 	):
 		self.site_url = validate_site_url(site_url, allow_http=allow_http, allow_loopback=allow_loopback)
 		self.allow_http = allow_http
 		self.allow_loopback = allow_loopback
+		self.access_token = (access_token or "").strip()
 		self.api_key = (api_key or "").strip()
 		self.api_secret = api_secret or ""
-		self._secrets = [self.api_key, self.api_secret]
+		self.oauth_session = oauth_session
+		self._secrets = []
+		if self.oauth_session:
+			token = getattr(self.oauth_session, "token", None) or {}
+			tok_str = token.get("access_token") if isinstance(token, dict) else ""
+			if tok_str:
+				self._auth_header = f"Bearer {tok_str}"
+				self._secrets = [tok_str]
+			else:
+				self._auth_header = ""
+		elif self.access_token:
+			self._auth_header = f"Bearer {self.access_token}"
+			self._secrets = [self.access_token]
+		elif self.api_key and self.api_secret:
+			self._auth_header = f"token {self.api_key}:{self.api_secret}"
+			self._secrets = [self.api_key, self.api_secret]
+		else:
+			raise ERPNextClientError("An OAuth access token, OAuth session, or API credentials are required.")
 		self.timeout = timeout
-		self.transport = transport or requests.request
-		if not self.api_key or not self.api_secret:
-			raise ERPNextClientError("An API key and API secret are required.")
+		self.transport = transport or (self.oauth_session.request if self.oauth_session else requests.request)
 
 	def get_logged_user(self) -> str:
 		response = self.request("GET", "/api/method/frappe.auth.get_logged_user")
@@ -163,9 +181,10 @@ class ERPNextClient:
 		)
 		url = self.site_url + path
 		headers = {
-			"Authorization": f"token {self.api_key}:{self.api_secret}",
 			"Accept": "application/json",
 		}
+		if self._auth_header:
+			headers["Authorization"] = self._auth_header
 		try:
 			response = self.transport(
 				method,

@@ -1604,33 +1604,6 @@ def delete_chatbot_keyword(account: str, name: str) -> dict:
 
 
 @frappe.whitelist()
-def list_chatbot_flows(account: str, start: int | None = 0, limit: int | None = None) -> list:
-	_require_manager()
-	_assert_account_access(account)
-	from nudg.services.chatbot_setup import list_flows
-
-	return list_flows(account, start=start, limit=limit)
-
-
-@frappe.whitelist()
-def save_chatbot_flow(account: str, payload) -> dict:
-	_require_manager()
-	_assert_account_access(account)
-	from nudg.services.chatbot_setup import save_flow
-
-	return save_flow(account, _chatbot_payload(payload))
-
-
-@frappe.whitelist()
-def delete_chatbot_flow(account: str, name: str) -> dict:
-	_require_manager()
-	_assert_account_access(account)
-	from nudg.services.chatbot_setup import delete_flow
-
-	return delete_flow(account, name)
-
-
-@frappe.whitelist()
 def list_chatbot_handoffs(account: str) -> dict:
 	_require_manager()
 	_assert_account_access(account)

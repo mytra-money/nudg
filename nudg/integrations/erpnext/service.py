@@ -36,6 +36,318 @@ _SEEN_TTL = 7 * 24 * 3600
 _RATE_LIMIT = 120
 
 
+def prepare_site_oauth(
+	site_name: str,
+	site_url: str,
+	whatsapp_account: str | None = None,
+	client_id: str | None = None,
+	client_secret: str | None = None,
+) -> dict:
+	"""Create or update a per-account Connected App for OAuth 2.0 and return its Redirect URI."""
+	site_name = assert_plain_label(site_name, "Site name")
+	try:
+		canonical = validate_site_url(site_url, allow_http=_allow_http(), allow_loopback=_allow_http())
+	except SiteURLError as exc:
+		frappe.throw(str(exc))
+
+	if not whatsapp_account or not frappe.db.exists("WA Account", whatsapp_account):
+		# Look for existing WA Account bound to this site_name
+		existing = frappe.db.get_value("WA Account", {"erp_site_name": site_name}, "name")
+		if existing:
+			whatsapp_account = existing
+		else:
+			# Auto-create a pending container WA Account for this site so users without accounts can connect
+			placeholder_name = site_name
+			if frappe.db.exists("WA Account", placeholder_name):
+				placeholder_name = f"{site_name} (Site)"
+			doc = frappe.get_doc({
+				"doctype": "WA Account",
+				"account_name": placeholder_name,
+				"status": "Inactive",
+				"erp_site_name": site_name,
+				"erp_site_url": canonical,
+				"erp_status": "Pending",
+			})
+			doc.insert(ignore_permissions=True)
+			from nudg.security import ensure_account_user_permission
+
+			ensure_account_user_permission(doc.name, frappe.session.user)
+			whatsapp_account = doc.name
+
+	doc = frappe.get_doc("WA Account", whatsapp_account)
+	other = frappe.db.get_value(
+		"WA Account",
+		{"erp_site_name": site_name, "name": ["!=", whatsapp_account]},
+		"name",
+	)
+	if other:
+		frappe.throw(_("Site name {0} is already connected on {1}.").format(site_name, other))
+
+	app = _upsert_connected_app(
+		existing_name=doc.get("erp_connected_app"),
+		site_name=site_name,
+		site_url=canonical,
+		whatsapp_account=whatsapp_account,
+		client_id=client_id,
+		client_secret=client_secret,
+	)
+	_sync_connected_app_permissions(app.name, whatsapp_account)
+
+	if not doc.get("erp_inbound_secret"):
+		doc.erp_inbound_secret = secrets.token_urlsafe(32)
+	url_changed = (doc.get("erp_site_url") or "") != canonical
+	doc.erp_site_name = site_name
+	doc.erp_site_url = canonical
+	doc.erp_connected_app = app.name
+	if frappe.session.user not in (None, "Guest"):
+		doc.erp_oauth_user = frappe.session.user
+	if not doc.erp_status or doc.erp_status == "Disconnected":
+		doc.erp_status = "Pending"
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	public = _public_site(doc)
+	public["redirect_uri"] = app.redirect_uri or ""
+	return public
+
+
+def authorize_site(site_name: str, success_uri: str | None = None) -> dict:
+	view = _load_site(site_name)
+	if not view or not getattr(view, "connected_app", None):
+		frappe.throw(_("Prepare site OAuth first."))
+	app = frappe.get_doc("Connected App", view.connected_app)
+	oauth_user = frappe.session.user
+	if oauth_user in (None, "Guest"):
+		frappe.throw(_("Log in to authorize."), frappe.PermissionError)
+	frappe.db.set_value("WA Account", view.account, "erp_oauth_user", oauth_user, update_modified=False)
+	target = success_uri or "/app/nudg"
+	authorization_url = app.initiate_web_application_flow(user=oauth_user, success_uri=target)
+	return {
+		"authorization_url": authorization_url,
+		"redirect_uri": app.redirect_uri or "",
+	}
+
+
+def verify_site(site_name: str) -> dict:
+	from nudg.integrations.erpnext.verify import verify_remote_site
+	view = _load_site(site_name)
+	if not view:
+		frappe.throw(_("External site not found."))
+	client = _client_for_site(view)
+	if not client:
+		_mark_oauth_error(view.account, "Could not initialize client for external site.")
+		return {"ok": False, "status": "Error", "checks": []}
+	outcome = verify_remote_site(client)
+	doc = frappe.get_doc("WA Account", view.account)
+	doc.erp_status = outcome.get("status") or "Error"
+	doc.erp_remote_user = outcome.get("remote_user") or ""
+	doc.erp_last_error = outcome.get("detail") or ""
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	_announce_site_check(outcome)
+	return outcome
+
+
+def disconnect_site(site_name: str) -> dict:
+	view = _load_site(site_name)
+	if not view:
+		frappe.throw(_("External site not found."))
+	doc = frappe.get_doc("WA Account", view.account)
+	doc.erp_status = "Disconnected"
+	doc.erp_last_error = ""
+	connected_app = getattr(doc, "erp_connected_app", None)
+	doc.erp_connected_app = None
+	doc.erp_oauth_user = None
+	doc.save(ignore_permissions=True)
+	if connected_app and frappe.db.exists("Connected App", connected_app):
+		frappe.delete_doc("Connected App", connected_app, ignore_permissions=True)
+	frappe.db.commit()
+	return _public_site(doc)
+
+
+def get_remote_wa_accounts(site_name: str) -> list[dict]:
+	"""Fetch the list of WA Accounts available on the connected external site."""
+	view = _load_site(site_name)
+	if not view:
+		frappe.throw(_("External site not found."))
+	client = _client_for_site(view)
+	if not client:
+		frappe.throw(_("Could not initialize external site client. Make sure the site is authorized and verified."))
+
+	remote_accounts = []
+	try:
+		res = client.request("GET", "/api/method/nudg.desk_api.list_user_accounts")
+		if isinstance(res, dict) and isinstance(res.get("message"), list):
+			remote_accounts = res["message"]
+	except Exception:
+		pass
+
+	if not remote_accounts:
+		try:
+			remote_accounts = client.get_resources(
+				"WA Account",
+				fields=["name", "account_name", "status", "phone_id", "business_id", "app_id", "auto_read_receipts", "is_default"],
+				limit=50,
+			)
+		except Exception:
+			pass
+
+	results = []
+	for acc in remote_accounts:
+		acc_name = acc.get("account_name") or acc.get("name") or ""
+		phone_id = str(acc.get("phone_id") or "").strip()
+		business_id = str(acc.get("business_id") or "").strip()
+		app_id = str(acc.get("app_id") or "").strip()
+		status = acc.get("status") or "Active"
+
+		exists = bool(
+			frappe.db.exists("WA Account", acc_name)
+			or (phone_id and frappe.db.exists("WA Account", {"phone_id": phone_id}))
+		)
+		local_matched = ""
+		if frappe.db.exists("WA Account", acc_name):
+			local_matched = acc_name
+		elif phone_id and frappe.db.exists("WA Account", {"phone_id": phone_id}):
+			local_matched = frappe.db.get_value("WA Account", {"phone_id": phone_id}, "name")
+
+		results.append({
+			"name": acc.get("name") or acc_name,
+			"account_name": acc_name,
+			"phone_id": phone_id,
+			"business_id": business_id,
+			"app_id": app_id,
+			"status": status,
+			"auto_read_receipts": acc.get("auto_read_receipts", 0),
+			"is_default": acc.get("is_default", 0),
+			"exists_locally": exists,
+			"local_account": local_matched,
+		})
+	return results
+
+
+def pull_remote_wa_accounts(site_name: str, selected_accounts: list) -> dict:
+	"""Pull and create or update local WA Accounts from the connected external site."""
+	view = _load_site(site_name)
+	if not view:
+		frappe.throw(_("External site not found."))
+
+	from nudg.security import ensure_account_user_permission
+
+	created = 0
+	updated = 0
+	pulled_accounts = []
+
+	for acc_data in selected_accounts:
+		if isinstance(acc_data, str):
+			acc_name = acc_data.strip()
+			acc_data = {"account_name": acc_name}
+		else:
+			acc_name = (acc_data.get("account_name") or acc_data.get("name") or "").strip()
+
+		if not acc_name:
+			continue
+
+		phone_id = str(acc_data.get("phone_id") or "").strip()
+		business_id = str(acc_data.get("business_id") or "").strip()
+		app_id = str(acc_data.get("app_id") or "").strip()
+		status = acc_data.get("status") or "Active"
+		auto_read = 1 if acc_data.get("auto_read_receipts") else 0
+
+		# Check if local account exists
+		local_name = None
+		if frappe.db.exists("WA Account", acc_name):
+			local_name = acc_name
+		elif phone_id and frappe.db.exists("WA Account", {"phone_id": phone_id}):
+			local_name = frappe.db.get_value("WA Account", {"phone_id": phone_id}, "name")
+		elif view.account and frappe.db.exists("WA Account", view.account):
+			holder = frappe.get_doc("WA Account", view.account)
+			if not holder.phone_id:
+				local_name = holder.name
+
+		if local_name:
+			doc = frappe.get_doc("WA Account", local_name)
+			# If the existing account was just the placeholder named after the site, rename it
+			if (doc.name == view.name or doc.name == f"{view.name} (Site)") and not frappe.db.exists("WA Account", acc_name):
+				frappe.rename_doc("WA Account", doc.name, acc_name, force=True)
+				doc = frappe.get_doc("WA Account", acc_name)
+
+			if phone_id:
+				doc.phone_id = phone_id
+			if business_id:
+				doc.business_id = business_id
+			if app_id:
+				doc.app_id = app_id
+			doc.status = status
+			doc.auto_read_receipts = auto_read
+			doc.erp_site_name = view.name
+			doc.erp_site_url = view.site_url
+			doc.erp_connected_app = view.connected_app
+			doc.erp_status = "Connected"
+			if frappe.session.user not in (None, "Guest"):
+				doc.erp_oauth_user = frappe.session.user
+			doc.save(ignore_permissions=True)
+			ensure_account_user_permission(doc.name, frappe.session.user)
+			updated += 1
+			pulled_accounts.append(doc.name)
+		else:
+			new_doc = frappe.get_doc({
+				"doctype": "WA Account",
+				"account_name": acc_name,
+				"phone_id": phone_id,
+				"business_id": business_id,
+				"app_id": app_id,
+				"status": status,
+				"auto_read_receipts": auto_read,
+				"erp_site_name": view.name,
+				"erp_site_url": view.site_url,
+				"erp_connected_app": view.connected_app,
+				"erp_status": "Connected",
+				"erp_oauth_user": frappe.session.user if frappe.session.user not in (None, "Guest") else "",
+			})
+			new_doc.insert(ignore_permissions=True)
+			ensure_account_user_permission(new_doc.name, frappe.session.user)
+			created += 1
+			pulled_accounts.append(new_doc.name)
+
+	frappe.db.commit()
+	return {
+		"ok": True,
+		"created": created,
+		"updated": updated,
+		"accounts": pulled_accounts,
+	}
+
+
+def push_wa_account_to_remote(account_name: str, site_name: str) -> dict:
+	"""Push local WA Account details (phone_id, business_id, app_id, status) to the connected remote site."""
+	if not frappe.db.exists("WA Account", account_name):
+		frappe.throw(_("Local WhatsApp Account not found."))
+	view = _load_site(site_name)
+	if not view:
+		frappe.throw(_("External site not found."))
+	client = _client_for_site(view)
+	if not client:
+		frappe.throw(_("Could not initialize external site client."))
+
+	doc = frappe.get_doc("WA Account", account_name)
+	payload = {
+		"name": doc.account_name or doc.name,
+		"phone_id": doc.phone_id or "",
+		"business_id": doc.business_id or "",
+		"app_id": doc.app_id or "",
+		"status": doc.status or "Active",
+		"auto_read_receipts": doc.auto_read_receipts or 0,
+	}
+	try:
+		client.request("POST", "/api/method/nudg.desk_api.update_whatsapp_account", json=payload)
+		return {"ok": True, "detail": "Account updated on remote site."}
+	except Exception:
+		try:
+			client.request("PUT", f"/api/resource/WA%20Account/{doc.account_name or doc.name}", json=payload)
+			return {"ok": True, "detail": "Account updated on remote site via resource API."}
+		except Exception as exc:
+			frappe.throw(_("Failed to push account to remote site: {0}").format(str(exc)))
+
+
 def connect_site(
 	site_name: str,
 	site_url: str,
@@ -230,7 +542,32 @@ def _note_sent(site) -> None:
 	frappe.db.set_value("WA Account", site.account, "erp_last_error", "", update_modified=False)
 
 
+def _oauth_client_for_site(site) -> ERPNextClient | None:
+	if not getattr(site, "connected_app", None) or not frappe.db.exists("Connected App", site.connected_app):
+		return None
+	app = frappe.get_doc("Connected App", site.connected_app)
+	oauth_user = getattr(site, "oauth_user", None) or frappe.session.user
+	if not oauth_user or oauth_user == "Guest":
+		oauth_user = getattr(site, "remote_user", None)
+	token_cache = app.get_active_token(user=oauth_user) if oauth_user else None
+	if not token_cache:
+		_mark_oauth_error(site.account, "OAuth token expired or not authorized.")
+		return None
+	return ERPNextClient(site.site_url, oauth_session=app.get_oauth2_session(user=oauth_user), allow_http=_allow_http(), allow_loopback=_allow_http())
+
+
+def _mark_oauth_error(account: str, reason: str) -> None:
+	frappe.db.set_value(
+		"WA Account",
+		account,
+		{"erp_status": "Error", "erp_last_error": reason},
+		update_modified=False,
+	)
+
+
 def _client_for_site(site) -> ERPNextClient | None:
+	if getattr(site, "connected_app", None):
+		return _oauth_client_for_site(site)
 	try:
 		return _client(site.site_url, site.get_password("api_key"), site.get_password("api_secret"))
 	except Exception:
@@ -330,6 +667,8 @@ class _SiteView:
 		self.whatsapp_account = account.name
 		self.remote_user = account.get("erp_remote_user")
 		self.last_error = account.get("erp_last_error")
+		self.connected_app = account.get("erp_connected_app") or ""
+		self.oauth_user = account.get("erp_oauth_user") or ""
 		self._account = account
 
 	def get_password(self, field: str) -> str:
@@ -447,13 +786,105 @@ def _flush_after_save(account: str) -> None:
 		pass
 
 
+
+
+def _clean_redirect_uri(uri: str | None) -> str:
+	if not uri:
+		return ""
+	import re
+	if uri.startswith("https://") and re.search(r":\d+", uri):
+		return re.sub(r"(https://[^/:]+):\d+", r"\1", uri)
+	return uri
+
+
+def _upsert_connected_app(
+	*,
+	existing_name: str | None,
+	site_name: str,
+	site_url: str,
+	whatsapp_account: str,
+	client_id: str | None = None,
+	client_secret: str | None = None,
+):
+	if existing_name and frappe.db.exists("Connected App", existing_name):
+		app = frappe.get_doc("Connected App", existing_name)
+	else:
+		app = frappe.new_doc("Connected App")
+		app.provider_name = f"External Site - {site_name} ({whatsapp_account})"
+
+	app.authorization_uri = f"{site_url}/api/method/frappe.integrations.oauth2.authorize"
+	app.token_uri = f"{site_url}/api/method/frappe.integrations.oauth2.get_token"
+	app.revocation_uri = f"{site_url}/api/method/frappe.integrations.oauth2.revoke_token"
+	app.userinfo_uri = f"{site_url}/api/method/frappe.integrations.oauth2.openid_profile"
+	if not app.get("scopes"):
+		app.append("scopes", {"scope": "all"})
+	if client_id is not None and client_id.strip():
+		app.client_id = client_id.strip()
+	if client_secret is not None and client_secret.strip():
+		app.client_secret = client_secret.strip()
+	app.save(ignore_permissions=True)
+	if app.redirect_uri:
+		cleaned = _clean_redirect_uri(app.redirect_uri)
+		if cleaned != app.redirect_uri:
+			app.db_set("redirect_uri", cleaned)
+			app.redirect_uri = cleaned
+	return app
+
+
+def _sync_connected_app_permissions(connected_app_name: str, whatsapp_account: str) -> None:
+	"""Scope a Connected App to only the users permitted on its WA Account (SaaS tenant isolation)."""
+	if not connected_app_name or not frappe.db.exists("DocType", "User Permission"):
+		return
+	users: set[str] = set()
+	if frappe.session.user not in (None, "Guest", "Administrator"):
+		users.add(frappe.session.user)
+	try:
+		permitted = frappe.get_all(
+			"User Permission",
+			filters={"allow": "WA Account", "for_value": whatsapp_account},
+			pluck="user",
+		)
+		for user in permitted or []:
+			if user and user not in ("Guest", "Administrator"):
+				users.add(user)
+	except Exception:
+		pass
+
+	for user in users:
+		if not frappe.db.exists(
+			"User Permission",
+			{"user": user, "allow": "Connected App", "for_value": connected_app_name},
+		):
+			perm = frappe.new_doc("User Permission")
+			perm.user = user
+			perm.allow = "Connected App"
+			perm.for_value = connected_app_name
+			perm.apply_to_all_doctypes = 1
+			perm.insert(ignore_permissions=True)
+
+
 def _public_site(doc) -> dict:
+	connected_app = getattr(doc, "erp_connected_app", None) or getattr(doc, "connected_app", "") or ""
+	redirect_uri = ""
+	client_id = ""
+	has_client_credentials = False
+	if connected_app and frappe.db.exists("Connected App", connected_app):
+		app = frappe.get_doc("Connected App", connected_app)
+		redirect_uri = _clean_redirect_uri(app.redirect_uri) or ""
+		client_id = app.client_id or ""
+		has_client_credentials = bool(app.client_id and _password(app, "client_secret"))
 	return {
-		"name": doc.account,
-		"site_name": doc.name,
-		"site_url": doc.site_url,
-		"status": doc.status,
-		"whatsapp_account": doc.whatsapp_account,
-		"remote_user": doc.remote_user,
-		"last_error": doc.last_error,
+		"name": doc.account if hasattr(doc, "account") else doc.name,
+		"site_name": doc.name if hasattr(doc, "account") else (doc.get("erp_site_name") or doc.name),
+		"site_url": doc.site_url if hasattr(doc, "site_url") else doc.get("erp_site_url"),
+		"status": doc.status if hasattr(doc, "status") else doc.get("erp_status"),
+		"whatsapp_account": doc.whatsapp_account if hasattr(doc, "whatsapp_account") else doc.name,
+		"remote_user": doc.remote_user if hasattr(doc, "remote_user") else doc.get("erp_remote_user"),
+		"last_error": doc.last_error if hasattr(doc, "last_error") else doc.get("erp_last_error"),
+		"connected_app": connected_app,
+		"client_id": client_id,
+		"oauth_user": getattr(doc, "oauth_user", None) or doc.get("erp_oauth_user") or "",
+		"auth_mode": "oauth" if connected_app else "api_key",
+		"redirect_uri": redirect_uri,
+		"has_client_credentials": has_client_credentials,
 	}

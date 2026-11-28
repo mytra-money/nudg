@@ -547,7 +547,7 @@ onMounted(async () => {
         description="Create a contact or receive a message to see profiles here."
       />
 
-      <div v-else class="min-h-0 flex-1 overflow-y-auto rounded-lg border border-outline-gray-2 bg-white divide-y divide-outline-gray-1">
+      <div v-else class="min-h-0 flex-1 overflow-y-auto rounded-lg border border-outline-gray-2 bg-surface-base divide-y divide-outline-gray-1">
         <ItemListRow
           v-for="row in visibleProfiles"
           :key="row.name"
@@ -609,7 +609,7 @@ onMounted(async () => {
         description="Create a recipient list to group contacts for campaigns."
       />
 
-      <div v-else class="min-h-0 flex-1 overflow-y-auto rounded-lg border border-outline-gray-2 bg-white divide-y divide-outline-gray-1">
+      <div v-else class="min-h-0 flex-1 overflow-y-auto rounded-lg border border-outline-gray-2 bg-surface-base divide-y divide-outline-gray-1">
         <ItemListRow
           v-for="row in visibleLists"
           :key="row.name"

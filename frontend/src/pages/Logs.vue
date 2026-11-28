@@ -323,9 +323,9 @@ watch(
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 flex-col bg-white">
+  <div class="flex h-full min-h-0 flex-col bg-surface-base">
     <!-- Sub-navigation Header Bar -->
-    <header class="flex flex-wrap items-center justify-between border-b border-outline-gray-2 bg-white px-4 py-2 sm:px-6">
+    <header class="flex flex-wrap items-center justify-between border-b border-outline-gray-2 bg-surface-base px-4 py-2 sm:px-6">
       <div class="flex items-center gap-1 sm:gap-2">
         <Button route="/integrations" size="sm" variant="ghost" icon-left="lucide-radio" label="WhatsApp numbers" />
         <Button

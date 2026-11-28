@@ -2,28 +2,57 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { Button, LoadingIndicator, Tooltip, dayjsLocal } from "frappe-ui";
+import FlowAnswers from "./FlowAnswers.vue";
+import TemplateButtons from "./TemplateButtons.vue";
 import TemplateContent from "./TemplateContent.vue";
 import { formatWhatsAppMessage } from "../../utils/formatMessage";
 import { contentTypeFromMime, documentMeta, documentName, hasCaption } from "../../utils/media";
-import type { MessageBubbleProps, WhatsAppDirection, WhatsAppMessage } from "./types";
+import type {
+	MessageBubbleProps,
+	WhatsAppDirection,
+	WhatsAppMessage,
+	WhatsAppTemplateButton,
+} from "./types";
 
 const props = withDefaults(defineProps<MessageBubbleProps>(), {
 	senderName: "Contact",
 	youLabel: "You",
 	reactedByLabel: "Reacted by",
+	canReply: true,
 	replyLabel: "Reply",
 	replyingToLabel: "Replying to",
 	failedMessageLabel: "Failed to send message",
+	flowSubmittedLabel: "Form submitted",
+	flowSensitiveLabel: "Hidden: the form marks this answer as sensitive",
+	flowYesLabel: "Yes",
+	flowNoLabel: "No",
+	flowOneFileLabel: "1 file",
+	flowFilesLabel: "{0} files",
 });
 
 const emit = defineEmits<{
 	reply: [message: WhatsAppMessage];
 	"jump-to": [name: string];
-	retry: [message: WhatsAppMessage];
 }>();
 
-/** No stored column: a message is a reply iff it points at another message's id. */
-const isReply = computed(() => Boolean(props.message.context_message_id));
+/**
+ * No stored column: a message is a reply iff it points at another message's id, or the server
+ * resolved what it replies to (a Flow response can arrive without a context id).
+ */
+const isReply = computed(() =>
+	Boolean(props.message.context_message_id || props.message.reply_to)
+);
+
+const isFlowSend = computed(
+	() =>
+		props.message.direction === "Outgoing" &&
+		Boolean(props.message.flow) &&
+		!props.message.is_template
+);
+
+const flowSendButtons = computed<WhatsAppTemplateButton[]>(() => [
+	{ button_type: "Flow", button_text: props.message.flow_cta || "" },
+]);
 
 const contentType = computed(() => contentTypeFromMime(props.message.mime_type));
 
@@ -44,17 +73,17 @@ function nameFor(direction?: WhatsAppDirection) {
 		variant only reaches descendants.
 	-->
 	<div
-		class="group/bubble flex min-w-0 max-w-[min(78%,36rem)] flex-col gap-0.5 data-[direction=Outgoing]:items-end"
+		class="group/bubble flex min-w-0 max-w-[80%] flex-col gap-1 data-[direction=Outgoing]:items-end"
 		:data-direction="message.direction"
 	>
 		<div
-			class="flex w-full items-end gap-1 pb-1 group-data-[direction=Outgoing]/bubble:flex-row-reverse"
+			class="flex w-full items-center gap-1 has-[[data-slot=reactions]]:mb-3 group-data-[direction=Outgoing]/bubble:flex-row-reverse"
 		>
 			<!-- no `overflow-hidden`: it would clip the reaction chip that hangs below the edge,
 			     and `break-words` already contains a long unbroken URL -->
 			<div
 				:id="message.name"
-				class="relative w-fit min-w-0 max-w-full flow-root break-words rounded-lg px-3 py-1.5 text-[14.2px] leading-[19px] text-[#111B21] shadow-[0_1px_0.5px_rgba(11,20,26,0.13)] has-[[data-slot=reactions]]:mb-3 group-data-[direction=Incoming]/bubble:rounded-tl-none group-data-[direction=Incoming]/bubble:bg-white group-data-[direction=Outgoing]/bubble:rounded-tr-none group-data-[direction=Outgoing]/bubble:bg-[#D9FDD3]"
+				class="relative w-fit min-w-0 max-w-full break-words rounded-6 bg-surface-gray-1 px-2.5 py-1.5 text-p-base text-ink-gray-9 shadow-[inset_0_0_0.25px_0.25px_rgba(0,0,0,0.03)] group-data-[direction=Outgoing]/bubble:bg-surface-gray-2"
 			>
 				<!--
 					reply_message/reply_to_* only: `header`/`footer` describe *this* message's template.
@@ -87,10 +116,21 @@ function nameFor(direction?: WhatsAppDirection) {
 					:footer="message.footer"
 					:buttons="message.buttons"
 				/>
-				<div
-					v-else-if="contentType == 'text'"
-					v-html="formatWhatsAppMessage(message.message)"
+				<FlowAnswers
+					v-else-if="message.flow_answers"
+					:answers="message.flow_answers"
+					:flow-name="message.flow_name"
+					:submitted-label="flowSubmittedLabel"
+					:sensitive-label="flowSensitiveLabel"
+					:yes-label="flowYesLabel"
+					:no-label="flowNoLabel"
+					:one-file-label="flowOneFileLabel"
+					:files-label="flowFilesLabel"
 				/>
+				<div v-else-if="contentType == 'text'" class="flex flex-col gap-2">
+					<div v-html="formatWhatsAppMessage(message.message)" />
+					<TemplateButtons v-if="isFlowSend" :buttons="flowSendButtons" />
+				</div>
 				<div v-else-if="contentType == 'image'">
 					<a :href="message.media_url" target="_blank" rel="noopener noreferrer">
 						<img
@@ -154,32 +194,6 @@ function nameFor(direction?: WhatsAppDirection) {
 					The chip straddles the bubble and the page, so it carries its own surface. The
 					hover fill marks it as the thing to hover for who reacted.
 				-->
-				<span class="float-right ml-3 mt-1 inline-flex items-center gap-0.5 whitespace-nowrap text-[11px] leading-none text-[#667781]">
-					<Tooltip :text="creation.format('ddd, MMM D, YYYY')">
-						<time :datetime="creation.format('YYYY-MM-DDTHH:mm:ssZ')">
-							{{ creation.format("h:mm A") }}
-						</time>
-					</Tooltip>
-					<template v-if="message.direction == 'Outgoing' && message.status != 'Failed'">
-						<LoadingIndicator v-if="message.status == 'Pending'" class="size-3 text-[#667781]" />
-						<span
-							v-else-if="message.status == 'Sent'"
-							class="lucide-check size-3.5 text-[#667781]"
-							aria-hidden="true"
-						/>
-						<span
-							v-else-if="message.status == 'Delivered'"
-							class="lucide-check-check size-3.5 text-[#667781]"
-							aria-hidden="true"
-						/>
-						<span
-							v-else-if="message.status == 'Read'"
-							class="lucide-check-check size-3.5 text-[#53BDEB]"
-							aria-hidden="true"
-						/>
-					</template>
-				</span>
-
 				<div
 					v-if="message.reactions?.length"
 					data-slot="reactions"
@@ -201,24 +215,15 @@ function nameFor(direction?: WhatsAppDirection) {
 				Beside the coloured body and centred on it, so the pair tracks the bubble rather
 				than the taller body-plus-footer column. Revealed by focus as well as hover, and
 				inert to the pointer until then: an invisible button must not be clickable, but
-				must still be reachable by keyboard.
+				must still be reachable by keyboard. Replies and reactions point at WhatsApp's id for
+				the message, so a message WhatsApp has not taken yet has none.
 			-->
-			<button
-				v-if="message.direction == 'Outgoing' && message.status == 'Failed'"
-				type="button"
-				class="mb-1 inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-white text-[#EA3943] shadow-[0_1px_0.5px_rgba(11,20,26,0.13)] hover:bg-red-50"
-				aria-label="Retry sending this message"
-				title="Retry"
-				@click="emit('retry', message)"
-			>
-				<span class="lucide-rotate-ccw size-4" aria-hidden="true" />
-			</button>
-
 			<div
-				v-if="message.status != 'Failed'"
-				class="pointer-events-none flex shrink-0 items-center gap-0.5 rounded-full border border-gray-200 bg-white/95 px-1 py-0.5 shadow-xs opacity-0 backdrop-blur-xs group-hover/bubble:pointer-events-auto group-hover/bubble:opacity-100 group-focus-within/bubble:pointer-events-auto group-focus-within/bubble:opacity-100"
+				v-if="message.message_id"
+				class="pointer-events-none flex shrink-0 items-center gap-0.5 opacity-0 group-hover/bubble:pointer-events-auto group-hover/bubble:opacity-100 group-focus-within/bubble:pointer-events-auto group-focus-within/bubble:opacity-100"
 			>
 				<Button
+					v-if="canReply"
 					variant="ghost"
 					size="xs"
 					:tooltip="replyLabel"
@@ -239,11 +244,48 @@ function nameFor(direction?: WhatsAppDirection) {
 			than on the bubble. Room for an overhanging reaction chip comes from the body's own
 			`has-[]` margin, not from a margin computed per row.
 		-->
-		<p
-			v-if="message.status == 'Failed'"
-			class="max-w-full px-1 text-[11px] leading-snug text-[#EA3943] group-data-[direction=Outgoing]/bubble:text-right"
+		<div
+			class="flex max-w-full items-center gap-1.5 px-1 text-xs text-ink-gray-6 group-data-[direction=Outgoing]/bubble:flex-row-reverse"
 		>
-			{{ message.error_message || failedMessageLabel }}
-		</p>
+			<Tooltip :text="creation.format('ddd, MMM D, YYYY')">
+				<!--
+					dayjsLocal, not dayjs: `creation` is naive and in the site's timezone,
+					so plain dayjs would read it as browser-local and shift every stamp.
+				-->
+				<time :datetime="creation.format('YYYY-MM-DDTHH:mm:ssZ')">
+					{{ creation.format("hh:mm a") }}
+				</time>
+			</Tooltip>
+
+			<template v-if="message.direction == 'Outgoing'">
+				<LoadingIndicator v-if="message.status == 'Pending'" class="size-3" />
+				<span
+					v-else-if="message.status == 'Sent'"
+					class="lucide-check size-4"
+					aria-hidden="true"
+				/>
+				<span
+					v-else-if="['Read', 'Delivered'].includes(message.status || '')"
+					class="lucide-check-check size-4"
+					:class="{ 'text-ink-blue-5': message.status == 'Read' }"
+					aria-hidden="true"
+				/>
+			</template>
+
+			<!-- agent-facing, so outside the body: the contact saw only the button -->
+			<span
+				v-if="isFlowSend && message.flow_name"
+				class="flex min-w-0 items-center gap-1"
+				:title="message.flow_name"
+			>
+				<span class="lucide-clipboard-list size-3 shrink-0" aria-hidden="true" />
+				<span class="truncate">{{ message.flow_name }}</span>
+			</span>
+
+			<!-- readable rather than hover-only: a send failure is the one thing worth reading -->
+			<span v-if="message.status == 'Failed'" class="min-w-0 break-words text-ink-red-6">
+				{{ message.error_message || failedMessageLabel }}
+			</span>
+		</div>
 	</div>
 </template>

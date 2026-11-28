@@ -335,3 +335,73 @@ class TestClient(unittest.TestCase):
 			doc = client.get_resource("DocType", "Sales Invoice")
 			self.assertEqual(doc["is_submittable"], 1)
 			self.assertEqual(client.get_resources("Webhook", fields=["name"], limit=10), [{"name": "Webhook"}])
+
+
+class TestOAuthConnectedApp(unittest.TestCase):
+	def test_client_uses_bearer_token_and_redacts_it(self):
+		seen = {}
+
+		def transport(method, url, **kwargs):
+			seen["headers"] = kwargs.get("headers") or {}
+			return _Response(500, "Failed with token oauth_secret_token_999")
+
+		with patch("nudg.integrations.erpnext.client.validate_site_url", side_effect=lambda url, **kwargs: "https://erp.example.com"):
+			client = ERPNextClient(
+				"https://erp.example.com",
+				access_token="oauth_secret_token_999",
+				transport=transport,
+			)
+			with self.assertRaises(ERPNextClientError) as raised:
+				client.get_logged_user()
+			self.assertEqual(seen["headers"].get("Authorization"), "Bearer oauth_secret_token_999")
+			self.assertNotIn("oauth_secret_token_999", str(raised.exception))
+
+	def test_oauth_client_for_site_uses_site_oauth_user_token(self):
+		from types import SimpleNamespace
+		from nudg.integrations.erpnext.service import _client_for_site
+
+		token_doc = SimpleNamespace(
+			access_token="fresh_token_123",
+			get=lambda f: "fresh_token_123",
+			get_password=lambda f: "fresh_token_123",
+		)
+		app_doc = SimpleNamespace(get_active_token=lambda user=None: token_doc if user == "manager@acme.com" else None)
+		site = SimpleNamespace(
+			account="WA-ACME",
+			site_url="https://erp.acme.com",
+			connected_app="CA-ACME",
+			oauth_user="manager@acme.com",
+		)
+
+		with (
+			patch("nudg.integrations.erpnext.service.frappe.get_doc", return_value=app_doc),
+			patch("nudg.integrations.erpnext.service._allow_http", return_value=False),
+			patch("nudg.integrations.erpnext.client.validate_site_url", side_effect=lambda url, **kwargs: "https://erp.acme.com"),
+		):
+			client = _client_for_site(site)
+			self.assertIsNotNone(client)
+			self.assertEqual(client.access_token, "fresh_token_123")
+
+	def test_oauth_client_marks_error_on_refresh_failure(self):
+		from types import SimpleNamespace
+		from nudg.integrations.erpnext.service import _client_for_site
+
+		def boom(user=None):
+			raise RuntimeError("invalid_grant")
+
+		app_doc = SimpleNamespace(get_active_token=boom)
+		site = SimpleNamespace(
+			account="WA-ACME",
+			site_url="https://erp.acme.com",
+			connected_app="CA-ACME",
+			oauth_user="manager@acme.com",
+		)
+
+		with (
+			patch("nudg.integrations.erpnext.service.frappe.get_doc", return_value=app_doc),
+			patch("nudg.integrations.erpnext.service._mark_oauth_error") as mark_err,
+		):
+			client = _client_for_site(site)
+			self.assertIsNone(client)
+			mark_err.assert_called_once()
+			self.assertEqual(mark_err.call_args[0][0], "WA-ACME")

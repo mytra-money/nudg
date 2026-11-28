@@ -156,9 +156,9 @@
   },
   {
    "fieldname": "trigger_flow",
-   "fieldtype": "Link",
-   "label": "Chatbot Flow",
-   "options": "WA Chatbot Flow"
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Chatbot Flow"
   },
   {
    "fieldname": "section_break_script",

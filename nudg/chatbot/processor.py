@@ -100,37 +100,15 @@ class ChatbotProcessor:
 				self.send_response(settings.out_of_hours_message)
 			return
 
-		from nudg.chatbot.flow_engine import FlowEngine
 		from nudg.chatbot.keyword_matcher import KeywordMatcher
 		from nudg.chatbot.session_manager import SessionManager
 
 		session_mgr = SessionManager(self.phone_number, self.account)
 		keyword_matcher = KeywordMatcher(self.account)
-		flow_engine = FlowEngine(self.phone_number, self.account)
-
-		active = session_mgr.get_active_session()
-		if active:
-			if self.content_type == "flow" and self.flow_response:
-				response = self.process_flow_response_in_session(active, flow_engine)
-			else:
-				response = flow_engine.process_input(active, self.message_text, self.button_payload)
-			if response:
-				self.send_response(response)
-				return
 
 		keyword = keyword_matcher.match(self.message_text)
 		if keyword:
-			if keyword.response_type == "Flow":
-				response = flow_engine.start_flow(keyword.trigger_flow)
-			else:
-				response = self.build_keyword_response(keyword)
-			if response:
-				self.send_response(response)
-				return
-
-		triggered = flow_engine.check_flow_trigger(self.message_text, self.button_payload)
-		if triggered:
-			response = flow_engine.start_flow(triggered)
+			response = self.build_keyword_response(keyword)
 			if response:
 				self.send_response(response)
 				return
@@ -151,22 +129,6 @@ class ChatbotProcessor:
 
 		if settings.default_response:
 			self.send_response(settings.default_response)
-
-	def process_flow_response_in_session(self, session, flow_engine):
-		try:
-			flow = frappe.get_doc("WA Chatbot Flow", session.current_flow)
-			current = flow_engine._find_step(flow, session.current_step)
-			if not current:
-				return flow_engine.complete_flow(session, flow)
-			if current.input_type != "WhatsApp Flow":
-				return flow_engine.process_input(session, self.message_text, self.button_payload)
-			data = flow_engine.process_flow_response(current, session, self.flow_response)
-			session.session_data = json.dumps(data)
-			session.add_message("Incoming", f"Flow completed: {self.message_text}", current.step_name)
-			return flow_engine.process_input(session, self.message_text, None)
-		except Exception:
-			frappe.log_error(title="Chatbot flow response failed")
-			return "An error occurred processing your form. Please try again."
 
 	def build_keyword_response(self, keyword_doc):
 		kind = keyword_doc.response_type

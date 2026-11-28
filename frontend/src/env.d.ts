@@ -39,3 +39,15 @@ interface Window {
     detail: string
   }
 }
+
+declare module '@framework/ui'
+declare module '@codemirror/lang-json'
+declare module '@codemirror/lang-html'
+declare module '@codemirror/lang-javascript'
+declare module '@codemirror/lang-python'
+declare module '@codemirror/lang-sql'
+declare module '@codemirror/lang-markdown'
+declare module '@codemirror/lang-css'
+declare module '@codemirror/lang-sass'
+declare module '@codemirror/lang-yaml'
+declare module '@codemirror/lang-xml'

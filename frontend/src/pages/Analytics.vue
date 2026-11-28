@@ -294,7 +294,7 @@ onUnmounted(() => window.clearInterval(timer))
     </template>
 
     <!-- Background Refresh Notification Banner -->
-    <div v-if="refreshing" class="shrink-0 border-b border-outline-gray-2 bg-white px-4 py-2">
+    <div v-if="refreshing" class="shrink-0 border-b border-outline-gray-2 bg-surface-base px-4 py-2">
       <Alert theme="amber" title="Generating a new Metric Snapshot in background… displaying the latest Ready values until computation finishes.">
         <template #prefix>
           <Spinner class="size-4" />

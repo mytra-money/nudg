@@ -50,9 +50,8 @@
   },
   {
    "fieldname": "current_flow",
-   "fieldtype": "Link",
-   "label": "Current Flow",
-   "options": "WA Chatbot Flow"
+   "fieldtype": "Data",
+   "label": "Current Flow"
   },
   {
    "fieldname": "current_step",

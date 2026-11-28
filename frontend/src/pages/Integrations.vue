@@ -16,9 +16,9 @@ const isAccountsActive = computed(() => route.path === '/integrations' || route.
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 flex-col bg-white">
+  <div class="flex h-full min-h-0 flex-col bg-surface-base">
     <!-- Sub-navigation Header -->
-    <header class="flex flex-wrap items-center justify-between border-b border-outline-gray-2 bg-white px-4 py-2 sm:px-6">
+    <header class="flex flex-wrap items-center justify-between border-b border-outline-gray-2 bg-surface-base px-4 py-2 sm:px-6">
       <div class="flex items-center gap-1 sm:gap-2">
         <Button
           route="/integrations"
@@ -28,16 +28,6 @@ const isAccountsActive = computed(() => route.path === '/integrations' || route.
           :variant="isAccountsActive ? 'subtle' : 'ghost'"
           :theme="isAccountsActive ? 'green' : 'gray'"
           :data-state="isAccountsActive ? 'active' : undefined"
-        />
-
-        <Button
-          route="/integrations/erpnext"
-          size="sm"
-          icon-left="lucide-building-2"
-          label="ERPNext"
-          :variant="route.path.includes('/erpnext') ? 'subtle' : 'ghost'"
-          :theme="route.path.includes('/erpnext') ? 'green' : 'gray'"
-          :data-state="route.path.includes('/erpnext') ? 'active' : undefined"
         />
 
         <Button

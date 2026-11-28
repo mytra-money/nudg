@@ -1,24 +1,21 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { Badge, Button, Checkbox, Dialog, FormControl, ItemListRow, Switch, TabButtons, TimePicker, dialog, toast } from 'frappe-ui'
+import { Badge, Button, Checkbox, Dialog, FormControl, Switch, TabButtons, TimePicker, dialog, toast } from 'frappe-ui'
 import DeskCard from '@/components/desk/DeskCard.vue'
 import DeskEmpty from '@/components/desk/DeskEmpty.vue'
 import DeskPage from '@/components/desk/DeskPage.vue'
 import EmptyState from '@/components/EmptyState.vue'
-import StatusBadge from '@/components/StatusBadge.vue'
+import MetaFlowsPanel from '@/components/MetaFlowsPanel.vue'
 import { formatDay, formatTime, rawErrorText } from '@/utils/format'
 import { displayTitle } from '@/utils/titles'
 import {
   cancelChatbotSession,
-  deleteChatbotFlow,
   deleteChatbotKeyword,
   getChatbot,
-  listChatbotFlows,
   listChatbotHandoffs,
   listChatbotKeywords,
   resumeChatbotHandoff,
   saveChatbot,
-  saveChatbotFlow,
   saveChatbotKeyword,
 } from '@/services/catalogApi'
 import { useAccountGate } from '@/composables/useAccountGate'
@@ -30,13 +27,6 @@ interface HourRow {
   enabled: number
   start_time: string
   end_time: string
-}
-
-interface FlowStep {
-  step_name: string
-  message: string
-  input_type: string
-  store_as: string
 }
 
 const tab = ref<Tab>('bot')
@@ -62,21 +52,16 @@ const bot = ref({
 })
 
 const keywords = ref<any[]>([])
-const flows = ref<any[]>([])
 const transfers = ref<any[]>([])
 const sessions = ref<any[]>([])
 
 const keywordOpen = ref(false)
-const flowOpen = ref(false)
 const keywordForm = ref(emptyKeyword())
-const flowForm = ref(emptyFlow())
-
-const flowOptions = computed(() => flows.value.map((row) => ({ name: row.name, label: row.flow_name || row.name })))
 
 const tabOptions: { value: Tab; label: string }[] = [
   { value: 'bot', label: 'Set up bot' },
   { value: 'keywords', label: 'Keywords' },
-  { value: 'flows', label: 'Flows' },
+  { value: 'flows', label: 'Meta Flows' },
   { value: 'handoffs', label: 'Handoffs' },
 ]
 const providerOptions = [
@@ -89,15 +74,9 @@ const providerOptions = [
 const matchTypeOptions = ['Contains', 'Exact', 'Starts With'].map((value) => ({ label: value, value }))
 const responseTypeOptions = [
   { label: 'Send a reply', value: 'Text' },
-  { label: 'Start a flow', value: 'Flow' },
   { label: 'Unsubscribe', value: 'Unsubscribe' },
   { label: 'Subscribe again', value: 'Subscribe' },
 ]
-const inputTypeOptions = ['Text', 'Email', 'Phone', 'Number'].map((value) => ({ label: value, value }))
-const flowSelectOptions = computed(() => [
-  { label: 'Select a flow', value: '' },
-  ...flowOptions.value.map((item) => ({ label: item.label, value: item.name })),
-])
 
 function setFlag(target: Record<string, any>, key: string, value: unknown) {
   target[key] = value ? 1 : 0
@@ -115,26 +94,8 @@ function emptyKeyword() {
     match_type: 'Contains',
     response_type: 'Text',
     response_text: '',
-    trigger_flow: '',
     enabled: 1,
   }
-}
-
-function emptyFlow() {
-  return {
-    name: '',
-    flow_name: '',
-    trigger_keywords: '',
-    initial_message: '',
-    completion_message: '',
-    cancel_keywords: 'stop',
-    enabled: 1,
-    steps: [emptyStep(1)] as FlowStep[],
-  }
-}
-
-function emptyStep(index: number): FlowStep {
-  return { step_name: `step_${index}`, message: '', input_type: 'Text', store_as: '' }
 }
 
 function clock(value: string) {
@@ -146,10 +107,9 @@ async function loadAccount() {
   loading.value = true
   error.value = null
   try {
-    const [settings, keywordRows, flowRows, handoff] = await Promise.all([
+    const [settings, keywordRows, handoff] = await Promise.all([
       getChatbot(account.value),
       listChatbotKeywords(account.value),
-      listChatbotFlows(account.value),
       listChatbotHandoffs(account.value),
     ])
     bot.value = {
@@ -171,7 +131,6 @@ async function loadAccount() {
       excluded_numbers: (settings.excluded_numbers || []).join('\n'),
     }
     keywords.value = keywordRows || []
-    flows.value = flowRows || []
     transfers.value = handoff?.transfers || []
     sessions.value = handoff?.sessions || []
   } catch (err) {
@@ -203,7 +162,6 @@ async function saveBot() {
 }
 
 function keywordResult(row: any) {
-  if (row.response_type === 'Flow') return `Flow · ${displayTitle(row.trigger_flow) || 'Flow'}`
   if (row.response_type === 'Unsubscribe') return `Unsubscribe · ${row.response_text || ''}`
   if (row.response_type === 'Subscribe') return `Subscribe · ${row.response_text || ''}`
   return row.response_text || ''
@@ -215,9 +173,8 @@ function openKeyword(row?: any) {
         name: row.name,
         keywords: row.keywords || '',
         match_type: row.match_type || 'Contains',
-        response_type: ['Flow', 'Unsubscribe', 'Subscribe'].includes(row.response_type) ? row.response_type : 'Text',
+        response_type: ['Unsubscribe', 'Subscribe'].includes(row.response_type) ? row.response_type : 'Text',
         response_text: row.response_text || '',
-        trigger_flow: row.trigger_flow || '',
         enabled: row.enabled ? 1 : 0,
       }
     : emptyKeyword()
@@ -245,68 +202,6 @@ function removeKeyword(name: string) {
     onConfirm: async () => {
       await deleteChatbotKeyword(account.value, name)
       keywords.value = keywords.value.filter((row) => row.name !== name)
-    },
-  })
-}
-
-function openFlow(row?: any) {
-  flowForm.value = row
-    ? {
-        name: row.name,
-        flow_name: row.flow_name || row.name,
-        trigger_keywords: row.trigger_keywords || '',
-        initial_message: row.initial_message || '',
-        completion_message: row.completion_message || '',
-        cancel_keywords: row.cancel_keywords || 'stop',
-        enabled: row.enabled ? 1 : 0,
-        steps: (row.steps || []).map((step: FlowStep, index: number) => ({
-          step_name: step.step_name || `step_${index + 1}`,
-          message: step.message || '',
-          input_type: step.input_type || 'Text',
-          store_as: step.store_as || '',
-        })),
-      }
-    : emptyFlow()
-  if (!flowForm.value.steps.length) flowForm.value.steps = [emptyStep(1)]
-  flowOpen.value = true
-}
-
-function addStep() {
-  flowForm.value.steps.push(emptyStep(flowForm.value.steps.length + 1))
-}
-
-function removeStep(index: number) {
-  flowForm.value.steps.splice(index, 1)
-  if (!flowForm.value.steps.length) flowForm.value.steps.push(emptyStep(1))
-}
-
-async function saveFlow() {
-  saving.value = true
-  try {
-    await saveChatbotFlow(account.value, {
-      ...flowForm.value,
-      steps: flowForm.value.steps.map((step, index) => ({
-        ...step,
-        step_name: (step.store_as || step.step_name || `step_${index + 1}`).trim().replace(/\s+/g, '_'),
-      })),
-    })
-    flowOpen.value = false
-    flows.value = (await listChatbotFlows(account.value)) || []
-    toast.success('Flow saved')
-  } catch (err) {
-    toast.error(rawErrorText(err))
-  } finally {
-    saving.value = false
-  }
-}
-
-function removeFlow(name: string) {
-  dialog.danger({
-    title: 'Delete flow?',
-    message: 'This chatbot flow will be removed.',
-    onConfirm: async () => {
-      await deleteChatbotFlow(account.value, name)
-      flows.value = flows.value.filter((row) => row.name !== name)
     },
   })
 }
@@ -513,32 +408,8 @@ onMounted(async () => {
       </DeskCard>
     </div>
 
-    <div v-else-if="tab === 'flows'">
-      <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <p class="text-xs text-ink-gray-5">Ask a few questions, then send the closing message. Use {email} to repeat a saved answer.</p>
-        <Button variant="solid" theme="green" size="sm" label="Add flow" @click="openFlow()"/>
-      </div>
-      <EmptyState v-if="!flows.length" title="No flows yet" description="Ask a few questions, then send a closing message." />
-      <div v-else class="grid gap-3 lg:grid-cols-2">
-        <DeskCard
-          v-for="row in flows"
-          :key="row.name"
-          as="article"
-          :title="displayTitle(row.flow_name) || 'Flow'"
-          :description="`Starts on: ${row.trigger_keywords || 'a keyword that points here'}`"
-        >
-          <template #actions>
-            <StatusBadge :label="row.enabled ? 'On' : 'Off'" />
-          </template>
-          <ol class="space-y-1 text-xs text-ink-gray-7">
-            <li v-for="(step, index) in row.steps" :key="step.step_name">{{ Number(index) + 1 }}. {{ step.message }}</li>
-          </ol>
-          <div class="mt-3 flex justify-end gap-2">
-            <Button variant="ghost" size="sm" label="Edit" @click="openFlow(row)" />
-            <Button variant="ghost" size="sm" theme="red" label="Delete" @click="removeFlow(row.name)" />
-          </div>
-        </DeskCard>
-      </div>
+    <div v-else-if="tab === 'flows'" class="flex min-h-[28rem] flex-col">
+      <MetaFlowsPanel :key="account" :account="account" />
     </div>
 
     <div v-else class="grid items-start gap-4 lg:grid-cols-2">
@@ -594,18 +465,10 @@ onMounted(async () => {
           />
         </div>
         <FormControl
-          v-if="keywordForm.response_type !== 'Flow'"
           v-model="keywordForm.response_text"
           type="textarea"
           label="Reply"
           :rows="3"
-        />
-        <FormControl
-          v-else
-          v-model="keywordForm.trigger_flow"
-          type="select"
-          label="Flow"
-          :options="flowSelectOptions"
         />
         <Checkbox
           :model-value="Boolean(keywordForm.enabled)"
@@ -617,71 +480,6 @@ onMounted(async () => {
         <div class="flex justify-end gap-2">
           <Button variant="subtle" label="Cancel" @click="keywordOpen = false" />
           <Button variant="solid" theme="green" loading-text="Saving…" label="Save" :loading="saving" @click="saveKeyword"/>
-        </div>
-      </template>
-    </Dialog>
-
-    <Dialog v-model="flowOpen" :title="flowForm.name ? 'Edit flow' : 'Add flow'" size="lg">
-      <div class="space-y-3">
-        <p class="text-xs text-ink-gray-5">
-          WhatsApp account: {{ displayTitle(selectedAccountLabel) || 'Select a number in the top bar' }}
-        </p>
-        <div class="grid gap-3 sm:grid-cols-2">
-          <FormControl
-            v-model="flowForm.flow_name"
-            type="text"
-            label="Name"
-            placeholder="Book a demo"
-            :disabled="Boolean(flowForm.name)"
-          />
-          <FormControl
-            v-model="flowForm.trigger_keywords"
-            type="text"
-            label="Start words"
-            placeholder="book, demo"
-          />
-        </div>
-        <FormControl
-          v-model="flowForm.initial_message"
-          type="text"
-          label="Opening message"
-          placeholder="Sure, a few quick questions."
-        />
-        <div class="space-y-2">
-          <div v-for="(step, index) in flowForm.steps" :key="index" class="rounded-lg border border-outline-gray-2 p-3">
-            <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_8rem_8rem_auto] sm:items-end">
-              <FormControl v-model="step.message" type="text" label="Question" placeholder="What is your email?" />
-              <FormControl v-model="step.input_type" type="select" label="Answer" :options="inputTypeOptions" />
-              <FormControl v-model="step.store_as" type="text" label="Save as" placeholder="email" />
-              <Button variant="ghost" theme="red" label="Remove" @click="removeStep(index)" />
-            </div>
-          </div>
-        </div>
-        <Button variant="subtle" size="sm" label="Add question" @click="addStep" />
-        <div class="grid gap-3 sm:grid-cols-2">
-          <FormControl
-            v-model="flowForm.completion_message"
-            type="text"
-            label="Closing message"
-            placeholder="Booked for {email}"
-          />
-          <FormControl
-            v-model="flowForm.cancel_keywords"
-            type="text"
-            label="Cancel words"
-            placeholder="stop, cancel"
-          />
-        </div>
-        <Checkbox
-          :model-value="Boolean(flowForm.enabled)"
-          label="Enabled"
-          @update:model-value="setFlag(flowForm, 'enabled', $event)"
-        />
-      </div>
-      <template #actions>
-        <div class="flex justify-end gap-2">
-          <Button variant="subtle" label="Cancel" @click="flowOpen = false" />
-          <Button variant="solid" theme="green" loading-text="Saving…" label="Save" :loading="saving" @click="saveFlow"/>
         </div>
       </template>
     </Dialog>

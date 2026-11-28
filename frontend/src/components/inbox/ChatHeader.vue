@@ -29,7 +29,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <header class="inbox-chat-header sticky top-0 z-10 flex h-14 shrink-0 items-center gap-1 overflow-hidden border-b border-wa bg-white px-2 sm:gap-2 sm:px-3">
+  <header class="inbox-chat-header sticky top-0 z-10 flex h-14 shrink-0 items-center gap-1 overflow-hidden border-b border-outline-gray-2 bg-surface-base px-2 sm:gap-2 sm:px-3">
     <div class="inbox-contact flex min-w-0 flex-1 items-center gap-2">
       <button
         type="button"
@@ -100,7 +100,7 @@ const emit = defineEmits<{
       >
         <button
           type="button"
-          class="hidden h-8 items-center gap-1.5 rounded-full border border-wa bg-white px-2 text-xs font-medium text-wa-ink hover:bg-wa-panel sm:inline-flex"
+          class="hidden h-8 items-center gap-1.5 rounded-full border border-wa bg-surface-base px-2 text-xs font-medium text-wa-ink hover:bg-wa-panel sm:inline-flex"
         >
           <span v-if="headerAssignees.length" class="flex items-center">
             <Avatar

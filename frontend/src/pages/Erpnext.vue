@@ -19,7 +19,10 @@ const desk = useDesk()
 const live = computed(() => Boolean(window.csrf_token))
 const loading = ref(true)
 const error = ref<string | null>(null)
-const busy = ref(false)
+const busyAction = ref<string | null>(null)
+function isBusy(key: string) {
+  return busyAction.value === key
+}
 const sites = ref<any[]>([])
 const accounts = computed(() => desk.inbox.value?.accounts || [])
 const alerts = ref<Record<string, any[]>>({})
@@ -206,7 +209,7 @@ async function connect() {
     toast.error('Select a WhatsApp number in the top bar first.')
     return
   }
-  busy.value = true
+  busyAction.value = 'connect'
   try {
     const result = await call<any>('nudg.integrations.erpnext.api.connect_site', {
       ...siteForm.value,
@@ -227,12 +230,12 @@ async function connect() {
   } catch (err) {
     toast.error(errorText(err))
   } finally {
-    busy.value = false
+    busyAction.value = null
   }
 }
 
 async function toggleSite(site: any) {
-  busy.value = true
+  busyAction.value = 'site:' + site.name
   try {
     await call('nudg.integrations.erpnext.api.set_site_enabled', {
       site: site.name,
@@ -242,7 +245,7 @@ async function toggleSite(site: any) {
   } catch (err) {
     toast.error(errorText(err))
   } finally {
-    busy.value = false
+    busyAction.value = null
   }
 }
 
@@ -471,7 +474,7 @@ async function saveAlert() {
 }
 
 async function toggleAlert(site: any, alert: any) {
-  busy.value = true
+  busyAction.value = 'alert:' + alert.name
   try {
     await call('nudg.integrations.erpnext.api.set_alert_enabled', {
       site: site.name,
@@ -482,7 +485,7 @@ async function toggleAlert(site: any, alert: any) {
   } catch (err) {
     toast.error(errorText(err))
   } finally {
-    busy.value = false
+    busyAction.value = null
   }
 }
 
@@ -492,7 +495,7 @@ async function removeAlert(site: any, alert: any) {
     return
   }
   confirmDelete.value = ''
-  busy.value = true
+  busyAction.value = 'remove:' + alert.name
   try {
     await call('nudg.integrations.erpnext.api.delete_alert', { site: site.name, alert: alert.name })
     toast.success('Alert removed from the ERPNext site.')
@@ -500,7 +503,7 @@ async function removeAlert(site: any, alert: any) {
   } catch (err) {
     toast.error(errorText(err))
   } finally {
-    busy.value = false
+    busyAction.value = null
   }
 }
 
@@ -512,8 +515,8 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 flex-col bg-white">
-    <header class="flex flex-wrap items-center gap-2 border-b border-outline-gray-2 bg-white px-4 py-2 sm:px-6">
+  <div class="flex h-full min-h-0 flex-col bg-surface-base">
+    <header class="flex flex-wrap items-center gap-2 border-b border-outline-gray-2 bg-surface-base px-4 py-2 sm:px-6">
       <Button route="/integrations" size="sm" variant="ghost" label="WhatsApp numbers" />
       <Button
         route="/integrations/erpnext"
@@ -527,7 +530,7 @@ onMounted(load)
 
     <div class="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
       <div class="mx-auto flex max-w-3xl flex-col gap-6">
-        <section class="rounded-xl border border-outline-gray-2 bg-white p-4">
+        <section class="rounded-xl border border-outline-gray-2 bg-surface-base p-4">
           <p class="text-sm text-ink-gray-6">
             Connect an ERPNext site with its API key. Add an alert here and Nudg creates the Webhook on that site for the document and event you pick. When that event happens, their site calls Nudg and Nudg sends the WhatsApp template.
           </p>
@@ -540,7 +543,7 @@ onMounted(load)
           title="No ERPNext sites connected"
           description="Open Nudg on a signed-in site to connect ERPNext."
         />
-        <section v-else class="rounded-xl border border-outline-gray-2 bg-white p-4">
+        <section v-else class="rounded-xl border border-outline-gray-2 bg-surface-base p-4">
           <h2 class="text-sm font-semibold text-ink-gray-9">Connect a site</h2>
           <p class="mt-1 text-sm text-ink-gray-6">
             Saving checks that this site is reachable, that WA Account, WA Profile, and WA Message are installed, and that this API user can use them. A failed check is shown so you can fix it. Site status becomes Connected after the checks pass, or Error when the site or API cannot be used.
@@ -555,7 +558,7 @@ onMounted(load)
               WhatsApp account: {{ currentAccountLabel || 'Select a number in the top bar' }}
             </p>
             <div class="flex items-end">
-              <Button variant="solid" theme="green" loading-text="Connecting…" :loading="busy" type="submit" label="Connect" />
+              <Button variant="solid" theme="green" loading-text="Connecting…" :loading="isBusy('connect')" type="submit" label="Connect" />
             </div>
           </form>
           <p v-if="live && !accountSites.length" class="mt-4 text-sm text-ink-gray-6">No ERPNext sites connected yet.</p>
@@ -576,7 +579,7 @@ onMounted(load)
                 </div>
                 <div class="flex flex-wrap gap-2">
                   <Button v-if="site.status === 'Connected'" variant="solid" theme="green" @click="openAlert(site)">Add alert</Button>
-                  <Button variant="subtle" :loading="busy" @click="toggleSite(site)">{{ site.status === 'Connected' ? 'Disable' : 'Enable' }}</Button>
+                  <Button variant="subtle" :loading="isBusy('site:' + site.name)" :disabled="Boolean(busyAction && !isBusy('site:' + site.name))" @click="toggleSite(site)">{{ site.status === 'Connected' ? 'Disable' : 'Enable' }}</Button>
                 </div>
               </div>
               <p v-if="alertsLoading[site.name]" class="mt-2 text-ink-gray-5">Loading alerts…</p>
@@ -594,9 +597,9 @@ onMounted(load)
                     <div class="break-words text-ink-gray-6">{{ alertTemplate(alert.template) }} · {{ alert.phone_field }} · {{ alert.enabled ? 'On' : 'Off' }}</div>
                   </div>
                   <div class="flex flex-wrap gap-2">
-                    <Button variant="subtle" :loading="busy" @click="openEdit(site, alert)">Edit</Button>
-                    <Button variant="subtle" :loading="busy" @click="toggleAlert(site, alert)">{{ alert.enabled ? 'Turn off' : 'Turn on' }}</Button>
-                    <Button variant="subtle" :loading="busy" @click="removeAlert(site, alert)">{{ confirmDelete === alert.name ? 'Confirm delete' : 'Delete' }}</Button>
+                    <Button variant="subtle" @click="openEdit(site, alert)">Edit</Button>
+                    <Button variant="subtle" :loading="isBusy('alert:' + alert.name)" :disabled="Boolean(busyAction && !isBusy('alert:' + alert.name))" @click="toggleAlert(site, alert)">{{ alert.enabled ? 'Turn off' : 'Turn on' }}</Button>
+                    <Button variant="subtle" :loading="isBusy('remove:' + alert.name)" :disabled="Boolean(busyAction && !isBusy('remove:' + alert.name))" @click="removeAlert(site, alert)">{{ confirmDelete === alert.name ? 'Confirm delete' : 'Delete' }}</Button>
                   </div>
                 </li>
               </ul>

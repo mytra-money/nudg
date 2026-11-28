@@ -24,7 +24,7 @@ def verify_remote_site(client) -> dict:
 	try:
 		remote_user = client.get_logged_user()
 	except ERPNextClientError as exc:
-		detail = _sign_in_detail(exc)
+		detail = _sign_in_detail(exc, client)
 		return _result(
 			ok=False,
 			status="Error",
@@ -179,9 +179,11 @@ def failure_kind(exc: ERPNextClientError) -> str:
 	return "other"
 
 
-def _sign_in_detail(exc: ERPNextClientError) -> str:
+def _sign_in_detail(exc: ERPNextClientError, client: Any = None) -> str:
 	kind = failure_kind(exc)
 	if kind == "denied":
+		if client and (getattr(client, "oauth_session", None) or getattr(client, "access_token", None)):
+			return "The OAuth access token was refused or expired. Click Re-authorize to refresh access."
 		return "The API key or API secret was refused. Generate a new key on that site and paste both values again."
 	if kind == "down":
 		text = str(exc).lower()

@@ -50,7 +50,7 @@ def list_doctypes(site: str, query: str | None = None) -> list[dict]:
 			},
 		)
 	except ERPNextClientError as exc:
-		_raise_remote(exc, _("Nudg could not read document types from that ERPNext site."))
+		_raise_remote(exc, _("Nudg could not read document types from that external site."))
 	return _link_rows(result)
 
 
@@ -99,7 +99,7 @@ def list_alerts(site: str) -> list[dict]:
 			limit=20,
 		)
 	except ERPNextClientError as exc:
-		_raise_remote(exc, _("Nudg could not read alerts from that ERPNext site."))
+		_raise_remote(exc, _("Nudg could not read alerts from that external site."))
 	alerts = []
 	for row in rows:
 		if not isinstance(row, dict):
@@ -114,7 +114,7 @@ def list_alerts(site: str) -> list[dict]:
 			try:
 				full = client.get_resource("Webhook", str(row.get("name")))
 			except ERPNextClientError as exc:
-				_raise_remote(exc, _("Nudg could not read alerts from that ERPNext site."))
+				_raise_remote(exc, _("Nudg could not read alerts from that external site."))
 			alert = alert_from_webhook(full, view.name)
 		if alert:
 			alerts.append(alert)
@@ -131,7 +131,7 @@ def create_alert(
 ) -> dict:
 	view = _require_site(site)
 	if view.status != "Connected":
-		frappe.throw(_("Enable the ERPNext connection before adding an alert."))
+		frappe.throw(_("Enable the external site connection before adding an alert."))
 	try:
 		doctype = assert_doctype_name(doctype)
 		phone_field = assert_field_name(phone_field, "Phone field")
@@ -182,7 +182,7 @@ def create_alert(
 		else:
 			saved = client.insert_resource("Webhook", document)
 	except ERPNextClientError as exc:
-		_raise_remote(exc, _("Nudg could not save that alert on the ERPNext site."))
+		_raise_remote(exc, _("Nudg could not save that alert on the external site."))
 	alert = alert_from_webhook(saved, view.name)
 	if alert:
 		return alert
@@ -201,7 +201,7 @@ def set_alert_enabled(site: str, alert: str, enabled: bool) -> dict:
 	try:
 		saved = client.update_resource("Webhook", current["name"], {"enabled": 1 if enabled else 0})
 	except ERPNextClientError as exc:
-		_raise_remote(exc, _("Nudg could not update that alert on the ERPNext site."))
+		_raise_remote(exc, _("Nudg could not update that alert on the external site."))
 	found = alert_from_webhook({**current, **saved, "enabled": 1 if enabled else 0}, view.name)
 	return found or {**current, "enabled": bool(enabled)}
 
@@ -211,7 +211,7 @@ def delete_alert(site: str, alert: str) -> dict:
 	try:
 		client.delete_resource("Webhook", current["name"])
 	except ERPNextClientError as exc:
-		_raise_remote(exc, _("Nudg could not delete that alert on the ERPNext site."))
+		_raise_remote(exc, _("Nudg could not delete that alert on the external site."))
 	return {"ok": True, "name": current["name"]}
 
 
@@ -225,10 +225,10 @@ def _owned_alert(site: str, alert: str):
 	try:
 		row = client.get_resource("Webhook", name)
 	except ERPNextClientError as exc:
-		_raise_remote(exc, _("Nudg could not read that alert on the ERPNext site."))
+		_raise_remote(exc, _("Nudg could not read that alert on the external site."))
 	current = alert_from_webhook(row, view.name)
 	if current is None:
-		frappe.throw(_("That alert is not on this ERPNext connection."))
+		frappe.throw(_("That alert is not on this external connection."))
 	return view, client, current
 
 
@@ -236,9 +236,9 @@ def _describe(client, doctype: str) -> dict:
 	try:
 		doc = client.get_resource("DocType", doctype)
 	except ERPNextClientError as exc:
-		_raise_remote(exc, _("Nudg could not read that document type from the ERPNext site."))
+		_raise_remote(exc, _("Nudg could not read that document type from the external site."))
 	if not doc:
-		frappe.throw(_("That document type was not found on the ERPNext site."))
+		frappe.throw(_("That document type was not found on the external site."))
 	fields = []
 	for row in doc.get("fields") or []:
 		if not isinstance(row, dict):
@@ -364,7 +364,9 @@ def _client(site: str):
 	view = _require_site(site)
 	client = _client_for_site(view)
 	if client is None:
-		frappe.throw(_("The API key for this ERPNext site is missing."))
+		if getattr(view, "connected_app", None):
+			frappe.throw(_("Authorize this external site via OAuth first."))
+		frappe.throw(_("The API key for this external site is missing."))
 	return client
 
 
@@ -399,12 +401,12 @@ def _raise_remote(exc: ERPNextClientError, fallback: str) -> NoReturn:
 	if exc.status_code in {401, 403}:
 		frappe.throw(
 			_(
-				"The API user on that ERPNext site is not allowed to do this. "
+				"The API user on that external site is not allowed to do this. "
 				"They need permission to read DocType and to create Webhook."
 			)
 		)
 	if exc.status_code == 404:
-		frappe.throw(_("That record was not found on the ERPNext site."))
+		frappe.throw(_("That record was not found on the external site."))
 	detail = str(exc).strip()
 	if exc.status_code in {400, 417} and detail and "<" not in detail:
 		frappe.throw(detail[:300])

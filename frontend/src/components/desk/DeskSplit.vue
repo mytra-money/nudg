@@ -26,17 +26,17 @@ withDefaults(
 
 <template>
   <div
-    class="nudg-split nudg-master desk-split grid min-h-0 flex-1 overflow-hidden bg-white"
+    class="nudg-split nudg-master desk-split grid min-h-0 flex-1 overflow-hidden bg-surface-base"
     :style="{ '--desk-split-cols': columns }"
   >
     <aside
-      class="min-h-0 flex-col overflow-hidden border-r border-outline-gray-2 bg-white"
+      class="min-h-0 flex-col overflow-hidden border-r border-outline-gray-2 bg-surface-base"
       :class="narrow && showDetail ? 'hidden' : 'flex'"
     >
       <slot name="master" />
     </aside>
     <main
-      class="min-h-0 flex-col overflow-hidden bg-white"
+      class="min-h-0 flex-col overflow-hidden bg-surface-base"
       :class="narrow && !showDetail ? 'hidden' : 'flex'"
     >
       <slot name="detail" />

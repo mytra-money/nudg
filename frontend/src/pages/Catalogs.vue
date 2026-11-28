@@ -174,6 +174,7 @@ const itemEditorMode = ref<'create' | 'edit'>('create')
 const editingItemName = ref('')
 const itemForm = ref({ item_name: '', sku: '', description: '', price: '', currency: 'INR', status: 'Active', image: '' })
 const savingCatalog = ref(false)
+const catalogAction = ref<'save' | 'delete' | null>(null)
 
 const currentAccount = computed(() => accountArg(desk.account.value) || '')
 const currentAccountLabel = computed(() =>
@@ -230,6 +231,7 @@ async function saveCatalogForm() {
     return
   }
   savingCatalog.value = true
+  catalogAction.value = 'save'
   const isLive = Boolean(window.csrf_token)
   try {
     if (!isLive) {
@@ -288,6 +290,7 @@ async function saveCatalogForm() {
     showToast(errorText(caught), true)
   } finally {
     savingCatalog.value = false
+    catalogAction.value = null
   }
 }
 
@@ -300,6 +303,7 @@ function removeCatalog() {
     message: `Remove “${label}” and its items from Nudg?`,
     onConfirm: async () => {
       savingCatalog.value = true
+      catalogAction.value = 'delete'
       const isLive = Boolean(window.csrf_token)
       try {
         if (isLive) await deleteCatalog(name)
@@ -312,6 +316,7 @@ function removeCatalog() {
         showToast('Catalog deleted')
       } finally {
         savingCatalog.value = false
+        catalogAction.value = null
       }
     },
   })
@@ -326,6 +331,7 @@ function removeItem() {
     message: `Remove “${label}” from this catalog?`,
     onConfirm: async () => {
       savingCatalog.value = true
+      catalogAction.value = 'delete'
       const isLive = Boolean(window.csrf_token)
       try {
         if (isLive) await deleteCatalogItem(name)
@@ -334,6 +340,7 @@ function removeItem() {
         showToast('Item deleted')
       } finally {
         savingCatalog.value = false
+        catalogAction.value = null
       }
     },
   })
@@ -351,6 +358,7 @@ async function saveItemForm() {
     return
   }
   savingCatalog.value = true
+  catalogAction.value = 'save'
   const isLive = Boolean(window.csrf_token)
   try {
     if (!isLive) {
@@ -407,6 +415,7 @@ async function saveItemForm() {
     showToast(errorText(caught), true)
   } finally {
     savingCatalog.value = false
+    catalogAction.value = null
   }
 }
 
@@ -812,7 +821,7 @@ watch(
           <!-- Empty Items State -->
           <div
             v-else
-            class="mt-6 flex flex-col items-center justify-center rounded-xl border border-dashed border-outline-gray-2 bg-white p-10 text-center"
+            class="mt-6 flex flex-col items-center justify-center rounded-xl border border-dashed border-outline-gray-2 bg-surface-base p-10 text-center"
           >
             <div class="flex h-10 w-10 items-center justify-center rounded-full bg-surface-gray-2 text-ink-gray-5">
               <span class="lucide-package size-5" />
@@ -836,11 +845,11 @@ watch(
       </div>
       <template #actions>
         <div class="flex w-full items-center justify-between gap-2">
-          <Button v-if="catalogEditorMode === 'edit'" label="Delete" :loading="savingCatalog" @click="removeCatalog" />
+          <Button v-if="catalogEditorMode === 'edit'" label="Delete" :loading="catalogAction === 'delete'" :disabled="Boolean(catalogAction)" @click="removeCatalog" />
           <span v-else />
           <div class="flex gap-2">
-            <Button label="Cancel" @click="catalogEditorOpen = false" />
-            <Button variant="solid" theme="green" loading-text="Saving…" :label="catalogEditorMode === 'edit' ? 'Save' : 'Create catalog'" :loading="savingCatalog" @click="saveCatalogForm"/>
+            <Button label="Cancel" :disabled="Boolean(catalogAction)" @click="catalogEditorOpen = false" />
+            <Button variant="solid" theme="green" loading-text="Saving…" :label="catalogEditorMode === 'edit' ? 'Save' : 'Create catalog'" :loading="catalogAction === 'save'" :disabled="Boolean(catalogAction)" @click="saveCatalogForm"/>
           </div>
         </div>
       </template>
@@ -860,11 +869,11 @@ watch(
       </div>
       <template #actions>
         <div class="flex w-full items-center justify-between gap-2">
-          <Button v-if="itemEditorMode === 'edit'" label="Delete" :loading="savingCatalog" @click="removeItem" />
+          <Button v-if="itemEditorMode === 'edit'" label="Delete" :loading="catalogAction === 'delete'" :disabled="Boolean(catalogAction)" @click="removeItem" />
           <span v-else />
           <div class="flex gap-2">
-            <Button label="Cancel" @click="itemEditorOpen = false" />
-            <Button variant="solid" theme="green" loading-text="Saving…" :label="itemEditorMode === 'edit' ? 'Save' : 'Add item'" :loading="savingCatalog" @click="saveItemForm"/>
+            <Button label="Cancel" :disabled="Boolean(catalogAction)" @click="itemEditorOpen = false" />
+            <Button variant="solid" theme="green" loading-text="Saving…" :label="itemEditorMode === 'edit' ? 'Save' : 'Add item'" :loading="catalogAction === 'save'" :disabled="Boolean(catalogAction)" @click="saveItemForm"/>
           </div>
         </div>
       </template>
@@ -911,7 +920,7 @@ watch(
               Customer Chat Preview
             </span>
 
-            <div class="rounded-xl border border-[#d1d7db] bg-white p-3.5 shadow-sm">
+            <div class="rounded-xl border border-[#d1d7db] bg-surface-base p-3.5 shadow-sm">
               <p class="text-xs text-ink-gray-9 leading-relaxed whitespace-pre-wrap">{{ customBodyText }}</p>
 
               <!-- Interactive SPM Product Card -->

@@ -69,9 +69,7 @@ def get_bot_status(phone_number: str, account: str | None = None) -> dict:
 	session = _match_phone("WA Chatbot Session", key, account, [
 		"name", "phone_number", "whatsapp_account", "current_flow", "current_step", "started_at", "last_activity",
 	])
-	flow_title = None
-	if session and session.get("current_flow"):
-		flow_title = frappe.db.get_value("WA Chatbot Flow", session.current_flow, "flow_name") or session.current_flow
+	flow_title = session.get("current_flow") if session else None
 	empty.update({
 		"has_bot_session": bool(session),
 		"is_transferred": bool(transfer),
@@ -167,9 +165,7 @@ def _bot_status_batch(profiles, empty: dict) -> dict[str, dict]:
 		key = phone_match_key(phone)
 		session = session_index.get((account or "", key)) if key else None
 		transfer = transfer_index.get((account or "", key)) if key else None
-		flow_title = None
-		if session and session.get("current_flow"):
-			flow_title = frappe.db.get_value("WA Chatbot Flow", session.current_flow, "flow_name") or session.current_flow
+		flow_title = session.get("current_flow") if session else None
 		info.update({
 			"has_bot_session": bool(session),
 			"is_transferred": bool(transfer),

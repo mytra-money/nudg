@@ -839,7 +839,7 @@ watch(
           v-for="row in utmCampaigns"
           :key="row.name"
           type="button"
-          class="rounded-xl border border-outline-gray-2 bg-white p-4 text-left hover:border-outline-green-3"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base p-4 text-left hover:border-outline-green-3"
           @click="isManager && editCampaign(row)"
         >
           <p class="font-semibold text-ink-gray-9">{{ displayTitle(row.campaign_name) || 'Campaign' }}</p>
@@ -862,7 +862,7 @@ watch(
       </div>
       <DeskEmpty v-if="loading && !bulkRows.length" kind="loading" title="Loading results…" />
       <DeskEmpty v-else-if="!bulkRows.length" kind="empty" title="No bulk messages yet" description="When a schedule reaches its start date and trigger time, one bulk message is created and each subscribed recipient is sent individually." />
-      <ul v-else class="divide-y divide-outline-gray-2 rounded-xl border border-outline-gray-2 bg-white">
+      <ul v-else class="divide-y divide-outline-gray-2 rounded-xl border border-outline-gray-2 bg-surface-base">
         <li v-for="row in bulkRows" :key="row.name" class="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div class="min-w-0">
             <div class="flex items-center gap-2">
@@ -1031,7 +1031,7 @@ watch(
             </div>
 
             <div class="flex items-center gap-2 shrink-0">
-              <Button v-if="isManager && (selected.status === 'Scheduled' || selected.status === 'In Progress')" variant="solid" theme="green" label="Send bulk message" icon-left="lucide-send" loading-text="Sending…" :loading="busy" @click="confirmRunOpen = true"/>
+              <Button v-if="isManager && (selected.status === 'Scheduled' || selected.status === 'In Progress')" variant="solid" theme="green" label="Send bulk message" icon-left="lucide-send" @click="confirmRunOpen = true"/>
               <Button
                 v-if="isManager && canEdit(selected)"
                 variant="subtle"
@@ -1096,7 +1096,7 @@ watch(
             </div>
 
             <!-- Recipient Items Table -->
-            <div class="rounded-xl border border-outline-gray-2 overflow-hidden bg-white">
+            <div class="rounded-xl border border-outline-gray-2 overflow-hidden bg-surface-base">
               <ul class="divide-y divide-outline-gray-1 text-xs">
                 <li
                   v-for="rec in filteredRecipients"

@@ -123,6 +123,7 @@ export default defineConfig(({ command, mode }) => {
       alias: {
         '@': path.resolve(root, 'src'),
         '@whatsapp/ui': whatsappUi,
+        '@framework/ui': path.resolve(root, 'src/utils/frameworkUiShim.ts'),
       },
       dedupe: ['vue', 'frappe-ui', 'reka-ui', 'dompurify'],
     },

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { Button, Dialog, FormControl, Select, TextInput, call, toast } from 'frappe-ui'
+import { Button, Dialog, Dropdown, FormControl, Select, TextInput, call, toast } from 'frappe-ui'
 import { MessageInput, MessageList } from '@whatsapp/ui/components/Messages'
 import type { ReactPayload, WhatsAppMessage } from '@whatsapp/ui/components/Messages'
 import DeskTemplatePreview from '@/components/DeskTemplatePreview.vue'
@@ -171,6 +171,23 @@ const filterOptions = CONVERSATION_STATUS_FILTERS.map((row) => ({
   label: row.label,
   value: row.value,
 }))
+
+const mobileComposerActions = computed(() => [
+  {
+    label: 'Send template',
+    icon: 'lucide-layout-template',
+    onClick: () => {
+      templateOpen.value = true
+    },
+  },
+  {
+    label: 'Send catalog product',
+    icon: 'lucide-shopping-bag',
+    onClick: () => {
+      void openCatalog()
+    },
+  },
+])
 
 function applyInboxTab(tab: string) {
   if (tab === 'all' || tab === 'needs_reply' || tab === 'window_open' || tab === 'unassigned') {
@@ -698,14 +715,14 @@ async function retryMessage(message: WhatsAppMessage) {
 </script>
 
 <template>
-  <div class="flex h-full min-w-0 overflow-hidden bg-wa-panel">
+  <div class="flex h-full min-w-0 overflow-hidden bg-surface-gray-1">
     <!-- Left Conversation Sidebar -->
     <aside
-      class="inbox-list min-h-0 flex-col border-r border-wa bg-white"
+      class="inbox-list min-h-0 flex-col border-r border-outline-gray-2 bg-surface-base"
       :class="desk.profile.value ? 'hidden md:flex' : 'flex'"
     >
-      <div class="flex items-center justify-between gap-2 border-b border-wa px-3 py-2.5">
-        <span class="text-base font-semibold text-wa-ink">Chats</span>
+      <div class="flex items-center justify-between gap-2 border-b border-outline-gray-2 px-3 py-2.5">
+        <span class="text-base font-semibold text-ink-gray-9">Chats</span>
         <button
           v-if="canCreateProfile"
           type="button"
@@ -719,7 +736,7 @@ async function retryMessage(message: WhatsAppMessage) {
       </div>
 
       <!-- Search & Filters Container -->
-      <div class="border-b border-outline-gray-2 p-3 space-y-2.5 shrink-0 bg-white">
+      <div class="border-b border-outline-gray-2 p-3 space-y-2.5 shrink-0 bg-surface-base">
         <!-- Search Input with clear button -->
         <div class="relative">
           <TextInput
@@ -770,7 +787,7 @@ async function retryMessage(message: WhatsAppMessage) {
 
     <!-- Center Chat Pane -->
     <section
-      class="inbox-chat min-h-0 flex-row overflow-hidden bg-white"
+      class="inbox-chat min-h-0 flex-row overflow-hidden bg-surface-base"
       :class="desk.profile.value ? 'flex' : 'hidden md:flex'"
     >
       <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-wa-chat">
@@ -790,7 +807,7 @@ async function retryMessage(message: WhatsAppMessage) {
             </p>
           </div>
           <div class="grid grid-cols-1 gap-3 pt-3 text-left sm:grid-cols-2">
-            <div class="rounded-xl border border-outline-gray-2 bg-white p-3.5 shadow-xs">
+            <div class="rounded-xl border border-outline-gray-2 bg-surface-base p-3.5 shadow-xs">
               <p class="text-xs font-semibold text-ink-gray-9 flex items-center gap-1.5">
                 <span class="lucide-clock size-3.5 text-emerald-600" /> 24h Service Window
               </p>
@@ -798,7 +815,7 @@ async function retryMessage(message: WhatsAppMessage) {
                 Free-form text and attachments are permitted within 24h of customer messages.
               </p>
             </div>
-            <div class="rounded-xl border border-outline-gray-2 bg-white p-3.5 shadow-xs">
+            <div class="rounded-xl border border-outline-gray-2 bg-surface-base p-3.5 shadow-xs">
               <p class="text-xs font-semibold text-ink-gray-9 flex items-center gap-1.5">
                 <span class="lucide-layout-template size-3.5 text-wa-teal" /> Meta Templates
               </p>
@@ -841,7 +858,7 @@ async function retryMessage(message: WhatsAppMessage) {
           @simulate-reply="desk.simulateReply()"
         />
 
-        <div v-if="chatSearchOpen" class="flex shrink-0 items-center gap-2 border-b border-wa bg-white px-3 py-2">
+        <div v-if="chatSearchOpen" class="flex shrink-0 items-center gap-2 border-b border-wa bg-surface-base px-3 py-2">
           <TextInput v-model="chatQuery" class="min-w-0 flex-1" placeholder="Search in this conversation" />
           <span class="shrink-0 text-[11px] text-wa-subtle">
             {{ chatQuery.trim() ? `${chatMatches.length ? matchCursor + 1 : 0}/${chatMatches.length}` : '' }}
@@ -870,7 +887,7 @@ async function retryMessage(message: WhatsAppMessage) {
         <div v-if="notesOpen" class="border-b border-outline-gray-2 bg-amber-50/70 px-4 py-3">
           <p class="text-xs text-ink-gray-6">Internal notes stay on this conversation. They are never sent on WhatsApp.</p>
           <ul v-if="notes.length" class="mt-2 max-h-36 space-y-2 overflow-y-auto">
-            <li v-for="note in notes" :key="note.name" class="rounded-md bg-white px-3 py-2 text-xs">
+            <li v-for="note in notes" :key="note.name" class="rounded-md bg-surface-base px-3 py-2 text-xs">
               <div class="font-semibold text-ink-gray-8">{{ note.author || 'Agent' }}</div>
               <div class="mt-0.5 whitespace-pre-wrap text-ink-gray-7">{{ note.content }}</div>
             </li>
@@ -891,7 +908,7 @@ async function retryMessage(message: WhatsAppMessage) {
           <button
             v-if="current?.has_older"
             type="button"
-            class="mb-3 w-full rounded-md bg-white/80 px-3 py-2 text-center text-xs font-semibold text-wa-teal shadow-sm"
+            class="mb-3 w-full rounded-md bg-surface-base/90 px-3 py-2 text-center text-xs font-semibold text-wa-teal shadow-sm"
             @click="loadEarlier"
           >
             Load earlier messages
@@ -921,15 +938,15 @@ async function retryMessage(message: WhatsAppMessage) {
         <!-- 24h Window Closed Helper Callout Banner -->
         <div
           v-else-if="windowState?.status !== 'open'"
-          class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 border-t border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50/50 px-4 py-2.5 text-xs text-amber-900 shrink-0"
+          class="flex flex-col gap-2 border-t border-outline-gray-2 bg-surface-gray-1 px-3 py-2 text-xs text-ink-gray-8 sm:flex-row sm:items-center sm:justify-between sm:px-4"
         >
-          <div class="flex items-center gap-2 min-w-0">
-            <span class="lucide-clock-alert size-4 text-amber-600 shrink-0" aria-hidden="true" />
+          <div class="flex min-w-0 items-center gap-2">
+            <span class="lucide-clock-alert size-4 shrink-0 text-amber-500" aria-hidden="true" />
             <span class="truncate">
-              <strong>24-Hour Window Closed.</strong> Meta allows only approved WhatsApp Templates outside the 24h window.
+              <strong>24h Window Closed.</strong> Send an approved template to re-open.
             </span>
           </div>
-          <Button size="sm" variant="solid" theme="green" label="Select Template to Send" icon-left="lucide-layout-template" @click="templateOpen = true" class="w-full sm:w-auto shrink-0"/>
+          <Button size="sm" variant="solid" theme="green" label="Select Template" icon-left="lucide-layout-template" @click="templateOpen = true" class="w-full shrink-0 sm:w-auto"/>
         </div>
 
         <!-- Message Composer Input -->
@@ -952,7 +969,7 @@ async function retryMessage(message: WhatsAppMessage) {
           <MessageInput
             v-bind="composer"
             :sender-name="current.profile.profile_name"
-            placeholder="Type a message… (/ for quick replies)"
+            placeholder="Message… (/ for replies)"
             window-closed-label=""
             window-unopened-label=""
           >
@@ -968,6 +985,20 @@ async function retryMessage(message: WhatsAppMessage) {
               >
                 <span class="lucide-zap size-5" aria-hidden="true" />
               </button>
+              <div class="sm:hidden">
+                <Dropdown :options="mobileComposerActions" placement="top-start">
+                  <template #default>
+                    <button
+                      type="button"
+                      class="grid size-10 place-items-center rounded-full text-wa-muted hover:bg-black/5"
+                      title="Templates & Catalog"
+                      aria-label="Templates & Catalog"
+                    >
+                      <span class="lucide-plus size-5" aria-hidden="true" />
+                    </button>
+                  </template>
+                </Dropdown>
+              </div>
               <button
                 type="button"
                 class="hidden size-10 place-items-center rounded-full text-wa-muted hover:bg-black/5 sm:grid"
@@ -992,7 +1023,7 @@ async function retryMessage(message: WhatsAppMessage) {
 
       <aside
         v-if="current && contactOpen"
-        class="inbox-rail inbox-rail-open relative hidden h-auto min-h-0 flex-col self-stretch border-l border-wa bg-white xl:flex"
+        class="inbox-rail inbox-rail-open relative hidden h-auto min-h-0 flex-col self-stretch border-l border-wa bg-surface-base xl:flex"
       >
         <div class="flex h-14 shrink-0 items-center gap-2 border-b border-wa px-2">
           <button
@@ -1019,7 +1050,7 @@ async function retryMessage(message: WhatsAppMessage) {
 
     <div v-if="details && current" class="fixed inset-0 z-50 xl:hidden">
       <button type="button" class="absolute inset-0 bg-black/40" aria-label="Close contact info" @click="details = false" />
-      <aside class="absolute inset-x-0 bottom-0 flex max-h-[min(70dvh,32rem)] w-full flex-col overflow-hidden rounded-t-2xl bg-white pb-[env(safe-area-inset-bottom)] shadow-xl">
+      <aside class="absolute inset-x-0 bottom-0 flex max-h-[min(70dvh,32rem)] w-full flex-col overflow-hidden rounded-t-2xl bg-surface-base pb-[env(safe-area-inset-bottom)] shadow-xl">
         <div class="flex h-11 shrink-0 items-center justify-between border-b border-wa px-3">
           <span class="text-sm font-semibold text-wa-ink">Contact info</span>
           <button type="button" class="grid size-8 place-items-center rounded-full text-wa-muted hover:bg-wa-panel" aria-label="Close" @click="details = false">
@@ -1184,7 +1215,7 @@ async function retryMessage(message: WhatsAppMessage) {
           <div
             v-for="item in filteredCatalogItems"
             :key="item.name"
-            class="flex flex-col gap-3 rounded-xl border border-outline-gray-2 bg-white p-3 transition-colors hover:border-outline-gray-4 sm:flex-row sm:items-center sm:justify-between"
+            class="flex flex-col gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-3 transition-colors hover:border-outline-gray-4 sm:flex-row sm:items-center sm:justify-between"
           >
             <div class="flex items-center gap-3 min-w-0">
               <div class="size-11 shrink-0 rounded-lg border border-outline-gray-2 bg-surface-gray-1 flex items-center justify-center overflow-hidden text-base">

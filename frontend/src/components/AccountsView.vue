@@ -48,7 +48,7 @@ const filteredAccounts = computed(() => {
 </script>
 
 <template>
-  <div class="h-full overflow-y-auto bg-white px-4 py-6 md:px-8">
+  <div class="h-full overflow-y-auto bg-surface-base px-4 py-6 md:px-8">
     <div class="flex flex-col gap-4 border-b border-outline-gray-2 pb-6 md:flex-row md:items-center md:justify-between">
       <div>
         <h1 class="text-2xl font-bold tracking-tight text-ink-gray-9">WhatsApp numbers</h1>
@@ -57,7 +57,7 @@ const filteredAccounts = computed(() => {
       <Button variant="solid" theme="green" label="Connect number" @click="showConnectModal = true"/>
     </div>
 
-    <div v-if="accountsList.length === 0" class="mt-8 rounded-xl border border-outline-gray-2 bg-white p-8 text-center">
+    <div v-if="accountsList.length === 0" class="mt-8 rounded-xl border border-outline-gray-2 bg-surface-base p-8 text-center">
       <h2 class="text-sm font-semibold text-ink-gray-9">No WhatsApp number yet</h2>
       <p class="mx-auto mt-1 max-w-md text-xs text-ink-gray-6">
         Connect with Facebook, or enter credentials if this number is already on the WhatsApp Cloud API.

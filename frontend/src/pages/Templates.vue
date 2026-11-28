@@ -195,6 +195,7 @@ function selectTemplate(t: Template) {
 const templateEditorOpen = ref(false)
 const templateDeleteOpen = ref(false)
 const templateSaving = ref(false)
+const templateAction = ref<'draft' | 'submit' | 'delete' | null>(null)
 const templateForm = ref({
   name: '',
   template_label: '',
@@ -410,6 +411,7 @@ async function persistTemplate(submitToMeta: boolean) {
     return
   }
   templateSaving.value = true
+  templateAction.value = submitToMeta ? 'submit' : 'draft'
   try {
     const saved = await saveWhatsappTemplate({
       name: templateForm.value.name || undefined,
@@ -444,6 +446,7 @@ async function persistTemplate(submitToMeta: boolean) {
     toast.error(errorText(caught))
   } finally {
     templateSaving.value = false
+    templateAction.value = null
   }
 }
 
@@ -469,6 +472,7 @@ async function syncTemplates() {
 async function removeTemplate() {
   if (!templateForm.value.name) return
   templateSaving.value = true
+  templateAction.value = 'delete'
   try {
     if (live) await deleteWhatsappTemplate(templateForm.value.name)
     if (selected.value === templateForm.value.name) selected.value = null
@@ -480,6 +484,7 @@ async function removeTemplate() {
     toast.error(errorText(caught))
   } finally {
     templateSaving.value = false
+    templateAction.value = null
   }
 }
 
@@ -531,61 +536,6 @@ function languageLabel(code?: string) {
             <span class="lucide-x size-3" />
           </button>
         </div>
-        <div class="flex shrink-0 items-center gap-1">
-          <Button
-            size="sm"
-            :variant="selectedStatus === 'Approved' ? 'solid' : 'subtle'"
-            :theme="selectedStatus === 'Approved' ? 'green' : 'gray'"
-            :data-state="selectedStatus === 'Approved' ? 'active' : undefined"
-            :aria-pressed="selectedStatus === 'Approved'"
-            @click="applyKpiFilter('Approved')"
-          >
-            <span class="tabular-nums">{{ countApproved }}</span>
-            Approved
-          </Button>
-          <Button
-            size="sm"
-            :variant="selectedStatus === 'Pending' ? 'solid' : 'subtle'"
-            theme="gray"
-            :data-state="selectedStatus === 'Pending' ? 'active' : undefined"
-            :aria-pressed="selectedStatus === 'Pending'"
-            @click="applyKpiFilter('Pending')"
-          >
-            <span class="tabular-nums">{{ countPending }}</span>
-            Pending
-          </Button>
-          <Button
-            size="sm"
-            :variant="selectedCategory === 'Utility' ? 'solid' : 'subtle'"
-            theme="gray"
-            :data-state="selectedCategory === 'Utility' ? 'active' : undefined"
-            :aria-pressed="selectedCategory === 'Utility'"
-            @click="applyKpiFilter('Utility')"
-          >
-            <span class="tabular-nums">{{ countUtility }}</span>
-            Utility
-          </Button>
-          <Button
-            size="sm"
-            :variant="selectedCategory === 'Marketing' ? 'solid' : 'subtle'"
-            theme="gray"
-            :data-state="selectedCategory === 'Marketing' ? 'active' : undefined"
-            :aria-pressed="selectedCategory === 'Marketing'"
-            @click="applyKpiFilter('Marketing')"
-          >
-            <span class="tabular-nums">{{ countMarketing }}</span>
-            Marketing
-          </Button>
-          <Button
-            v-if="filtersActive"
-            variant="ghost"
-            theme="green"
-            size="sm"
-            label="Clear"
-            @click="clearFilters"
-          />
-        </div>
-
         <Select
           class="w-36 shrink-0 text-xs"
           :model-value="selectedCategory"
@@ -597,6 +547,14 @@ function languageLabel(code?: string) {
           :model-value="selectedStatus"
           :options="statuses"
           @update:model-value="(val) => (selectedStatus = String(val || 'All'))"
+        />
+        <Button
+          v-if="filtersActive"
+          variant="ghost"
+          theme="green"
+          size="sm"
+          label="Clear"
+          @click="clearFilters"
         />
 
         <div v-if="isManager" class="ml-auto flex flex-wrap items-center justify-end gap-2">
@@ -677,9 +635,9 @@ function languageLabel(code?: string) {
 
       <!-- Right Column: Interactive Studio Inspector Canvas -->
       <template #detail>
-      <div class="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
+      <div class="flex min-h-0 flex-1 flex-col overflow-hidden bg-surface-base">
         <div v-if="current" class="flex min-h-0 flex-1 flex-col">
-          <header class="shrink-0 border-b border-outline-gray-2 bg-white px-3 py-2">
+          <header class="shrink-0 border-b border-outline-gray-2 bg-surface-base px-3 py-2">
             <Button
               v-if="narrow"
               variant="ghost"
@@ -731,13 +689,16 @@ function languageLabel(code?: string) {
               </div>
             </div>
           </header>
-          <DeskTemplatePreview
-            class="min-h-0 flex-1"
-            :template="current"
-            mode="preview"
-            :editable="true"
-            chrome="stage"
-          />
+          <div class="flex min-h-0 flex-1 items-start justify-center overflow-y-auto bg-surface-gray-1 p-4 sm:p-6">
+            <div class="w-full max-w-[340px]">
+              <DeskTemplatePreview
+                :template="current"
+                mode="preview"
+                :editable="true"
+                chrome="phone"
+              />
+            </div>
+          </div>
         </div>
 
         <div v-else class="grid flex-1 place-items-center px-6 text-center">
@@ -782,7 +743,7 @@ function languageLabel(code?: string) {
             required
           />
 
-          <div class="max-h-48 overflow-y-auto divide-y divide-outline-gray-1 rounded-lg border border-outline-gray-2 bg-white">
+          <div class="max-h-48 overflow-y-auto divide-y divide-outline-gray-1 rounded-lg border border-outline-gray-2 bg-surface-base">
             <button
               v-for="r in filteredRecipients"
               :key="r.value"
@@ -991,18 +952,19 @@ function languageLabel(code?: string) {
             v-if="templateForm.name"
             variant="subtle"
             label="Delete"
-            :loading="templateSaving"
+            :loading="templateAction === 'delete'"
+            :disabled="Boolean(templateAction)"
             @click="templateDeleteOpen = true"
           />
           <span v-else />
           <div class="flex flex-wrap gap-2">
-            <Button variant="subtle" label="Cancel" @click="templateEditorOpen = false" />
+            <Button variant="subtle" label="Cancel" :disabled="Boolean(templateAction)" @click="templateEditorOpen = false" />
             <Button
               variant="subtle"
               label="Save draft"
               loading-text="Saving…"
-              :loading="templateSaving || Boolean(templateForm.name && !buttonsReady)"
-              :disabled="Boolean(templateForm.name && !buttonsReady)"
+              :loading="templateAction === 'draft'"
+              :disabled="Boolean(templateAction && templateAction !== 'draft') || Boolean(templateForm.name && !buttonsReady)"
               @click="persistTemplate(false)"
             />
             <Button
@@ -1010,8 +972,8 @@ function languageLabel(code?: string) {
               theme="green"
               :label="editorOnMeta ? 'Update on Meta' : 'Submit to Meta'"
               loading-text="Saving…"
-              :loading="templateSaving || Boolean(templateForm.name && !buttonsReady)"
-              :disabled="Boolean(templateForm.name && !buttonsReady) || editorLocked"
+              :loading="templateAction === 'submit'"
+              :disabled="Boolean(templateAction && templateAction !== 'submit') || Boolean(templateForm.name && !buttonsReady) || editorLocked"
               @click="persistTemplate(true)"
             />
           </div>
@@ -1027,8 +989,8 @@ function languageLabel(code?: string) {
       </p>
       <template #actions>
         <div class="flex w-full justify-end gap-2">
-          <Button variant="subtle" label="Cancel" @click="templateDeleteOpen = false" />
-          <Button variant="solid" theme="red" label="Delete" :loading="templateSaving" @click="removeTemplate" />
+          <Button variant="subtle" label="Cancel" :disabled="Boolean(templateAction)" @click="templateDeleteOpen = false" />
+          <Button variant="solid" theme="red" label="Delete" :loading="templateAction === 'delete'" :disabled="Boolean(templateAction && templateAction !== 'delete')" @click="removeTemplate" />
         </div>
       </template>
     </Dialog>

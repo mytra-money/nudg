@@ -7,7 +7,6 @@ import unittest
 from datetime import datetime
 
 from nudg.chatbot.ai_responder import phone_variants
-from nudg.chatbot.flow_engine import next_step_name, substitute, validate_input
 from nudg.chatbot.keyword_matcher import rule_matches
 from nudg.services.bulk import clean_mobile
 from nudg.services.campaign_replies import apply_unsubscribe, phone_digits, stop_plan
@@ -27,11 +26,6 @@ class _Rule:
 		self.__dict__.update(kwargs)
 
 
-class _Step:
-	def __init__(self, **kwargs):
-		self.__dict__.update(kwargs)
-
-
 class TestChatbotMatching(unittest.TestCase):
 	def test_keyword_match_types(self):
 		exact = _Rule(keywords="order, status", match_type="Exact", case_sensitive=0)
@@ -47,31 +41,6 @@ class TestChatbotMatching(unittest.TestCase):
 
 		pattern = _Rule(keywords=r"ord-\d+", match_type="Regex", case_sensitive=0)
 		self.assertTrue(rule_matches(pattern, "see ORD-15"))
-
-	def test_input_validation(self):
-		email = _Step(input_type="Email")
-		self.assertTrue(validate_input(email, "a@b.co")[0])
-		self.assertFalse(validate_input(email, "not-an-email")[0])
-
-		number = _Step(input_type="Number")
-		self.assertTrue(validate_input(number, "1,200")[0])
-		self.assertFalse(validate_input(number, "twelve")[0])
-
-		choice = _Step(input_type="Select", options="Yes|No")
-		self.assertTrue(validate_input(choice, "yes")[0])
-		self.assertFalse(validate_input(choice, "maybe")[0])
-
-		phone = _Step(input_type="Phone")
-		self.assertTrue(validate_input(phone, "+1 (415) 555-1212")[0])
-
-	def test_next_step_and_substitution(self):
-		current = _Step(step_name="ask", idx=1, conditional_next='{"yes": "done", "default": "retry"}', next_step=None)
-		steps = [current, _Step(step_name="done", idx=2), _Step(step_name="retry", idx=3)]
-		self.assertEqual(next_step_name(current, steps, "YES"), "done")
-		self.assertEqual(next_step_name(current, steps, "later"), "retry")
-		plain = _Step(step_name="a", idx=1, conditional_next=None, next_step=None)
-		self.assertEqual(next_step_name(plain, [plain, _Step(step_name="b", idx=2)], "x"), "b")
-		self.assertEqual(substitute("Hello {name}", {"name": "Ada"}), "Hello Ada")
 
 	def test_phone_variants_and_mobile_cleanup(self):
 		variants = phone_variants("+1 415-555-1212")

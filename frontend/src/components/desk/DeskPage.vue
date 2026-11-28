@@ -17,18 +17,18 @@ withDefaults(
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-white">
+  <div class="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-surface-base">
     <!-- Studio: compact actions only (no page title — AppShell shows it) -->
     <header
       v-if="variant === 'studio' && $slots.actions"
-      class="flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-outline-gray-2 bg-white px-4 py-2.5"
+      class="flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-outline-gray-2 bg-surface-base px-4 py-2.5"
     >
       <slot name="actions" />
     </header>
 
     <div
       v-if="variant === 'scroll'"
-      class="flex min-h-0 flex-1 flex-col overflow-y-auto bg-white px-4 py-5 sm:px-8"
+      class="flex min-h-0 flex-1 flex-col overflow-y-auto bg-surface-base px-4 py-5 sm:px-8"
     >
       <div
         v-if="$slots.actions || $slots.badges"
@@ -60,13 +60,13 @@ withDefaults(
     </div>
 
     <template v-if="variant === 'studio'">
-      <div v-if="$slots.kpi" class="shrink-0 border-b border-outline-gray-2 bg-white px-4 py-3">
+      <div v-if="$slots.kpi" class="shrink-0 border-b border-outline-gray-2 bg-surface-base px-4 py-3">
         <slot name="kpi" />
       </div>
-      <div v-if="$slots.toolbar" class="shrink-0 border-b border-outline-gray-2 bg-white px-4 py-2.5">
+      <div v-if="$slots.toolbar" class="shrink-0 border-b border-outline-gray-2 bg-surface-base px-4 py-2.5">
         <slot name="toolbar" />
       </div>
-      <div class="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
+      <div class="flex min-h-0 flex-1 flex-col overflow-hidden bg-surface-base">
         <slot />
       </div>
     </template>
